@@ -116,9 +116,10 @@ def generate_mcp_config(base_config_path: str, cwd: str) -> str:
     with open(base_config_path) as f:
         config = json.load(f)
 
-    # Set cwd on all MCP servers
-    for server in config.get("mcpServers", {}).values():
-        server["cwd"] = cwd
+    # Set cwd on the codebox server only (matches run_swebench.sh behavior)
+    codebox = config.get("mcpServers", {}).get("codebox")
+    if codebox is not None:
+        codebox["cwd"] = cwd
 
     tmp = tempfile.NamedTemporaryFile(
         prefix="mcp-config-",
