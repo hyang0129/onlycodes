@@ -132,14 +132,20 @@ def add_command(instance_id: str) -> None:
         else:
             click.echo("WARNING: no test_cmd or FAIL_TO_PASS in dataset row; set test_cmd manually.", err=True)
 
-    # Check for patch file
+    # Write test patch from dataset's test_patch field
     patch_file: str | None = None
     patch_path = patches_dir / f"{instance_id}_tests.patch"
-    if patch_path.exists():
+    test_patch_content = row.get("test_patch", "")
+    if test_patch_content:
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        patch_path.write_text(test_patch_content)
         patch_file = f"patches/{instance_id}_tests.patch"
-        click.echo(f"  Found patch file: {patch_file}")
+        click.echo(f"  Wrote test patch: {patch_file}")
+    elif patch_path.exists():
+        patch_file = f"patches/{instance_id}_tests.patch"
+        click.echo(f"  Using existing patch file: {patch_file}")
     else:
-        click.echo(f"  WARNING: No patch file at {patch_path}. You may need to create it.", err=True)
+        click.echo(f"  WARNING: No test_patch in dataset and no patch file at {patch_path}.", err=True)
 
     # Build Problem and write YAML
     problem = Problem(
