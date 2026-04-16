@@ -201,7 +201,7 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
     "parallel",
     type=int,
     default=1,
-    help="Max concurrent Claude invocations (default: 1 = serial).",
+    help="Max problems to run concurrently (default: 1 = serial).",
 )
 @click.option(
     "--fail-fast",
