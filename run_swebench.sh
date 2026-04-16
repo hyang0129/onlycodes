@@ -219,6 +219,11 @@ Fix the source code so these tests pass. Do not modify the test files."
 
     # Onlycode arm: MCP execute_code tool only, no built-in tools
     # run_arm() resets the repo to BASE_COMMIT as its first action — no explicit reset needed here.
+    #
+    # NOTE: mcp-config.json sets cwd=/workspaces/hub_1/onlycodes (the harness dir),
+    # not the target repo. The onlycode agent must use absolute paths to work on
+    # REPO_DIR. This is a known evaluation asymmetry; fix by generating per-instance
+    # MCP configs when scaling beyond the smoke test.
     run_arm "$INSTANCE" "onlycode" "--mcp-config ${MCP_CONFIG} --strict-mcp-config --tools mcp__codebox__execute_code" \
       "You are a helpful assistant." \
       "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"
