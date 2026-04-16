@@ -1,8 +1,10 @@
 results/
+results_mcp/
+results_requests/
 __pycache__/
 *.pyc
 .pytest_cache/
 fixtures_requests/
-results_requests/
 node_modules/
 logs/session.jsonl
+exec-server.bundle.cjs

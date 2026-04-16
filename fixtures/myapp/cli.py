@@ -11,11 +11,16 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind")
     parser.add_argument("--port", type=int, default=8080, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    # TODO: add --dry-run flag
+    parser.add_argument("--dry-run", action="store_true", help="Print what would be done and exit without starting the server")
     args = parser.parse_args()
 
     config = get_config()
     print(f"Using config: {config}")  # target for print→logging task
+
+    if args.dry_run:
+        print(f"Dry run: would start server on {args.host}:{args.port} with debug={args.debug}")
+        return 0
+
     result = start(args.host, args.port, args.debug)
     print(f"Server started: {result.to_dict()}")
     return 0
