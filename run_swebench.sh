@@ -53,7 +53,7 @@ echo "Claude binary: $CLAUDE" | tee -a "$RESULTS_DIR/run.log"
 echo "" | tee -a "$RESULTS_DIR/run.log"
 
 # --------------------------------------------------------------------------
-# Helper: run one arm (baseline or constrained) for one instance
+# Helper: run one arm (baseline or onlycode) for one instance
 # --------------------------------------------------------------------------
 run_arm() {
   local INSTANCE="$1"
@@ -200,7 +200,7 @@ while IFS=$'\t ' read -r INSTANCE BASE_COMMIT REPO_SLUG TEST_CMD_REST || [[ -n "
     echo "  WARNING: PROBLEM_TEXT hardcoded — ${INSTANCE} results may be invalid" \
       | tee -a "$RESULTS_DIR/run.log"
   fi
-  PROBLEM_TEXT="The following tests are failing in the repository at ${REPO_DIR}:
+  PROBLEM_TEXT="The following tests are failing:
 
   cache.tests.FileBasedCacheTests.test_has_key_race_handling
   cache.tests.FileBasedCachePathLibTests.test_has_key_race_handling
@@ -216,11 +216,8 @@ Fix the source code so these tests pass. Do not modify the test files."
       "You are a helpful assistant." \
       "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"
 
-    # Reset before onlycode arm
-    git -C "$REPO_DIR" checkout "$BASE_COMMIT" --force --quiet 2>/dev/null
-    git -C "$REPO_DIR" clean -fd --quiet 2>/dev/null
-
     # Onlycode arm: MCP execute_code tool only, no built-in tools
+    # run_arm() resets the repo to BASE_COMMIT as its first action — no explicit reset needed here.
     run_arm "$INSTANCE" "onlycode" "--mcp-config ${MCP_CONFIG} --strict-mcp-config --tools mcp__codebox__execute_code" \
       "You are a helpful assistant." \
       "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"
