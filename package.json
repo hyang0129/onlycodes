@@ -1,0 +1,15 @@
+{
+  "name": "onlycodes",
+  "version": "1.0.0",
+  "description": "MCP server exposing execute_code tool for Claude Code bypass mode",
+  "main": "exec-server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node exec-server.js",
+    "test": "node test/test-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "license": "MIT"
+}

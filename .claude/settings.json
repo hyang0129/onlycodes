@@ -1,0 +1,10 @@
+{
+  "allowedTools": ["mcp__codebox__execute_code"],
+  "mcpServers": {
+    "codebox": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./exec-server.js"]
+    }
+  }
+}
