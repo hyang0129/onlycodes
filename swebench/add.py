@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
 from datetime import date
@@ -107,9 +109,8 @@ def add_command(instance_id: str) -> None:
         # Construct from FAIL_TO_PASS field
         fail_to_pass = row.get("FAIL_TO_PASS", [])
         if isinstance(fail_to_pass, str):
-            import json as _json
             try:
-                fail_to_pass = _json.loads(fail_to_pass)
+                fail_to_pass = json.loads(fail_to_pass)
             except (ValueError, TypeError):
                 fail_to_pass = [fail_to_pass]
 
@@ -117,9 +118,8 @@ def add_command(instance_id: str) -> None:
             # Extract dotted test names from format like "test_name (module.Class)"
             test_names = []
             for entry in fail_to_pass:
-                import re as _re
                 # Handle "test_name (module.Class)" format
-                m = _re.match(r"^(\S+)\s+\(([^)]+)\)$", entry)
+                m = re.match(r"^(\S+)\s+\(([^)]+)\)$", entry)
                 if m:
                     test_name, class_path = m.group(1), m.group(2)
                     test_names.append(f"{class_path}.{test_name}")
