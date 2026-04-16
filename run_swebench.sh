@@ -117,8 +117,8 @@ ${PROBLEM_TEXT}"
   local VENV_DIR="${REPO_DIR}/.venv"
   (
     cd "$REPO_DIR"
-    # TEST_CMD starts with "python ..." — replace with venv python
-    local VENV_TEST_CMD="${TEST_CMD/python/${VENV_DIR}/bin/python}"
+    # TEST_CMD starts with "python ..." — replace leading python with venv python
+    local VENV_TEST_CMD="${TEST_CMD/#python/${VENV_DIR}/bin/python}"
     # shellcheck disable=SC2086
     if $VENV_TEST_CMD > "$TEST_RESULT_FILE" 2>&1; then
       echo "PASS" >> "$TEST_RESULT_FILE"
