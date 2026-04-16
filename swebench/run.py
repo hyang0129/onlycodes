@@ -33,8 +33,8 @@ def _run_arm(
     claude_binary: str,
     mcp_config_path: str,
     root: Path,
-) -> None:
-    """Run a single arm (baseline or onlycode) for one instance."""
+) -> str:
+    """Run a single arm (baseline or onlycode) for one instance. Returns verdict."""
     click.echo(f"  [{arm} run {run_idx}] Starting...")
 
     # Reset repo to base commit
@@ -112,6 +112,8 @@ def _run_arm(
 
     click.echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
 
+    return verdict
+
 
 @click.command("run")
 @click.option(
@@ -133,7 +135,13 @@ def _run_arm(
     default=1,
     help="Number of runs per arm (default: 1).",
 )
-def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
+@click.option(
+    "--fail-fast",
+    is_flag=True,
+    default=False,
+    help="Stop after the first FAIL verdict.",
+)
+def run_command(filter_ids: str | None, arms: str, num_runs: int, fail_fast: bool) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     root = repo_root()
     problems_dir = root / "problems"
@@ -181,7 +189,11 @@ def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
     click.echo(f"Claude binary: {claude_binary}")
     click.echo()
 
+    stopped = False
     for problem in problems:
+        if stopped:
+            break
+
         click.echo(f"--- Instance: {problem.instance_id} ---")
         click.echo(f"  Repo: {problem.repo_slug}")
         click.echo(f"  Base commit: {problem.base_commit}")
@@ -198,7 +210,7 @@ def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
         for run_idx in range(1, num_runs + 1):
             for arm in arm_list:
                 click.echo()
-                _run_arm(
+                verdict = _run_arm(
                     problem=problem,
                     arm=arm,
                     run_idx=run_idx,
@@ -209,6 +221,12 @@ def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
                     mcp_config_path=mcp_config_path,
                     root=root,
                 )
+                if fail_fast and verdict == "FAIL":
+                    click.echo("\n--fail-fast: stopping after first FAIL.")
+                    stopped = True
+                    break
+            if stopped:
+                break
 
         click.echo()
 
