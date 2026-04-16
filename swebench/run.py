@@ -19,7 +19,6 @@ from swebench.harness import (
     apply_test_patch,
     clone_repo,
     find_claude_binary,
-    generate_mcp_config,
     git_reset,
     run_claude,
     run_tests,
@@ -88,11 +87,9 @@ def _run_arm(
 
     # Build tools flags based on arm
     tools_flags: list[str] = []
-    effective_mcp_config = mcp_config_path
     if arm == "onlycode":
-        effective_mcp_config = generate_mcp_config(mcp_config_path, repo_dir)
         tools_flags = [
-            "--mcp-config", effective_mcp_config,
+            "--mcp-config", mcp_config_path,
             "--strict-mcp-config",
             "--tools", "mcp__codebox__execute_code",
         ]
@@ -109,13 +106,6 @@ def _run_arm(
     )
 
     wall_secs = int(time.time() - start_time)
-
-    # Clean up temp MCP config
-    if arm == "onlycode" and effective_mcp_config != mcp_config_path:
-        try:
-            os.unlink(effective_mcp_config)
-        except OSError:
-            pass
 
     # Run tests
     test_result_file = os.path.join(
