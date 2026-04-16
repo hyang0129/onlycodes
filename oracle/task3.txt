@@ -1,0 +1,9 @@
+Test suite results:
+
+Total:  6
+Passed: 4
+Failed: 2
+
+Failures:
+  - tests/test_models.py::test_server_config_validation_fails
+  - tests/test_utils.py::test_validate_input_out_of_range

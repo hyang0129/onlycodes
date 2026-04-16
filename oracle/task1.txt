@@ -1,0 +1,6 @@
+Files importing os or os.path (with line numbers):
+
+myapp/config.py:1: import os
+myapp/server.py:1: import os
+myapp/server.py:2: import os.path
+myapp/utils.py:1: import os.path

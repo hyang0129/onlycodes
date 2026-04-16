@@ -1,0 +1,8 @@
+Env vars referenced in code but NOT defined in .env.example:
+
+API_KEY       (myapp/server.py)
+SERVER_URL    (myapp/server.py)
+SECRET_TOKEN  (myapp/config.py)
+TIMEOUT_MS    (myapp/config.py)
+
+Note: DATABASE_URL appears in both code and .env.example — correctly excluded.
