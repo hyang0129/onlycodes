@@ -1,0 +1,4 @@
+Total: 26
+Passed: 26
+Failed: 0
+Test files: tests/test_structures.py, tests/test_hooks.py, tests/test_packages.py

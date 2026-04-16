@@ -1,0 +1,4 @@
+src/requests/adapters.py:9  os.path
+src/requests/auth.py:9      os
+src/requests/sessions.py:9  os
+src/requests/utils.py:12    os

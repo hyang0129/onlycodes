@@ -10,6 +10,12 @@ FIXTURE_DIR="$(cd "$(dirname "$0")/fixtures" && pwd)"
 RESULTS_DIR="$(cd "$(dirname "$0")" && pwd)/results"
 mkdir -p "$RESULTS_DIR"
 
+# Common flags for clean, reproducible benchmark runs:
+#   --no-session-persistence  : no session saved to disk between runs
+#   --dangerously-skip-permissions : no approval prompts blocking tool calls
+#   --system-prompt           : override CLAUDE.md injection with neutral prompt
+COMMON_FLAGS="--output-format stream-json --verbose --no-session-persistence --dangerously-skip-permissions --system-prompt You are a helpful assistant."
+
 TASKS=(
   "You are working in the directory: $FIXTURE_DIR
 
@@ -42,20 +48,18 @@ for i in "${!TASKS[@]}"; do
   TASK_NUM=$((i + 1))
   echo "--- Task $TASK_NUM ---" | tee -a "$RESULTS_DIR/run.log"
 
-  echo "Running Task $TASK_NUM — BASELINE..."
+  echo "Running Task $TASK_NUM -- BASELINE..."
   $CLAUDE -p "${TASKS[$i]}" \
-    --output-format stream-json --verbose \
-    --no-session-persistence \
+    $COMMON_FLAGS \
     > "$RESULTS_DIR/task${TASK_NUM}_baseline.jsonl" 2>&1
   echo "  Baseline done."
 
-  echo "Running Task $TASK_NUM — CONSTRAINED..."
+  echo "Running Task $TASK_NUM -- CONSTRAINED..."
   $CLAUDE -p "${CONSTRAINT}
 
 ${TASKS[$i]}" \
-    --tools Bash \
-    --output-format stream-json --verbose \
-    --no-session-persistence \
+    --tools Bash,Write \
+    $COMMON_FLAGS \
     > "$RESULTS_DIR/task${TASK_NUM}_constrained.jsonl" 2>&1
   echo "  Constrained done."
 
@@ -65,8 +69,8 @@ done
 echo "=== Done. Results in $RESULTS_DIR ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
 echo "Grade each task against oracle/ files:"
-echo "  oracle/task1.txt  — imports"
-echo "  oracle/task2.txt  — missing env vars"
-echo "  oracle/task3.txt  — test failures"
-echo "  oracle/task4.txt  — server_url files"
-echo "  oracle/task5_cli.py — reference --dry-run implementation"
+echo "  oracle/task1.txt  -- imports"
+echo "  oracle/task2.txt  -- missing env vars"
+echo "  oracle/task3.txt  -- test failures"
+echo "  oracle/task4.txt  -- server_url files"
+echo "  oracle/task5_cli.py -- reference --dry-run implementation"

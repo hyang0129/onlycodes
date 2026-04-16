@@ -11,25 +11,66 @@ tool calls. Measure whether this reduces round-trips and improves output quality
 
 ---
 
-## Pre-M1 — Hypothesis Validation Gate
+## Pre-M1 — Hypothesis Validation Gate ✅ COMPLETE
 
 **Do this before writing any code. Takes one afternoon.**
 
-Manually constrain Claude to "one Bash script per turn" using the existing Bash tool. No MCP
-server, no settings changes. Run 5 representative tasks side-by-side (normal tools vs. one-script
-constraint). Record: did it complete, was the output correct, how many rounds, what happened on
-failure.
+Simulated Code Mode using `claude -p --tools Bash,Write` against two fixtures: a synthetic myapp
+codebase and the real psf/requests library. 5 tasks, two arms each (baseline all-tools vs.
+constrained). Full methodology in `run_prevalidation.sh` and `run_prevalidation_requests.sh`.
 
-**Pass gate:** ≥4/5 tasks complete correctly, zero silent partial failures (exit 0, wrong output).
+### Methodology
 
-**If gate fails:** stop. Document which task types broke and why. Do not proceed to M1.
+- Both arms: identical `--system-prompt "You are a helpful assistant."` (eliminates CLAUDE.md
+  injection as a confound), `--dangerously-skip-permissions` (no approval gates), `--no-session-persistence`
+- Constrained arm: `--tools Bash,Write` only, CONSTRAINT prefix asking for one script per task
+- Scored against pre-computed oracle files in `oracle/` and `oracle_requests/`
+- Metrics captured per run: `total_cost_usd`, `num_turns`, `permission_denials` from stream-json
 
-**Tasks to run:**
-1. Find all Python files that import a specific module
-2. Find env vars referenced in a codebase but never set in `.env`
-3. Add a `--dry-run` flag to an existing CLI
-4. Run a test suite and summarize failures
-5. Find/replace a string across multiple files and verify the result
+### Results
+
+**Read/search tasks (T1–T4): hypothesis validated.**
+
+| Task | Correctness | Cost delta | Turns |
+|------|-------------|------------|-------|
+| T1: Find os imports | Both ✅ | Constrained −8% | 2/2 |
+| T2: Find missing env vars | Both ✅ | Constrained −24% | 2/2 |
+| T3: Run pytest, summarize | Both ✅ | Constrained −19 to −26% | 2/2 |
+| T4: Find variable references | Both ✅ (constrained filtered .pyc on requests) | Constrained −18 to −21% | 2/2 |
+
+Constrained arm is consistently 8–26% cheaper on read/search/exec tasks with identical correctness
+and identical turn count. Savings come from smaller tool-definition context in the API request, not
+system prompt size (both arms use the same prompt).
+
+**Write/modify tasks (T5): baseline wins.**
+
+| Variant | Turns | Cost | Notes |
+|---------|-------|------|-------|
+| Baseline (Read+Edit) | 3–4 | $0.037–$0.082 | Surgical, reliable |
+| Constrained Bash-only | 2–6 | $0.038–$0.094 | Correct but self-corrects on complex files |
+| Constrained Bash+Write (silent) | 2–5 | $0.038–$0.059 | Write tool never discovered |
+| Constrained Bash+Write (nudged) | 3–9 | $0.044–$0.111 | Write used, but more expensive |
+
+Edit tool is surgical; Bash-based file mutation is fragile on production code with complex
+structure. The model does not naturally discover Write as an intermediate step — it requires
+an explicit prompt hint, and even then the write-then-run pattern adds overhead rather than saving it.
+
+### Gate verdict
+
+**Pass.** 5/5 tasks completed correctly in both arms. Zero silent partial failures. The hypothesis
+holds for read tasks; write tasks need the Edit tool or equivalent in the real MCP server.
+
+**Resolved open questions:**
+
+| Question | Answer |
+|----------|--------|
+| Does `--tools` remove built-in tools from Claude's context? | Yes — constrained arm shows lower cache reads, confirming tool definitions are excluded |
+| Does the constrained arm discover Write organically? | No — requires explicit prompt nudge; even then, not more efficient |
+| Which task shapes benefit most? | Read-heavy / search / execute-and-report; write tasks favor Edit |
+
+**New open question surfaced:** The caveman repo finding — output tokens are ~6% of session cost —
+suggests the round-trip saving may be secondary to the tool-definition size saving. The real
+`execute_code` MCP tool description will itself consume tokens. Keep it short.
 
 ---
 
@@ -56,6 +97,7 @@ approval. If it prompts or falls back, the isolation mechanism is broken and M1 
   - Network isolation: `unshare -n` or equivalent (not optional — execute_code is an attack surface
     from day 1)
   - Structured output: `{stdout, stderr, exit_code}` as typed content blocks
+  - **Keep tool description short** — tool definitions add to every API request's token cost
 - [ ] Session logger: append to `logs/session.jsonl`
   - Fields: `timestamp, language, code, stdout, stderr, exit_code, duration_ms`
 - [ ] Retry + fallback handler:
@@ -137,10 +179,9 @@ Claude's context window. Revisit only post-M2 and only with HTTP+SSE on the Clau
 
 | Question | Resolves at |
 |----------|-------------|
-| Does `--allowedTools` remove built-ins from Claude's context, or just block execution? | Pre-M1 test |
 | Does async subprocess within stdio MCP eliminate the blocking hang? | M1 implementation |
 | What is the fallback target — built-in Bash, or fail-closed? | M1 design decision |
 | Does Claude Code expose token usage metadata per session? | M2 design |
 | At what success rate does the customer actually route their workflow here? | Post-M2 |
 | Does Claude naturally write parallel scripts (asyncio.gather) or sequential? | M2 logs |
-| Which task shapes benefit most — read-heavy vs. multi-step write? | M2 analysis |
+| How short can the execute_code tool description be without hurting task quality? | M1 tuning |
