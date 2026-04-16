@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SWE-bench smoke test: baseline vs. constrained mode comparison
+# SWE-bench smoke test: baseline vs. onlycode comparison
 # Runs selected SWE-bench instances in two arms — baseline (all built-in tools)
-# and constrained (Bash+Write only, one-script-per-turn).
+# and onlycode (MCP execute_code tool only, no built-ins).
 #
 # Usage:
 #   ./run_swebench.sh [problems_file] [runs_per_arm]
@@ -24,6 +24,7 @@ if [[ ! "$RUNS_PER_ARM" =~ ^[1-9][0-9]*$ ]]; then
 fi
 RESULTS_DIR="${SCRIPT_DIR}/results_swebench"
 CLONE_BASE="/tmp/swebench"
+MCP_CONFIG="${SCRIPT_DIR}/mcp-config.json"
 
 mkdir -p "$RESULTS_DIR" "$CLONE_BASE"
 
@@ -64,12 +65,21 @@ run_arm() {
   local BASE_COMMIT="$7"
   local TEST_CMD="$8"
   local PROBLEM_TEXT="$9"
+  local VENV_DIR="${10}"
 
   echo "  [${ARM} run ${RUN_IDX}] Starting..." | tee -a "$RESULTS_DIR/run.log"
 
   # Reset repo to base commit before each arm run
   git -C "$REPO_DIR" checkout "$BASE_COMMIT" --force --quiet 2>/dev/null
   git -C "$REPO_DIR" clean -fd --quiet 2>/dev/null
+
+  # Apply test-only patch (SWE-bench style: agent sees failing tests, must fix implementation)
+  local TEST_PATCH="${SCRIPT_DIR}/patches/${INSTANCE}_tests.patch"
+  if [[ -f "$TEST_PATCH" ]]; then
+    git -C "$REPO_DIR" apply "$TEST_PATCH" 2>/dev/null \
+      && echo "  [${ARM} run ${RUN_IDX}] Applied test patch." | tee -a "$RESULTS_DIR/run.log" \
+      || echo "  [${ARM} run ${RUN_IDX}] WARNING: test patch failed to apply." | tee -a "$RESULTS_DIR/run.log"
+  fi
 
   # Isolated Claude config: only credentials, no settings/skills/memories
   local EVAL_CFG
@@ -98,6 +108,7 @@ ${PROBLEM_TEXT}"
   # shellcheck disable=SC2086
   CLAUDE_CONFIG_DIR="$EVAL_CFG" \
     "$CLAUDE" -p "$FULL_PROMPT" \
+    --model claude-sonnet-4-6 \
     --system-prompt "$SYSTEM_PROMPT" \
     $TOOLS_FLAGS \
     --dangerously-skip-permissions \
@@ -118,7 +129,6 @@ ${PROBLEM_TEXT}"
   echo "  [${ARM} run ${RUN_IDX}] Running test suite..." | tee -a "$RESULTS_DIR/run.log"
 
   # Run test command from the repo dir using the venv python
-  local VENV_DIR="${REPO_DIR}/.venv"
   (
     cd "$REPO_DIR"
     # TEST_CMD starts with "python ..." — replace leading python with venv python
@@ -169,8 +179,8 @@ while IFS=$'\t ' read -r INSTANCE BASE_COMMIT REPO_SLUG TEST_CMD_REST || [[ -n "
 
   git -C "$REPO_DIR" checkout "$BASE_COMMIT" --force --quiet
 
-  # --- Set up venv once per instance ---
-  VENV_DIR="${REPO_DIR}/.venv"
+  # --- Set up venv once per instance (outside REPO_DIR so git clean -fd doesn't wipe it) ---
+  VENV_DIR="${CLONE_BASE}/venvs/${INSTANCE}"
   if [[ ! -d "$VENV_DIR" ]]; then
     echo "  Setting up venv..." | tee -a "$RESULTS_DIR/run.log"
     python3.11 -m venv "$VENV_DIR"
@@ -190,17 +200,12 @@ while IFS=$'\t ' read -r INSTANCE BASE_COMMIT REPO_SLUG TEST_CMD_REST || [[ -n "
     echo "  WARNING: PROBLEM_TEXT hardcoded — ${INSTANCE} results may be invalid" \
       | tee -a "$RESULTS_DIR/run.log"
   fi
-  PROBLEM_TEXT="Instance: ${INSTANCE}
-Repository: ${REPO_SLUG} at commit ${BASE_COMMIT}
+  PROBLEM_TEXT="The following tests are failing in the repository at ${REPO_DIR}:
 
-Bug: FileBasedCache.has_key() is susceptible to race conditions.
-The has_key method checks os.path.exists(fname) then opens the file,
-but between the exists() check and open(), the file can be deleted
-(e.g., by another thread calling _is_expired() which deletes expired files).
-This causes FileNotFoundError.
+  cache.tests.FileBasedCacheTests.test_has_key_race_handling
+  cache.tests.FileBasedCachePathLibTests.test_has_key_race_handling
 
-The fix should wrap the open() call in a try/except FileNotFoundError
-to handle the race condition gracefully (EAFP pattern)."
+Fix the source code so these tests pass. Do not modify the test files."
 
   # --- Run both arms ---
   for RUN in $(seq 1 "$RUNS_PER_ARM"); do
@@ -209,16 +214,16 @@ to handle the race condition gracefully (EAFP pattern)."
     # Baseline arm: all default tools
     run_arm "$INSTANCE" "baseline" "" \
       "You are a helpful assistant." \
-      "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT"
+      "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"
 
-    # Reset before constrained arm
+    # Reset before onlycode arm
     git -C "$REPO_DIR" checkout "$BASE_COMMIT" --force --quiet 2>/dev/null
     git -C "$REPO_DIR" clean -fd --quiet 2>/dev/null
 
-    # Constrained arm: Bash+Write only, one-script-per-turn
-    run_arm "$INSTANCE" "constrained" "--tools Bash,Write" \
-      "You are a helpful assistant. CONSTRAINT: solve each task by writing one complete script per turn." \
-      "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT"
+    # Onlycode arm: MCP execute_code tool only, no built-in tools
+    run_arm "$INSTANCE" "onlycode" "--mcp-config ${MCP_CONFIG} --strict-mcp-config --tools mcp__codebox__execute_code" \
+      "You are a helpful assistant." \
+      "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"
   done
 
   echo "" | tee -a "$RESULTS_DIR/run.log"
@@ -231,7 +236,7 @@ echo "=== Done. Results in ${RESULTS_DIR}/ ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
 echo "Result files per instance per arm:"
 echo "  *_baseline_run*.jsonl   — stream-json output from baseline arm"
-echo "  *_constrained_run*.jsonl — stream-json output from constrained arm"
+echo "  *_onlycode_run*.jsonl   — stream-json output from onlycode arm"
 echo "  *_test.txt              — test suite output + PASS/FAIL verdict"
 echo ""
 echo "To generate summary: review *_test.txt files for PASS/FAIL verdicts,"
