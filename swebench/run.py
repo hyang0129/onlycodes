@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from pathlib import Path
 
@@ -110,7 +111,6 @@ def _run_arm(
     try:
         with open(result_file) as f:
             content = f.read()
-        import re
         cost_matches = re.findall(r'"total_cost_usd":\s*([\d.]+)', content)
         turns_matches = re.findall(r'"num_turns":\s*(\d+)', content)
         if cost_matches:

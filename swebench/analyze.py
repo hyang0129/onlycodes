@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import os
 import re
 from pathlib import Path
 
