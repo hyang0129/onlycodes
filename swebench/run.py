@@ -6,6 +6,7 @@ import io
 import os
 import re
 import time
+import traceback
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
@@ -207,7 +208,7 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
     "fail_fast",
     is_flag=True,
     default=False,
-    help="Stop on first FAIL verdict and cancel in-flight runs.",
+    help="Stop on first FAIL verdict. Cancels queued tasks; already-running Claude invocations finish.",
 )
 def run_command(
     filter_ids: str | None,
@@ -299,84 +300,112 @@ def run_command(
     click.echo("Phase 2: Running evaluation arms...")
     click.echo()
 
-    # Build flat list of arm tasks
-    arm_tasks: list[_ArmTask] = []
+    # Build arm tasks grouped by problem.  Each problem's arms must run
+    # serially because they share one repo_dir (git working tree).
+    problem_tasks: dict[str, list[_ArmTask]] = {}
     for problem in problems:
         repo_dir, venv_dir = setup_map[problem.instance_id]
+        tasks: list[_ArmTask] = []
         for run_idx in range(1, num_runs + 1):
             for arm in arm_list:
-                arm_tasks.append(_ArmTask(
+                tasks.append(_ArmTask(
                     problem=problem,
                     arm=arm,
                     run_idx=run_idx,
                     repo_dir=repo_dir,
                     venv_dir=venv_dir,
                 ))
+        problem_tasks[problem.instance_id] = tasks
 
     if parallel == 1:
         # Serial execution — matches original behaviour exactly
-        for task in arm_tasks:
-            click.echo(f"--- Instance: {task.problem.instance_id} ---")
-            click.echo(f"  Repo: {task.problem.repo_slug}")
-            click.echo(f"  Base commit: {task.problem.base_commit}")
-            click.echo(f"  Test cmd: {task.problem.test_cmd}")
-            verdict = _run_arm(
-                problem=task.problem,
-                arm=task.arm,
-                run_idx=task.run_idx,
-                repo_dir=task.repo_dir,
-                venv_dir=task.venv_dir,
-                results_dir=str(results_dir),
-                claude_binary=claude_binary,
-                mcp_config_path=mcp_config_path,
-                root=root,
-            )
-            click.echo()
-            if fail_fast and verdict == "FAIL":
-                click.echo("FAIL detected with --fail-fast; stopping early.")
-                raise SystemExit(1)
+        last_instance: str | None = None
+        for pid, tasks in problem_tasks.items():
+            for task in tasks:
+                if task.problem.instance_id != last_instance:
+                    click.echo(f"--- Instance: {task.problem.instance_id} ---")
+                    click.echo(f"  Repo: {task.problem.repo_slug}")
+                    click.echo(f"  Base commit: {task.problem.base_commit}")
+                    click.echo(f"  Test cmd: {task.problem.test_cmd}")
+                    last_instance = task.problem.instance_id
+                verdict = _run_arm(
+                    problem=task.problem,
+                    arm=task.arm,
+                    run_idx=task.run_idx,
+                    repo_dir=task.repo_dir,
+                    venv_dir=task.venv_dir,
+                    results_dir=str(results_dir),
+                    claude_binary=claude_binary,
+                    mcp_config_path=mcp_config_path,
+                    root=root,
+                )
+                click.echo()
+                if fail_fast and verdict == "FAIL":
+                    click.echo("FAIL detected with --fail-fast; stopping early.")
+                    raise SystemExit(1)
     else:
-        # Parallel execution with concurrency semaphore
+        # Parallel execution — one thread per problem.  Arms within each
+        # problem run serially to avoid repo_dir race conditions.
         _fail_event = threading.Event()
 
-        def _run_task(task: _ArmTask) -> tuple[str, str]:
-            """Execute one arm task; returns (instance_id, verdict)."""
-            if _fail_event.is_set():
-                return task.problem.instance_id, "CANCELLED"
+        def _run_problem_tasks(tasks: list[_ArmTask]) -> list[tuple[str, str]]:
+            """Run all arm tasks for one problem serially; returns list of (id, verdict)."""
+            results: list[tuple[str, str]] = []
+            for task in tasks:
+                if _fail_event.is_set():
+                    results.append((task.problem.instance_id, "CANCELLED"))
+                    continue
 
-            buf = io.StringIO()
-            verdict = _run_arm(
-                problem=task.problem,
-                arm=task.arm,
-                run_idx=task.run_idx,
-                repo_dir=task.repo_dir,
-                venv_dir=task.venv_dir,
-                results_dir=str(results_dir),
-                claude_binary=claude_binary,
-                mcp_config_path=mcp_config_path,
-                root=root,
-                log_buffer=buf,
-            )
+                buf = io.StringIO()
+                try:
+                    verdict = _run_arm(
+                        problem=task.problem,
+                        arm=task.arm,
+                        run_idx=task.run_idx,
+                        repo_dir=task.repo_dir,
+                        venv_dir=task.venv_dir,
+                        results_dir=str(results_dir),
+                        claude_binary=claude_binary,
+                        mcp_config_path=mcp_config_path,
+                        root=root,
+                        log_buffer=buf,
+                    )
+                except Exception as exc:
+                    buf.write(f"\nERROR: {exc}\n")
+                    buf.write(traceback.format_exc())
+                    verdict = "ERROR"
 
-            header = (
-                f"--- Instance: {task.problem.instance_id} "
-                f"[{task.arm} run {task.run_idx}] ---"
-            )
-            _flush_buffer(header, buf)
+                header = (
+                    f"--- Instance: {task.problem.instance_id} "
+                    f"[{task.arm} run {task.run_idx}] ---"
+                )
+                _flush_buffer(header, buf)
 
-            if fail_fast and verdict == "FAIL":
-                _fail_event.set()
+                if fail_fast and verdict == "FAIL":
+                    _fail_event.set()
 
-            return task.problem.instance_id, verdict
+                results.append((task.problem.instance_id, verdict))
+            return results
 
         with ThreadPoolExecutor(max_workers=parallel) as pool:
-            futures = [pool.submit(_run_task, t) for t in arm_tasks]
+            futures = {
+                pool.submit(_run_problem_tasks, tasks): pid
+                for pid, tasks in problem_tasks.items()
+            }
 
             had_failure = False
             for fut in as_completed(futures):
-                instance_id, verdict = fut.result()
-                if verdict == "FAIL" and fail_fast:
+                try:
+                    for instance_id, verdict in fut.result():
+                        if verdict == "FAIL" and fail_fast:
+                            had_failure = True
+                except Exception:
                     had_failure = True
+
+                # Cancel remaining unstarted futures on failure
+                if had_failure and fail_fast:
+                    for other_fut in futures:
+                        other_fut.cancel()
 
             if had_failure:
                 click.echo("FAIL detected with --fail-fast; stopping early.")
