@@ -1,0 +1,12 @@
+# SWE-bench problem list for smoke test
+# Format: instance_id  base_commit  repo  test_cmd
+#
+# Fields are whitespace-separated. The test_cmd is everything after the 3rd field.
+# The harness runs: <venv>/bin/<test_cmd> from within the repo directory.
+#
+# Start with 1 exercise to validate the harness before scaling to 20.
+# Additional instances from the issue can be added once the smoke test passes.
+#
+# --parallel=1: disables Django's parallel test runner for deterministic evaluation results.
+
+django__django-16379  1d0fa848e084cad62d0bb6bde3b51e4862558e57  django/django  python tests/runtests.py cache.tests.FileBasedCacheTests.test_has_key_race_handling cache.tests.FileBasedCachePathLibTests.test_has_key_race_handling --parallel=1
