@@ -20870,8 +20870,8 @@ async function logSession(entry) {
 }
 var DEFAULT_TIMEOUT_SECONDS = 30;
 var MAX_OUTPUT_BYTES = 1024 * 1024;
-async function executeCode(code, language, timeoutSeconds) {
-  const workDir = await mkdtemp(join(tmpdir(), "onlycodes-"));
+async function executeCode(code, language, timeoutSeconds, cwd = null) {
+  const workDir = cwd ?? await mkdtemp(join(tmpdir(), "onlycodes-"));
   const strippedEnv = buildStrippedEnv();
   const interpreter = language === "python" ? "python3" : "bash";
   let cmd, args;
@@ -20966,14 +20966,14 @@ function classifyResult(result) {
   return "non_retryable";
 }
 var fallbackCount = 0;
-async function executeWithRetry(code, language, timeoutSeconds) {
-  const result1 = await executeCode(code, language, timeoutSeconds);
+async function executeWithRetry(code, language, timeoutSeconds, cwd = null) {
+  const result1 = await executeCode(code, language, timeoutSeconds, cwd);
   const classification1 = classifyResult(result1);
   if (classification1 === "success") {
     return { result: result1, fallback_used: false, warning: null };
   }
   if (classification1 === "retryable") {
-    const result2 = await executeCode(code, language, timeoutSeconds);
+    const result2 = await executeCode(code, language, timeoutSeconds, cwd);
     const classification2 = classifyResult(result2);
     if (classification2 === "success") {
       return { result: result2, fallback_used: false, warning: null };
@@ -21003,7 +21003,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "execute_code",
-      description: "Execute a Python or Bash script in an isolated subprocess. Returns stdout, stderr, and exit code. Use for file operations, analysis, and shell commands. Prefer writing one complete script over multiple calls.",
+      description: "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory. Prefer writing one complete script over multiple calls.",
       inputSchema: {
         type: "object",
         properties: {
@@ -21019,6 +21019,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           timeout_seconds: {
             type: "number",
             description: "Hard timeout in seconds. Process is killed on expiry. Default: 30."
+          },
+          cwd: {
+            type: "string",
+            description: "Working directory for the subprocess. If omitted, a fresh isolated temp directory is used."
           }
         },
         required: ["code", "language"]
@@ -21038,7 +21042,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true
     };
   }
-  const { code, language, timeout_seconds } = request.params.arguments;
+  const { code, language, timeout_seconds, cwd } = request.params.arguments;
   if (!code || typeof code !== "string") {
     return {
       content: [{ type: "text", text: "Error: code is required and must be a string." }],
@@ -21057,14 +21061,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
   const timeout = typeof timeout_seconds === "number" && timeout_seconds > 0 ? timeout_seconds : DEFAULT_TIMEOUT_SECONDS;
+  const effectiveCwd = typeof cwd === "string" && cwd.length > 0 ? cwd : null;
   const { result, fallback_used, warning } = await executeWithRetry(
     code,
     language,
-    timeout
+    timeout,
+    effectiveCwd
   );
   await logSession({
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     language,
+    cwd: effectiveCwd,
     code,
     stdout: result.stdout,
     stderr: result.stderr,
