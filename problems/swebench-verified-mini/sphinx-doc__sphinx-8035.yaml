@@ -1,0 +1,17 @@
+instance_id: sphinx-doc__sphinx-8035
+repo: sphinx-doc/sphinx
+base_commit: 5e6da19f0e44a0ae83944fb6ce18f18f781e1a6e
+test_cmd: python -m pytest tests/test_ext_autodoc_private_members.py::test_private_members
+patch_file: patches/sphinx-doc__sphinx-8035_tests.patch
+problem_statement: "Support defining specific `:private-members:` for autodoc\n**Is\
+  \ your feature request related to a problem? Please describe.**\r\nCurrently, if\
+  \ I'm using autodoc, the `:private-members:` option does not allow specification\
+  \ of which private members to document. The current behavior is to document all\
+  \ private members, but what if I would only like to document 1 or 2?\r\n\r\n**Describe\
+  \ the solution you'd like**\r\nFor `:private-members:` to take arguments, similarly\
+  \ to how `:members:` currently works\r\n\r\n**Describe alternatives you've considered**\r\
+  \nThe current best way to do this is to explicitly list each class in a module and\
+  \ use `:autoattribute:`\r\n\r\n- Some prior discussion: https://github.com/sphinx-doc/sphinx/issues/8009\r\
+  \n\r\n\n"
+added_at: '2026-04-16'
+hf_split: test

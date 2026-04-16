@@ -1,0 +1,12 @@
+instance_id: django__django-12713
+repo: django/django
+base_commit: 5b884d45ac5b76234eca614d90c83b347294c332
+test_cmd: python tests/runtests.py admin_widgets.tests.AdminFormfieldForDBFieldTests.test_formfield_overrides_m2m_filter_widget
+  --parallel=1
+patch_file: patches/django__django-12713_tests.patch
+problem_statement: "Allow overridding widget in formfield_for_manytomany().\nDescription\n\
+  \t \n\t\t(last modified by Mariusz Felisiak)\n\t \nIt does not work when I set widget\
+  \ param to function formfield_for_manytomany().\nThis is different from the formfield_for_foreignkey()\
+  \ function.\n"
+added_at: '2026-04-16'
+hf_split: test
