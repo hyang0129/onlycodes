@@ -9,12 +9,8 @@ from pathlib import Path
 
 import click
 
+from swebench import repo_root
 from swebench.models import ArmResult
-
-
-def _repo_root() -> Path:
-    """Return the repository root (parent of swebench/)."""
-    return Path(__file__).resolve().parent.parent
 
 
 def _parse_results(results_dir: Path) -> list[ArmResult]:
@@ -107,7 +103,7 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
     if results_dir:
         rdir = Path(results_dir)
     else:
-        rdir = _repo_root() / "results_swebench"
+        rdir = repo_root() / "results_swebench"
 
     if not rdir.is_dir():
         click.echo(f"ERROR: Results directory not found: {rdir}", err=True)

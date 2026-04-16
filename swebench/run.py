@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from swebench import repo_root
 from swebench.harness import (
     apply_test_patch,
     clone_repo,
@@ -19,11 +20,6 @@ from swebench.harness import (
     setup_venv,
 )
 from swebench.models import Problem
-
-
-def _repo_root() -> Path:
-    """Return the repository root (parent of swebench/)."""
-    return Path(__file__).resolve().parent.parent
 
 
 def _run_arm(
@@ -149,7 +145,7 @@ def _run_arm(
 )
 def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
-    root = _repo_root()
+    root = repo_root()
     problems_dir = root / "problems"
     results_dir = root / "results_swebench"
     mcp_config_path = str(root / "mcp-config.json")

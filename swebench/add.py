@@ -11,12 +11,8 @@ from pathlib import Path
 
 import click
 
+from swebench import repo_root
 from swebench.models import Problem
-
-
-def _repo_root() -> Path:
-    """Return the repository root (parent of swebench/)."""
-    return Path(__file__).resolve().parent.parent
 
 
 def _fetch_instance(instance_id: str) -> dict:
@@ -82,7 +78,7 @@ def _validate_instance(instance_id: str, repo_slug: str, base_commit: str) -> No
 @click.argument("instance_id")
 def add_command(instance_id: str) -> None:
     """Fetch an instance from SWE-bench_Verified and write it to problems/."""
-    root = _repo_root()
+    root = repo_root()
     problems_dir = root / "problems"
     patches_dir = root / "patches"
 
