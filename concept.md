@@ -51,7 +51,7 @@ A Code Mode proxy acts as both MCP server (to Claude Code) and MCP client (to re
 
 ```
 Claude Code
-    └── MCP client → proxy (exposes: execute_code)
+    └── MCP client → proxy (exposes: mcp__codebox__execute_code)
                           ├── MCP client → real server A
                           ├── MCP client → real server B
                           └── sandbox executes generated code
@@ -100,29 +100,21 @@ Host receives messages, dispatches to real MCP servers with credentials, returns
 
 ---
 
-## Disabling Built-in Tools
+## Restricting Tools at Invocation Time
 
-Add tool names to `permissions.deny` in settings — this removes them from the system prompt entirely, not just blocks their execution.
+Rather than editing `settings.json`, register the MCP server once via CLI and pass `--allowedTools` per invocation. This keeps settings files clean and makes the constraint explicit in the runner script:
 
-```json
-// .claude/settings.json (project-level)
-{
-  "permissions": {
-    "deny": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit"]
-  },
-  "mcpServers": {
-    "execute-code": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["./exec-server.js"]
-    }
-  }
-}
+```bash
+# One-time registration (adds to ~/.claude/settings.json automatically)
+claude mcp add codebox node ./exec-server.js
+
+# Per-invocation: only mcp__codebox__execute_code is available
+claude --allowedTools "mcp__codebox__execute_code" -p "run this script"
 ```
 
-Use `/permissions` inside a running session to adjust interactively without editing the file.
+`--allowedTools` is a whitelist — unlisted tools are not offered to the model at all, equivalent to `permissions.deny` on everything else. Because it's a CLI flag rather than a file edit, the same `settings.json` works for both normal and constrained runs; the runner script controls the constraint.
 
-**Caveat:** Full disabling of built-in tools is an open GitHub issue — `deny` blocks calls and removes context, but behavior may vary by tool. Use project-level settings so only that devcontainer agent is affected; other agents keep normal tool access.
+**Caveat:** Full disabling of built-in tools is an open GitHub issue — `deny` / `--allowedTools` blocks calls and removes context, but behavior may vary by tool. Keeping the constraint in the runner script (rather than committed settings) means other agents using the same project settings retain normal tool access.
 
 ---
 
