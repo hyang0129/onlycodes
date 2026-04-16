@@ -109,6 +109,7 @@ ${PROBLEM_TEXT}"
   CLAUDE_CONFIG_DIR="$EVAL_CFG" \
     "$CLAUDE" -p "$FULL_PROMPT" \
     --model claude-sonnet-4-6 \
+    --cwd "$REPO_DIR" \
     --system-prompt "$SYSTEM_PROMPT" \
     $TOOLS_FLAGS \
     --dangerously-skip-permissions \
