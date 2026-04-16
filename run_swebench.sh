@@ -179,6 +179,13 @@ while IFS=$'\t ' read -r INSTANCE BASE_COMMIT REPO_SLUG TEST_CMD_REST || [[ -n "
   # TODO: When scaling to 20 problems, fetch problem_statement from SWE-bench
   # dataset via: python3 -c "from datasets import load_dataset; ..."
   # For the smoke test, the problem statement is hardcoded for the single instance.
+  if [[ "$INSTANCE" != "django__django-16379" ]]; then
+    echo "  WARNING: PROBLEM_TEXT is hardcoded for django__django-16379." >&2
+    echo "           Results for ${INSTANCE} may be invalid." >&2
+    echo "           Implement dynamic problem_statement fetching (see TODO above)." >&2
+    echo "  WARNING: PROBLEM_TEXT hardcoded — ${INSTANCE} results may be invalid" \
+      | tee -a "$RESULTS_DIR/run.log"
+  fi
   PROBLEM_TEXT="Instance: ${INSTANCE}
 Repository: ${REPO_SLUG} at commit ${BASE_COMMIT}
 
