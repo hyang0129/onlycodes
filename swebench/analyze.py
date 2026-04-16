@@ -120,7 +120,7 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
     try:
         from tabulate import tabulate
 
-        headers = ["instance_id", "arm", "run", "verdict", "cost", "turns", "wall"]
+        headers = ["instance_id", "arm", "run", "verdict", "cost", "turns"]
         rows = [
             [
                 r.instance_id,
@@ -129,21 +129,20 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
                 r.verdict,
                 f"${r.cost_usd:.3f}" if r.cost_usd is not None else "N/A",
                 r.num_turns if r.num_turns is not None else "N/A",
-                f"{r.wall_secs}s",
             ]
             for r in results
         ]
         click.echo(tabulate(rows, headers=headers, tablefmt="plain"))
     except ImportError:
         # Fallback: manual column formatting
-        header = f"{'instance_id':<30} {'arm':<12} {'run':<5} {'verdict':<8} {'cost':<10} {'turns':<7} {'wall':<6}"
+        header = f"{'instance_id':<30} {'arm':<12} {'run':<5} {'verdict':<8} {'cost':<10} {'turns':<7}"
         click.echo(header)
         for r in results:
             cost_str = f"${r.cost_usd:.3f}" if r.cost_usd is not None else "N/A"
             turns_str = str(r.num_turns) if r.num_turns is not None else "N/A"
             click.echo(
                 f"{r.instance_id:<30} {r.arm:<12} {r.run_idx:<5} {r.verdict:<8} "
-                f"{cost_str:<10} {turns_str:<7} {r.wall_secs}s"
+                f"{cost_str:<10} {turns_str:<7}"
             )
 
     # Optional CSV output
