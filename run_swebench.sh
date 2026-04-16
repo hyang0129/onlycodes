@@ -10,14 +10,18 @@
 #   problems_file = swebench_problems.txt
 #   runs_per_arm  = 1
 #
-# Architecture is parametric: --problems N and --runs-per-arm N flags support
-# future expansion without structural changes.
+# Architecture is parametric: positional parameters support future expansion
+# without structural changes.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROBLEMS_FILE="${1:-${SCRIPT_DIR}/swebench_problems.txt}"
 RUNS_PER_ARM="${2:-1}"
+if [[ ! "$RUNS_PER_ARM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: runs_per_arm must be a positive integer, got: '$RUNS_PER_ARM'" >&2
+  exit 1
+fi
 RESULTS_DIR="${SCRIPT_DIR}/results_swebench"
 CLONE_BASE="/tmp/swebench"
 
