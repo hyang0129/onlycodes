@@ -148,7 +148,6 @@ def run_claude(
             claude_binary,
             "-p", prompt,
             "--model", "claude-sonnet-4-6",
-            "--cwd", repo_dir,
             "--system-prompt", system_prompt,
             *tools_flags,
             "--dangerously-skip-permissions",
@@ -161,7 +160,7 @@ def run_claude(
         env["CLAUDE_CONFIG_DIR"] = cfg_dir
 
         with open(result_file, "w") as out:
-            subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT, env=env)
+            subprocess.run(cmd, cwd=repo_dir, stdout=out, stderr=subprocess.STDOUT, env=env)
     finally:
         shutil.rmtree(cfg_dir, ignore_errors=True)
 

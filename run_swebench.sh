@@ -93,15 +93,6 @@ run_arm() {
 
   local RESULT_FILE="${RESULTS_DIR}/${INSTANCE}_${ARM}_run${RUN_IDX}.jsonl"
 
-  # Generate per-run MCP config with cwd set to the target repo
-  local EFFECTIVE_MCP_CONFIG="$MCP_CONFIG"
-  if [[ -f "$MCP_CONFIG" ]]; then
-    EFFECTIVE_MCP_CONFIG=$(mktemp /tmp/mcp-config-XXXXXX.json)
-    jq --arg cwd "$REPO_DIR" '.mcpServers.codebox.cwd = $cwd' "$MCP_CONFIG" > "$EFFECTIVE_MCP_CONFIG"
-  fi
-  # Replace MCP_CONFIG path in TOOLS_FLAGS with the per-run config
-  local EFFECTIVE_TOOLS_FLAGS="${TOOLS_FLAGS//${MCP_CONFIG}/${EFFECTIVE_MCP_CONFIG}}"
-
   # Run claude with timing
   local START_TIME
   START_TIME=$(date +%s)
@@ -115,26 +106,25 @@ Fix the following bug. Make the minimal change needed.
 ${PROBLEM_TEXT}"
 
   # shellcheck disable=SC2086
-  CLAUDE_CONFIG_DIR="$EVAL_CFG" \
-    "$CLAUDE" -p "$FULL_PROMPT" \
-    --model claude-sonnet-4-6 \
-    --cwd "$REPO_DIR" \
-    --system-prompt "$SYSTEM_PROMPT" \
-    $EFFECTIVE_TOOLS_FLAGS \
-    --dangerously-skip-permissions \
-    --no-session-persistence \
-    --output-format stream-json \
-    --verbose \
-    > "$RESULT_FILE" 2>&1 || true
+  (
+    cd "$REPO_DIR"
+    CLAUDE_CONFIG_DIR="$EVAL_CFG" \
+      "$CLAUDE" -p "$FULL_PROMPT" \
+      --model claude-sonnet-4-6 \
+      --system-prompt "$SYSTEM_PROMPT" \
+      $TOOLS_FLAGS \
+      --dangerously-skip-permissions \
+      --no-session-persistence \
+      --output-format stream-json \
+      --verbose \
+      > "$RESULT_FILE" 2>&1 || true
+  )
 
   local END_TIME
   END_TIME=$(date +%s)
   local WALL_SECS=$(( END_TIME - START_TIME ))
 
   rm -rf "$EVAL_CFG"
-  if [[ "$EFFECTIVE_MCP_CONFIG" != "$MCP_CONFIG" ]]; then
-    rm -f "$EFFECTIVE_MCP_CONFIG"
-  fi
 
   # Run the test suite to get pass/fail verdict
   local TEST_RESULT_FILE="${RESULTS_DIR}/${INSTANCE}_${ARM}_run${RUN_IDX}_test.txt"
@@ -231,8 +221,7 @@ Fix the source code so these tests pass. Do not modify the test files."
 
     # Onlycode arm: MCP execute_code tool only, no built-in tools
     # run_arm() resets the repo to BASE_COMMIT as its first action — no explicit reset needed here.
-    # run_arm() generates a per-instance MCP config with cwd=$REPO_DIR so the MCP server
-    # runs in the target repo, matching the baseline arm's working directory.
+    # The agent receives REPO_DIR in the prompt and passes it as cwd= in each execute_code call.
     run_arm "$INSTANCE" "onlycode" "--mcp-config ${MCP_CONFIG} --strict-mcp-config --tools mcp__codebox__execute_code" \
       "You are a helpful assistant." \
       "$RUN" "$REPO_DIR" "$BASE_COMMIT" "$TEST_CMD" "$PROBLEM_TEXT" "$VENV_DIR"

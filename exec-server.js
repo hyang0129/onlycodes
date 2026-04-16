@@ -86,10 +86,11 @@ const MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB per stream
  * @param {string} code - The script to execute
  * @param {"python"|"bash"} language - Script language
  * @param {number} timeoutSeconds - Hard timeout
+ * @param {string|null} cwd - Working directory for the subprocess. If null, a fresh temp dir is used.
  * @returns {Promise<{stdout: string, stderr: string, exit_code: number, duration_ms: number, timed_out: boolean}>}
  */
-async function executeCode(code, language, timeoutSeconds) {
-  const workDir = await mkdtemp(join(tmpdir(), "onlycodes-"));
+async function executeCode(code, language, timeoutSeconds, cwd = null) {
+  const workDir = cwd ?? await mkdtemp(join(tmpdir(), "onlycodes-"));
   const strippedEnv = buildStrippedEnv();
 
   const interpreter = language === "python" ? "python3" : "bash";
@@ -224,8 +225,8 @@ let fallbackCount = 0;
  *
  * @returns {{result: object, fallback_used: boolean, warning: string|null}}
  */
-async function executeWithRetry(code, language, timeoutSeconds) {
-  const result1 = await executeCode(code, language, timeoutSeconds);
+async function executeWithRetry(code, language, timeoutSeconds, cwd = null) {
+  const result1 = await executeCode(code, language, timeoutSeconds, cwd);
   const classification1 = classifyResult(result1);
 
   if (classification1 === "success") {
@@ -234,7 +235,7 @@ async function executeWithRetry(code, language, timeoutSeconds) {
 
   if (classification1 === "retryable") {
     // Retry once on transient error
-    const result2 = await executeCode(code, language, timeoutSeconds);
+    const result2 = await executeCode(code, language, timeoutSeconds, cwd);
     const classification2 = classifyResult(result2);
 
     if (classification2 === "success") {
@@ -279,7 +280,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "execute_code",
       description:
-        "Execute a Python or Bash script in an isolated subprocess. Returns stdout, stderr, and exit code. Use for file operations, analysis, and shell commands. Prefer writing one complete script over multiple calls.",
+        "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory. Prefer writing one complete script over multiple calls.",
       inputSchema: {
         type: "object",
         properties: {
@@ -296,6 +297,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "number",
             description:
               "Hard timeout in seconds. Process is killed on expiry. Default: 30.",
+          },
+          cwd: {
+            type: "string",
+            description:
+              "Working directory for the subprocess. If omitted, a fresh isolated temp directory is used.",
           },
         },
         required: ["code", "language"],
@@ -318,7 +324,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  const { code, language, timeout_seconds } = request.params.arguments;
+  const { code, language, timeout_seconds, cwd } = request.params.arguments;
 
   // Validate inputs
   if (!code || typeof code !== "string") {
@@ -344,16 +350,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     ? timeout_seconds
     : DEFAULT_TIMEOUT_SECONDS;
 
+  const effectiveCwd = typeof cwd === "string" && cwd.length > 0 ? cwd : null;
+
   const { result, fallback_used, warning } = await executeWithRetry(
     code,
     language,
-    timeout
+    timeout,
+    effectiveCwd
   );
 
   // Log to session.jsonl
   await logSession({
     timestamp: new Date().toISOString(),
     language,
+    cwd: effectiveCwd,
     code,
     stdout: result.stdout,
     stderr: result.stderr,
