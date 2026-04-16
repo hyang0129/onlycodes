@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import os
 import re
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
+from typing import NamedTuple
 
 import click
 
@@ -23,6 +27,16 @@ from swebench.harness import (
 from swebench.models import Problem
 
 
+class _ArmTask(NamedTuple):
+    """Describes one arm execution to schedule."""
+
+    problem: Problem
+    arm: str
+    run_idx: int
+    repo_dir: str
+    venv_dir: str
+
+
 def _run_arm(
     *,
     problem: Problem,
@@ -34,9 +48,22 @@ def _run_arm(
     claude_binary: str,
     mcp_config_path: str,
     root: Path,
-) -> None:
-    """Run a single arm (baseline or onlycode) for one instance."""
-    click.echo(f"  [{arm} run {run_idx}] Starting...")
+    log_buffer: io.StringIO | None = None,
+) -> str:
+    """Run a single arm (baseline or onlycode) for one instance.
+
+    Returns the verdict string ("PASS", "FAIL", or "ERROR").
+    When *log_buffer* is provided, all output is written there instead of
+    directly to stdout so that parallel runs don't interleave.
+    """
+
+    def _echo(msg: str) -> None:
+        if log_buffer is not None:
+            log_buffer.write(msg + "\n")
+        else:
+            click.echo(msg)
+
+    _echo(f"  [{arm} run {run_idx}] Starting...")
 
     # Reset repo to base commit
     git_reset(repo_dir, problem.base_commit)
@@ -45,9 +72,9 @@ def _run_arm(
     if problem.patch_file:
         patch_path = str(root / problem.patch_file)
         if apply_test_patch(repo_dir, patch_path):
-            click.echo(f"  [{arm} run {run_idx}] Applied test patch.")
+            _echo(f"  [{arm} run {run_idx}] Applied test patch.")
         else:
-            click.echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
+            _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     prompt = (
@@ -94,7 +121,7 @@ def _run_arm(
         results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
     )
 
-    click.echo(f"  [{arm} run {run_idx}] Running test suite...")
+    _echo(f"  [{arm} run {run_idx}] Running test suite...")
 
     verdict = run_tests(
         repo_dir=repo_dir,
@@ -103,7 +130,7 @@ def _run_arm(
         result_file=test_result_file,
     )
 
-    click.echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
+    _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
 
     # Extract cost and turns from stream-json output
     cost = "N/A"
@@ -120,7 +147,32 @@ def _run_arm(
     except (OSError, ValueError):
         pass
 
-    click.echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
+    _echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
+    return verdict
+
+
+def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
+    """Clone repo and set up venv for a single problem. Returns (repo_dir, venv_dir)."""
+    repo_dir = os.path.join(clone_base, problem.instance_id)
+    venv_dir = os.path.join(clone_base, "venvs", problem.instance_id)
+    clone_repo(problem.repo_slug, repo_dir)
+    git_reset(repo_dir, problem.base_commit)
+    setup_venv(venv_dir, repo_dir)
+    return repo_dir, venv_dir
+
+
+# Global lock for serialised stdout flushing.
+_print_lock = threading.Lock()
+
+
+def _flush_buffer(header: str, buf: io.StringIO) -> None:
+    """Write buffered output to stdout atomically under a lock."""
+    text = buf.getvalue()
+    with _print_lock:
+        click.echo(header)
+        if text:
+            click.echo(text, nl=False)
+        click.echo()
 
 
 @click.command("run")
@@ -143,8 +195,32 @@ def _run_arm(
     default=1,
     help="Number of runs per arm (default: 1).",
 )
-def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
+@click.option(
+    "--parallel",
+    "parallel",
+    type=int,
+    default=1,
+    help="Max concurrent Claude invocations (default: 1 = serial).",
+)
+@click.option(
+    "--fail-fast",
+    "fail_fast",
+    is_flag=True,
+    default=False,
+    help="Stop on first FAIL verdict and cancel in-flight runs.",
+)
+def run_command(
+    filter_ids: str | None,
+    arms: str,
+    num_runs: int,
+    parallel: int,
+    fail_fast: bool,
+) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
+    if parallel < 1:
+        click.echo("ERROR: --parallel must be >= 1", err=True)
+        raise SystemExit(1)
+
     root = repo_root()
     problems_dir = root / "problems"
     results_dir = root / "results_swebench"
@@ -188,38 +264,122 @@ def run_command(filter_ids: str | None, arms: str, num_runs: int) -> None:
     click.echo(f"Problems: {len(problems)}")
     click.echo(f"Arms: {', '.join(arm_list)}")
     click.echo(f"Runs per arm: {num_runs}")
+    click.echo(f"Parallel: {parallel}")
+    click.echo(f"Fail-fast: {fail_fast}")
     click.echo(f"Claude binary: {claude_binary}")
     click.echo()
 
+    # --- Phase 1: parallel clone + venv setup -----------------------------------
+    click.echo("Phase 1: Setting up repos and venvs...")
+    setup_map: dict[str, tuple[str, str]] = {}
+
+    if parallel == 1:
+        # Serial setup — no thread overhead
+        for problem in problems:
+            click.echo(f"  Setting up {problem.instance_id}...")
+            setup_map[problem.instance_id] = _setup_problem(problem, clone_base)
+    else:
+        with ThreadPoolExecutor(max_workers=parallel) as pool:
+            future_to_id: dict[Future[tuple[str, str]], str] = {}
+            for problem in problems:
+                fut = pool.submit(_setup_problem, problem, clone_base)
+                future_to_id[fut] = problem.instance_id
+            for fut in as_completed(future_to_id):
+                pid = future_to_id[fut]
+                try:
+                    setup_map[pid] = fut.result()
+                    click.echo(f"  {pid}: setup complete")
+                except Exception as exc:
+                    click.echo(f"  {pid}: setup FAILED ({exc})", err=True)
+                    raise SystemExit(1)
+
+    click.echo()
+
+    # --- Phase 2: run arms -------------------------------------------------------
+    click.echo("Phase 2: Running evaluation arms...")
+    click.echo()
+
+    # Build flat list of arm tasks
+    arm_tasks: list[_ArmTask] = []
     for problem in problems:
-        click.echo(f"--- Instance: {problem.instance_id} ---")
-        click.echo(f"  Repo: {problem.repo_slug}")
-        click.echo(f"  Base commit: {problem.base_commit}")
-        click.echo(f"  Test cmd: {problem.test_cmd}")
-
-        repo_dir = os.path.join(clone_base, problem.instance_id)
-        venv_dir = os.path.join(clone_base, "venvs", problem.instance_id)
-
-        # Clone and setup
-        clone_repo(problem.repo_slug, repo_dir)
-        git_reset(repo_dir, problem.base_commit)
-        setup_venv(venv_dir, repo_dir)
-
+        repo_dir, venv_dir = setup_map[problem.instance_id]
         for run_idx in range(1, num_runs + 1):
             for arm in arm_list:
-                click.echo()
-                _run_arm(
+                arm_tasks.append(_ArmTask(
                     problem=problem,
                     arm=arm,
                     run_idx=run_idx,
                     repo_dir=repo_dir,
                     venv_dir=venv_dir,
-                    results_dir=str(results_dir),
-                    claude_binary=claude_binary,
-                    mcp_config_path=mcp_config_path,
-                    root=root,
-                )
+                ))
 
-        click.echo()
+    if parallel == 1:
+        # Serial execution — matches original behaviour exactly
+        for task in arm_tasks:
+            click.echo(f"--- Instance: {task.problem.instance_id} ---")
+            click.echo(f"  Repo: {task.problem.repo_slug}")
+            click.echo(f"  Base commit: {task.problem.base_commit}")
+            click.echo(f"  Test cmd: {task.problem.test_cmd}")
+            verdict = _run_arm(
+                problem=task.problem,
+                arm=task.arm,
+                run_idx=task.run_idx,
+                repo_dir=task.repo_dir,
+                venv_dir=task.venv_dir,
+                results_dir=str(results_dir),
+                claude_binary=claude_binary,
+                mcp_config_path=mcp_config_path,
+                root=root,
+            )
+            click.echo()
+            if fail_fast and verdict == "FAIL":
+                click.echo("FAIL detected with --fail-fast; stopping early.")
+                raise SystemExit(1)
+    else:
+        # Parallel execution with concurrency semaphore
+        _fail_event = threading.Event()
+
+        def _run_task(task: _ArmTask) -> tuple[str, str]:
+            """Execute one arm task; returns (instance_id, verdict)."""
+            if _fail_event.is_set():
+                return task.problem.instance_id, "CANCELLED"
+
+            buf = io.StringIO()
+            verdict = _run_arm(
+                problem=task.problem,
+                arm=task.arm,
+                run_idx=task.run_idx,
+                repo_dir=task.repo_dir,
+                venv_dir=task.venv_dir,
+                results_dir=str(results_dir),
+                claude_binary=claude_binary,
+                mcp_config_path=mcp_config_path,
+                root=root,
+                log_buffer=buf,
+            )
+
+            header = (
+                f"--- Instance: {task.problem.instance_id} "
+                f"[{task.arm} run {task.run_idx}] ---"
+            )
+            _flush_buffer(header, buf)
+
+            if fail_fast and verdict == "FAIL":
+                _fail_event.set()
+
+            return task.problem.instance_id, verdict
+
+        with ThreadPoolExecutor(max_workers=parallel) as pool:
+            futures = [pool.submit(_run_task, t) for t in arm_tasks]
+
+            had_failure = False
+            for fut in as_completed(futures):
+                instance_id, verdict = fut.result()
+                if verdict == "FAIL" and fail_fast:
+                    had_failure = True
+
+            if had_failure:
+                click.echo("FAIL detected with --fail-fast; stopping early.")
+                raise SystemExit(1)
 
     click.echo(f"=== Done. Results in {results_dir}/ ===")
