@@ -208,9 +208,8 @@ def _process_one(
     except LookupError as exc:
         return (instance_id, False, str(exc))
     except Exception as exc:  # noqa: BLE001
-        logger.error(
-            f"Unexpected error processing {instance_id}: {type(exc).__name__}: {exc}",
-            exc_info=True,
+        logger.opt(exception=True).error(
+            f"Unexpected error processing {instance_id}: {type(exc).__name__}: {exc}"
         )
         return (instance_id, False, str(exc))
 
