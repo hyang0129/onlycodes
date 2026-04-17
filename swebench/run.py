@@ -609,10 +609,16 @@ def run_command(
                     raise SystemExit(1)
                 # Refresh the overlay between arms so the next arm sees a clean
                 # lowerdir — avoids fuse-overlayfs EEXIST on copy-up'd files.
+                # Note: we do NOT write the returned handle back to overlay_handles
+                # because _refresh_overlay reuses the same merged/upper/work paths
+                # (it wipes and remounts in place). Writing back would create a
+                # concurrent write/iterate hazard in parallel mode since
+                # _teardown_all_overlays iterates overlay_handles.values(). The
+                # paths in overlay_handles remain valid throughout (Option B fix).
                 if i < len(tasks) - 1:
                     handle = overlay_handles.get(pid)
                     if handle is not None and handle.lowerdir:
-                        overlay_handles[pid] = _refresh_overlay(handle, task.venv_dir)
+                        _refresh_overlay(handle, task.venv_dir)
     else:
         # Parallel execution — one thread per problem.  Arms within each
         # problem run serially to avoid repo_dir race conditions.
@@ -663,10 +669,17 @@ def run_command(
 
                 # Refresh the overlay between arms so the next arm sees a clean
                 # lowerdir — avoids fuse-overlayfs EEXIST on copy-up'd files.
+                # Note: we do NOT write the returned handle back to overlay_handles
+                # because _refresh_overlay reuses the same merged/upper/work paths
+                # (it wipes and remounts in place). Writing back would create a
+                # concurrent write/iterate hazard since _teardown_all_overlays
+                # (called from the main thread on exception) iterates
+                # overlay_handles.values(). The paths in overlay_handles remain
+                # valid throughout (Option B fix).
                 if i < len(tasks) - 1:
                     handle = overlay_handles.get(pid)
                     if handle is not None and handle.lowerdir:
-                        overlay_handles[pid] = _refresh_overlay(handle, task.venv_dir)
+                        _refresh_overlay(handle, task.venv_dir)
             return results
 
         try:
