@@ -203,3 +203,91 @@ def test_unmount_overlay_on_never_mounted_path(tmp_path):
 
 def test_unmount_overlay_on_missing_dir_is_noop(tmp_path):
     cache.unmount_overlay(str(tmp_path / "missing"), "kernel")
+
+
+# --- reinstall_editable error surfacing -------------------------------------
+
+
+def test_reinstall_editable_raises_on_pip_failure(tmp_path):
+    """Non-zero pip exit must surface as OverlayError, not a silent no-op.
+
+    Previously the call swallowed errors, which let broken editable installs
+    reach the arm-execution phase and fail with confusing ImportErrors.
+    """
+    # Build a venv that has pip — then point reinstall_editable at a path
+    # that doesn't look like a package.
+    venv_dir = tmp_path / "venv"
+    stdlib_venv.create(str(venv_dir), with_pip=True)
+    not_a_package = tmp_path / "definitely-not-a-package"
+    not_a_package.mkdir()
+
+    with pytest.raises(cache.OverlayError):
+        cache.reinstall_editable(str(venv_dir), str(not_a_package))
+
+
+# --- run.py cached-setup fallback and teardown ------------------------------
+
+
+def test_setup_problem_cached_returns_none_when_uncached(tmp_path, monkeypatch):
+    """_setup_problem_cached must short-circuit when has_cached_instance is False.
+
+    This is the contract the Phase 1 fallback relies on: an empty third
+    element signals "no cache; fall back to clone+venv".
+    """
+    from swebench.run import _setup_problem_cached
+    from swebench.models import Problem
+
+    monkeypatch.setenv("SWEBENCH_CACHE_ROOT", str(tmp_path))
+
+    problem = Problem(
+        instance_id="not-cached-1",
+        repo_slug="example/example",
+        base_commit="deadbeef",
+        test_cmd="true",
+        problem_statement="n/a",
+        patch_file=None,
+        added_at="",
+        hf_split="test",
+    )
+
+    repo_dir, venv_dir, handle = _setup_problem_cached(
+        problem,
+        run_tag="eval",
+        overlay_tmp_root=str(tmp_path / "tmp-overlays"),
+        overlay_backend="kernel",
+    )
+    assert handle is None
+    assert repo_dir == ""
+    assert venv_dir == ""
+
+
+def test_teardown_overlay_removes_allocated_dirs(tmp_path, monkeypatch):
+    """_teardown_overlay must unmount-then-rmtree upper/work/merged and rm the parent.
+
+    We don't have a real mount here, so unmount_overlay is a no-op; the
+    important invariant is that the three directories are removed and the
+    common parent (now empty) is also rmdir'd.
+    """
+    from swebench.run import _OverlayHandle, _teardown_overlay
+
+    parent = tmp_path / "overlay-parent"
+    upperdir = parent / "upper"
+    workdir = parent / "work"
+    merged = parent / "merged"
+    for d in (upperdir, workdir, merged):
+        d.mkdir(parents=True)
+    (upperdir / "dummy.txt").write_text("x")  # non-empty to exercise rmtree
+
+    handle = _OverlayHandle(
+        merged=str(merged),
+        upperdir=str(upperdir),
+        workdir=str(workdir),
+        backend="kernel",
+    )
+    _teardown_overlay(handle)
+
+    # All three subdirs must be gone, and the parent too (now empty → rmdir).
+    assert not upperdir.exists()
+    assert not workdir.exists()
+    assert not merged.exists()
+    assert not parent.exists()
