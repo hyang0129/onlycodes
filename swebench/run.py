@@ -165,8 +165,6 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
             click.echo(text, nl=False)
         click.echo()
 
-    return verdict
-
 
 @click.command("run")
 @click.option(
@@ -230,8 +228,9 @@ def run_command(
         click.echo(f"ERROR: {e}", err=True)
         raise SystemExit(1)
 
-    # Load problems
-    yaml_files = sorted(problems_dir.glob("*.yaml"))
+    # Load problems (recurse into subfolders so curated sets in e.g.
+    # problems/swebench-verified-mini/ and problems/adhoc/ are all picked up).
+    yaml_files = sorted(problems_dir.rglob("*.yaml"))
     if not yaml_files:
         click.echo("ERROR: No problem files found in problems/. Run 'python -m swebench add' first.", err=True)
         raise SystemExit(1)
