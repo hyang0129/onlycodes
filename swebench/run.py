@@ -165,8 +165,6 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
             click.echo(text, nl=False)
         click.echo()
 
-    return verdict
-
 
 @click.command("run")
 @click.option(

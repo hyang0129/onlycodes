@@ -7,5 +7,6 @@ __pycache__/
 .pytest_cache/
 fixtures_requests/
 node_modules/
+.venv/
 logs/session.jsonl
 exec-server.bundle.cjs
