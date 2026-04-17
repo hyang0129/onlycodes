@@ -422,6 +422,11 @@ def run_command(
     def _setup_one(problem: Problem) -> tuple[str, str, _OverlayHandle | None]:
         """Prefer cached setup when --use-cache is on; else fall back to plain clone."""
         if use_cache:
+            # run_tag is a fixed string here, which means two concurrent
+            # `swebench run --use-cache` invocations on overlapping filters
+            # would collide on /tmp/swe-{id}-eval/. Deferred per PR scope;
+            # assign a PID- or uuid-based tag here if that becomes a real
+            # use case.
             merged, venv_dir, handle = _setup_problem_cached(
                 problem,
                 run_tag="eval",

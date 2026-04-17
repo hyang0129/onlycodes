@@ -125,6 +125,25 @@ def test_scrub_is_idempotent(tmp_path):
     assert (tmp_path / "README.md").is_file()
 
 
+def test_scrub_preserves_nested_dot_claude_fixture(tmp_path):
+    """Nested .claude/ directories (upstream test fixtures) must be preserved.
+
+    scrub is intentionally root-only for .claude/ so packages like a
+    hypothetical `myproj/tests/fixtures/.claude/` don't get clobbered.
+    """
+    (tmp_path / ".claude").mkdir()  # root-level — should be removed
+    (tmp_path / ".claude" / "notes.md").write_text("prior context")
+    nested = tmp_path / "tests" / "fixtures" / ".claude"
+    nested.mkdir(parents=True)
+    (nested / "data.json").write_text("{}")
+
+    cache.scrub_cache_dir(str(tmp_path))
+
+    assert not (tmp_path / ".claude").exists()  # root removed
+    assert nested.exists()  # nested preserved
+    assert (nested / "data.json").is_file()
+
+
 # --- lockfile ----------------------------------------------------------------
 
 

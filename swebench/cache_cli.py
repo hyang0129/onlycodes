@@ -87,6 +87,11 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
 
     started = time.time()
     try:
+        # On --force, clear any stale lockfile up front so a half-rebuilt
+        # cache never looks valid to verify_lockfile on a later run.
+        if force:
+            Path(paths["lockfile"]).unlink(missing_ok=True)
+
         # 1. Bare repo
         bare = str(bare_repo_path(problem.repo_slug))
         clone_bare_repo(problem.repo_slug, bare)

@@ -34,13 +34,15 @@ from typing import Literal
 
 # -- Layout ------------------------------------------------------------------
 
-# Override via the SWEBENCH_CACHE_ROOT env var (used by tests).
-CACHE_ROOT = os.environ.get("SWEBENCH_CACHE_ROOT", "/workspaces/.swebench-cache")
+# Default cache root. Override via the SWEBENCH_CACHE_ROOT env var (used by
+# tests). The env var is read on every _root() call so test fixtures that
+# monkeypatch.setenv take effect without needing to re-import the module.
+_DEFAULT_CACHE_ROOT = "/workspaces/.swebench-cache"
 
 
 def _root() -> Path:
     """Resolve the cache root at call time, honouring SWEBENCH_CACHE_ROOT."""
-    return Path(os.environ.get("SWEBENCH_CACHE_ROOT", CACHE_ROOT))
+    return Path(os.environ.get("SWEBENCH_CACHE_ROOT", _DEFAULT_CACHE_ROOT))
 
 
 def repos_dir() -> Path:
@@ -90,7 +92,12 @@ def has_cached_instance(instance_id: str) -> bool:
 # -- Scrub -------------------------------------------------------------------
 
 # Directory names (at any depth) to remove wholesale before caching.
-_SCRUB_DIR_NAMES = {"__pycache__", ".claude"}
+_SCRUB_DIR_NAMES_ANY_DEPTH = {"__pycache__"}
+
+# Directory names removed only at the repo root — intentionally narrower
+# because upstream repos sometimes ship a ``.claude/`` fixture directory that
+# must not be clobbered.
+_SCRUB_DIR_NAMES_ROOT_ONLY = {".claude"}
 
 # File suffixes (case-sensitive) to remove at any depth.
 _SCRUB_FILE_SUFFIXES = (".pyc", ".pyo", ".swp")
@@ -106,8 +113,11 @@ def scrub_cache_dir(repo_dir: str) -> None:
     Removes at any depth:
       - ``__pycache__/`` directories and ``*.pyc`` / ``*.pyo`` files
       - ``*.swp`` files (vim swap)
-      - ``.claude/`` directories (prior-run Claude context — prevents leakage)
       - ``*.egg-info/`` directories (will be regenerated post-mount)
+    Removes only at the repo root:
+      - ``.claude/`` directory (prior-run Claude context — prevents leakage).
+        Restricted to the root so upstream fixtures named ``.claude/`` deep
+        in the tree are preserved.
     And specifically from ``.git/``:
       - ``COMMIT_EDITMSG``, ``MERGE_MSG``, ``FETCH_HEAD``
 
@@ -125,13 +135,19 @@ def scrub_cache_dir(repo_dir: str) -> None:
     for path in root.rglob("*"):
         name = path.name
         if path.is_dir():
-            if name in _SCRUB_DIR_NAMES:
+            if name in _SCRUB_DIR_NAMES_ANY_DEPTH:
                 dirs_to_remove.append(path)
             elif name.endswith(".egg-info"):
                 dirs_to_remove.append(path)
         else:
             if name.endswith(_SCRUB_FILE_SUFFIXES):
                 files_to_remove.append(path)
+
+    # Root-only directory scrubs (see _SCRUB_DIR_NAMES_ROOT_ONLY).
+    for name in _SCRUB_DIR_NAMES_ROOT_ONLY:
+        p = root / name
+        if p.is_dir():
+            dirs_to_remove.append(p)
 
     git_dir = root / ".git"
     if git_dir.is_dir():
@@ -256,7 +272,14 @@ def _can_kernel_mount() -> bool:
             capture_output=True,
         )
         if result.returncode == 0:
-            subprocess.run(["umount", merged], capture_output=True)
+            # Unmount before the finally's rmtree. If umount fails (rare, but
+            # possible on transient EBUSY), retry with lazy unmount so the
+            # tmpdir cleanup doesn't leave a dangling mount behind.
+            umount_rc = subprocess.run(
+                ["umount", merged], capture_output=True
+            ).returncode
+            if umount_rc != 0:
+                subprocess.run(["umount", "-l", merged], capture_output=True)
             return True
         return False
     finally:
@@ -353,6 +376,15 @@ def unmount_overlay(merged: str, backend: Backend) -> None:
         stderr = (result.stderr or "").lower()
         if "not mounted" in stderr or "not found" in stderr or "no such" in stderr:
             return
-        # Fallback: try a lazy unmount (best-effort; don't raise on double-cleanup)
+        # Fallback: try a lazy/forced unmount (best-effort; don't raise on
+        # double-cleanup). For fuse, prefer `fusermount -uz` so we stay on
+        # the canonical fuse teardown path; fall back to `umount -l` only
+        # if that isn't available.
+        if backend == "fuse":
+            rc = subprocess.run(
+                ["fusermount", "-uz", merged], capture_output=True
+            ).returncode
+            if rc == 0:
+                return
         if shutil.which("umount") is not None:
             subprocess.run(["umount", "-l", merged], capture_output=True)
