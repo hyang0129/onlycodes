@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 import click
+from loguru import logger
 
 from swebench import repo_root
 from swebench.cache import (
@@ -86,6 +87,11 @@ def _run_arm(
         else:
             click.echo(msg)
 
+    logger.debug(
+        f"Arm execution mode: {'buffered' if log_buffer is not None else 'direct'} "
+        f"({problem.instance_id}[{arm}] run {run_idx})"
+    )
+    logger.info(f"[{problem.instance_id}][{arm} run {run_idx}] Starting arm")
     _echo(f"  [{arm} run {run_idx}] Starting...")
 
     # Reset repo to base commit
@@ -102,8 +108,14 @@ def _run_arm(
     if problem.patch_file:
         patch_path = str(root / problem.patch_file)
         if apply_test_patch(repo_dir, patch_path):
+            logger.info(
+                f"[{problem.instance_id}][{arm} run {run_idx}] Applied test patch"
+            )
             _echo(f"  [{arm} run {run_idx}] Applied test patch.")
         else:
+            logger.warning(
+                f"[{problem.instance_id}][{arm} run {run_idx}] Test patch failed to apply"
+            )
             _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
@@ -142,6 +154,9 @@ def _run_arm(
         results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
     )
 
+    logger.info(
+        f"[{problem.instance_id}][{arm} run {run_idx}] Running test suite"
+    )
     _echo(f"  [{arm} run {run_idx}] Running test suite...")
 
     verdict = run_tests(
@@ -151,6 +166,9 @@ def _run_arm(
         result_file=test_result_file,
     )
 
+    logger.info(
+        f"[{problem.instance_id}][{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)"
+    )
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
 
     # Extract cost and turns from stream-json output
@@ -165,9 +183,16 @@ def _run_arm(
             cost = f"${cost_matches[-1]}"
         if turns_matches:
             turns = turns_matches[-1]
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        logger.debug(
+            f"[{problem.instance_id}][{arm} run {run_idx}] "
+            f"Cost/turns extraction failed: {exc}"
+        )
 
+    logger.info(
+        f"[{problem.instance_id}][{arm} run {run_idx}] "
+        f"Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s"
+    )
     _echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
     return verdict
 
@@ -223,6 +248,9 @@ def _setup_problem_cached(
 
     # Venv integrity — if Claude leaked a pip install into a prior run, rebuild.
     if not verify_lockfile(venv_dir, lockfile):
+        logger.warning(
+            f"Venv lockfile mismatch for {problem.instance_id}; rebuilding cache entry"
+        )
         click.echo(
             f"  {problem.instance_id}: venv lockfile mismatch — rebuilding cache entry."
         )
@@ -238,6 +266,7 @@ def _setup_problem_cached(
         setup_venv(venv_dir, lower)
         scrub_cache_dir(lower)
         write_lockfile(venv_dir, lockfile)
+        logger.info(f"Cache rebuild complete for {problem.instance_id}")
 
     # Allocate overlay dirs unique to this (problem, run_tag) pair.
     overlay_root = os.path.join(overlay_tmp_root, f"{problem.instance_id}-{run_tag}")
@@ -247,6 +276,10 @@ def _setup_problem_cached(
     for d in (upperdir, workdir, merged):
         os.makedirs(d, exist_ok=True)
 
+    logger.debug(
+        f"Mounting overlay for {problem.instance_id}: backend={overlay_backend} "
+        f"lower={lower} merged={merged}"
+    )
     mount_overlay(lower, upperdir, workdir, merged, overlay_backend)
 
     return (
@@ -264,18 +297,21 @@ def _setup_problem_cached(
 
 def _teardown_overlay(handle: _OverlayHandle) -> None:
     """Unmount and rm -rf the overlay's upper/work/merged directories."""
+    logger.debug(f"Unmounting overlay: {handle.merged} (backend={handle.backend})")
     try:
         unmount_overlay(handle.merged, handle.backend)
-    except Exception:  # noqa: BLE001 — teardown must not raise
-        pass
+    except Exception as exc:  # noqa: BLE001 — teardown must not raise
+        logger.debug(
+            f"Unmount exception during teardown of {handle.merged} (suppressed): {exc}"
+        )
     for d in (handle.upperdir, handle.workdir, handle.merged):
         shutil.rmtree(d, ignore_errors=True)
     # Remove the common parent if now empty.
     parent = os.path.dirname(handle.merged)
     try:
         os.rmdir(parent)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug(f"Parent dir {parent} not empty or missing (expected): {exc}")
 
 
 def _refresh_overlay(handle: _OverlayHandle, venv_dir: str) -> _OverlayHandle:
@@ -318,8 +354,12 @@ def _cleanup_stale_overlays(
     instance_ids = {p.instance_id for p in problems}
     try:
         entries = os.listdir(overlay_tmp_root)
-    except OSError:
+    except OSError as exc:
+        logger.debug(
+            f"Cannot list overlay tmp root {overlay_tmp_root}: {exc}; skipping cleanup"
+        )
         return
+    cleaned = 0
     for entry in entries:
         # Match any dir named "{instance_id}-*" (e.g. "-eval", "-baseline-1-eval")
         for iid in instance_ids:
@@ -335,11 +375,18 @@ def _cleanup_stale_overlays(
                     break
                 try:
                     unmount_overlay(merged, backend)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        f"Stale overlay unmount failed for {merged}: {exc}; "
+                        "attempting tree removal"
+                    )
                 shutil.rmtree(overlay_root, ignore_errors=True)
+                logger.debug(f"Cleaned stale overlay: {overlay_root}")
                 click.echo(f"  cleaned stale overlay: {overlay_root}")
+                cleaned += 1
                 break
+    if cleaned:
+        logger.info(f"Cleanup: {cleaned} stale overlay(s) removed")
 
 
 @click.command("run")
@@ -416,18 +463,25 @@ def run_command(
 
     results_dir.mkdir(parents=True, exist_ok=True)
     os.makedirs(clone_base, exist_ok=True)
+    logger.debug(
+        f"Initialized results dir: {results_dir}; clone base: {clone_base}"
+    )
 
     # Find claude binary
     try:
         claude_binary = find_claude_binary()
     except FileNotFoundError as e:
+        logger.error(f"Claude binary not found: {e}")
         click.echo(f"ERROR: {e}", err=True)
         raise SystemExit(1)
+    logger.info(f"Found Claude binary: {claude_binary}")
 
     # Load problems (recurse into subfolders so curated sets in e.g.
     # problems/swebench-verified-mini/ and problems/adhoc/ are all picked up).
     yaml_files = sorted(problems_dir.rglob("*.yaml"))
+    logger.debug(f"Discovered {len(yaml_files)} problem file(s) under {problems_dir}")
     if not yaml_files:
+        logger.error(f"No problem files found in {problems_dir}")
         click.echo("ERROR: No problem files found in problems/. Run 'python -m swebench add' first.", err=True)
         raise SystemExit(1)
 
@@ -437,7 +491,9 @@ def run_command(
     if filter_ids:
         ids = {s.strip() for s in filter_ids.split(",")}
         problems = [p for p in problems if p.instance_id in ids]
+        logger.debug(f"After filter '{filter_ids}': {len(problems)} problem(s)")
         if not problems:
+            logger.error(f"No matching problems for filter: {filter_ids}")
             click.echo(f"ERROR: No matching problems for filter: {filter_ids}", err=True)
             raise SystemExit(1)
 
@@ -464,6 +520,10 @@ def run_command(
     if use_cache:
         overlay_backend = detect_overlay_backend()
         if overlay_backend == "none":
+            logger.warning(
+                "No overlay backend available (no CAP_SYS_ADMIN and no fuse-overlayfs); "
+                "using clone+venv fallback"
+            )
             click.echo(
                 "WARNING: --use-cache requested but no overlay backend available "
                 "(no CAP_SYS_ADMIN and no fuse-overlayfs). Falling back to the "
@@ -472,6 +532,7 @@ def run_command(
             )
             use_cache = False
         else:
+            logger.info(f"Overlay backend: {overlay_backend}")
             click.echo(f"Overlay backend: {overlay_backend}")
             click.echo()
             _cleanup_stale_overlays(problems, overlay_tmp_root, overlay_backend)
@@ -499,6 +560,10 @@ def run_command(
                     overlay_backend=overlay_backend,
                 )
             except OverlayError as exc:
+                logger.error(
+                    f"Overlay mount failed for {problem.instance_id}: {exc}; "
+                    "falling back to clone+venv"
+                )
                 click.echo(
                     f"  {problem.instance_id}: overlay mount failed ({exc}); "
                     "falling back to clone+venv.",
@@ -519,15 +584,18 @@ def run_command(
     if parallel == 1:
         # Serial setup — no thread overhead
         for problem in problems:
+            logger.debug(f"Setup started: {problem.instance_id}")
             click.echo(f"  Setting up {problem.instance_id}...")
             repo_dir, venv_dir, handle = _setup_one(problem)
             setup_map[problem.instance_id] = (repo_dir, venv_dir)
             if handle is not None:
                 overlay_handles[problem.instance_id] = handle
+            logger.debug(f"Setup complete: {problem.instance_id}")
     else:
         with ThreadPoolExecutor(max_workers=parallel) as pool:
             future_to_id: dict[Future[tuple[str, str, _OverlayHandle | None]], str] = {}
             for problem in problems:
+                logger.debug(f"Setup started: {problem.instance_id}")
                 fut = pool.submit(_setup_one, problem)
                 future_to_id[fut] = problem.instance_id
             for fut in as_completed(future_to_id):
@@ -537,8 +605,12 @@ def run_command(
                     setup_map[pid] = (repo_dir, venv_dir)
                     if handle is not None:
                         overlay_handles[pid] = handle
+                    logger.debug(f"Setup complete: {pid}")
                     click.echo(f"  {pid}: setup complete")
                 except Exception as exc:
+                    logger.opt(exception=True).error(
+                        f"Setup for {pid} failed: {exc}"
+                    )
                     click.echo(f"  {pid}: setup FAILED ({exc})", err=True)
                     # Tear down any overlays mounted so far before exiting.
                     for h in overlay_handles.values():
@@ -581,12 +653,21 @@ def run_command(
                 ))
         problem_tasks[problem.instance_id] = tasks
 
+    total_tasks = sum(len(t) for t in problem_tasks.values())
+    logger.debug(
+        f"Built {total_tasks} arm task(s) across {len(problem_tasks)} problem(s)"
+    )
+
     if parallel == 1:
         # Serial execution — matches original behaviour exactly
         last_instance: str | None = None
         for pid, tasks in problem_tasks.items():
             for i, task in enumerate(tasks):
                 if task.problem.instance_id != last_instance:
+                    logger.info(
+                        f"Instance: {task.problem.instance_id} arm={task.arm} "
+                        f"repo={task.problem.repo_slug} base={task.problem.base_commit}"
+                    )
                     click.echo(f"--- Instance: {task.problem.instance_id} ---")
                     click.echo(f"  Repo: {task.problem.repo_slug}")
                     click.echo(f"  Base commit: {task.problem.base_commit}")
@@ -606,10 +687,18 @@ def run_command(
                         needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except BaseException:
+                    logger.opt(exception=True).error(
+                        f"Arm execution failed for "
+                        f"{task.problem.instance_id}[{task.arm}] before teardown"
+                    )
                     _teardown_all_overlays()
                     raise
                 click.echo()
                 if fail_fast and verdict == "FAIL":
+                    logger.info(
+                        f"Fail-fast triggered: {task.problem.instance_id}[{task.arm}] "
+                        f"verdict={verdict}"
+                    )
                     _teardown_all_overlays()
                     click.echo("FAIL detected with --fail-fast; stopping early.")
                     raise SystemExit(1)
@@ -659,8 +748,12 @@ def run_command(
                         needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except Exception as exc:
+                    logger.opt(exception=True).error(
+                        f"Arm {task.arm} run {task.run_idx} for "
+                        f"{task.problem.instance_id} failed"
+                    )
                     stderr_detail = getattr(exc, "stderr", None)
-                    buf.write(f"\nERROR: {exc}\n")
+                    buf.write(f"\nERROR: {type(exc).__name__}: {exc}\n")
                     if stderr_detail:
                         buf.write(f"stderr: {stderr_detail}\n")
                     buf.write(traceback.format_exc())
@@ -673,6 +766,10 @@ def run_command(
                 _flush_buffer(header, buf)
 
                 if fail_fast and verdict == "FAIL":
+                    logger.info(
+                        f"Fail-fast triggered: {task.problem.instance_id}"
+                        f"[{task.arm}] verdict={verdict}"
+                    )
                     _fail_event.set()
 
                 results.append((task.problem.instance_id, verdict))
@@ -697,6 +794,10 @@ def run_command(
             return results
 
         try:
+            logger.info(
+                f"Starting parallel execution: {parallel} worker(s), "
+                f"{len(problem_tasks)} problem(s)"
+            )
             with ThreadPoolExecutor(max_workers=parallel) as pool:
                 futures = {
                     pool.submit(_run_problem_tasks, tasks): pid
@@ -709,7 +810,11 @@ def run_command(
                         for instance_id, verdict in fut.result():
                             if verdict == "FAIL" and fail_fast:
                                 had_failure = True
-                    except Exception:
+                    except Exception as exc:
+                        logger.opt(exception=True).error(
+                            f"Unexpected error processing result from parallel "
+                            f"arm ({futures[fut]}): {exc}"
+                        )
                         had_failure = True
 
                     # Cancel remaining unstarted futures on failure
