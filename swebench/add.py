@@ -6,24 +6,15 @@ import json
 import re
 import subprocess
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 
 import click
+from loguru import logger
 
 from swebench import repo_root
 from swebench.models import Problem
-
-
-# Lock to serialise click.echo output across parallel worker threads.
-_print_lock = threading.Lock()
-
-
-def _echo(msg: str, *, err: bool = False) -> None:
-    with _print_lock:
-        click.echo(msg, err=err)
 
 
 def _iter_ids_file(path: Path) -> list[str]:
@@ -53,10 +44,9 @@ def _fetch_instance(instance_id: str) -> dict:
     try:
         from datasets import load_dataset
     except ImportError:
-        _echo(
-            "ERROR: 'datasets' package is required for the add command.\n"
-            "Install it with: pip install 'datasets>=2.18'",
-            err=True,
+        logger.error(
+            "'datasets' package required for the add command; "
+            "install with: pip install 'datasets>=2.18'"
         )
         sys.exit(1)
 
@@ -67,13 +57,14 @@ def _fetch_instance(instance_id: str) -> dict:
     ]
 
     for dataset_name, split in datasets_to_try:
-        _echo(f"Searching {dataset_name} for {instance_id} (streaming)...")
+        logger.info(f"Searching {dataset_name} for {instance_id}...")
         ds = load_dataset(dataset_name, split=split, streaming=True)
         for row in ds:
             if row["instance_id"] == instance_id:
-                _echo(f"  Found {instance_id} in {dataset_name}.")
+                logger.info(f"Located {instance_id} in {dataset_name}")
                 return row
 
+    logger.warning(f"Instance {instance_id} not found in any SWE-bench dataset")
     raise LookupError(
         f"instance '{instance_id}' not found in SWE-bench_Verified or SWE-bench."
     )
@@ -85,7 +76,7 @@ def _validate_instance(instance_id: str, repo_slug: str, base_commit: str) -> No
     This performs lightweight checks — it does not actually clone the repo if it
     doesn't already exist locally.
     """
-    _echo(f"Validating {instance_id}...")
+    logger.debug(f"Validating {instance_id}...")
 
     # Check repo exists on GitHub
     result = subprocess.run(
@@ -94,15 +85,14 @@ def _validate_instance(instance_id: str, repo_slug: str, base_commit: str) -> No
         text=True,
     )
     if result.returncode != 0:
-        _echo(
-            f"WARNING: Could not verify repo {repo_slug} via gh: {result.stderr.strip()}",
-            err=True,
+        logger.warning(
+            f"Repository {repo_slug} could not be verified: {result.stderr.strip()}"
         )
     else:
-        _echo(f"  Repo {repo_slug} exists on GitHub.")
+        logger.debug(f"Repository {repo_slug} verified on GitHub")
 
-    _echo(f"  Base commit: {base_commit}")
-    _echo(f"  Validation complete for {instance_id}.")
+    logger.debug(f"Base commit for {instance_id}: {base_commit}")
+    logger.debug(f"Validation complete for {instance_id}")
 
 
 def _build_test_cmd(row: dict, repo_slug: str) -> str:
@@ -114,11 +104,16 @@ def _build_test_cmd(row: dict, repo_slug: str) -> str:
     if "test_cmd" in row and row["test_cmd"]:
         return row["test_cmd"]
 
+    instance_id = row.get("instance_id", "<unknown>")
     fail_to_pass = row.get("FAIL_TO_PASS", [])
     if isinstance(fail_to_pass, str):
         try:
             fail_to_pass = json.loads(fail_to_pass)
         except (ValueError, TypeError):
+            logger.debug(
+                f"Could not parse FAIL_TO_PASS as JSON for {instance_id}; "
+                "treating as string"
+            )
             fail_to_pass = [fail_to_pass]
 
     if not fail_to_pass:
@@ -154,13 +149,11 @@ def _write_problem(
 
     test_cmd = _build_test_cmd(row, repo_slug)
     if not test_cmd:
-        _echo(
-            f"WARNING: no test_cmd or FAIL_TO_PASS in dataset row for {instance_id}; "
-            "set test_cmd manually.",
-            err=True,
+        logger.warning(
+            f"No test_cmd or FAIL_TO_PASS for {instance_id}; must be set manually"
         )
     elif "test_cmd" not in row or not row.get("test_cmd"):
-        _echo(f"  Constructed test_cmd from FAIL_TO_PASS: {test_cmd}")
+        logger.info(f"Constructed test_cmd for {instance_id}: {test_cmd}")
 
     # Write test patch from dataset's test_patch field
     patch_file: str | None = None
@@ -170,15 +163,12 @@ def _write_problem(
         patches_dir.mkdir(parents=True, exist_ok=True)
         patch_path.write_text(test_patch_content)
         patch_file = f"patches/{instance_id}_tests.patch"
-        _echo(f"  Wrote test patch: {patch_file}")
+        logger.info(f"Wrote test patch for {instance_id}: {patch_file}")
     elif patch_path.exists():
         patch_file = f"patches/{instance_id}_tests.patch"
-        _echo(f"  Using existing patch file: {patch_file}")
+        logger.info(f"Using existing patch file for {instance_id}: {patch_file}")
     else:
-        _echo(
-            f"  WARNING: No test_patch in dataset and no patch file at {patch_path}.",
-            err=True,
-        )
+        logger.warning(f"No test_patch for {instance_id} at {patch_path}")
 
     # Build Problem and write YAML into problems/<set>/<instance_id>.yaml
     problem = Problem(
@@ -194,7 +184,7 @@ def _write_problem(
 
     yaml_path = problems_dir / set_name / f"{instance_id}.yaml"
     problem.to_yaml(yaml_path)
-    _echo(f"Wrote {yaml_path}")
+    logger.info(f"Wrote problem YAML: {yaml_path}")
     return yaml_path
 
 
@@ -210,18 +200,19 @@ def _process_one(
         # the target set. Matches the previous UX for single adds.
         existing = list(problems_dir.rglob(f"{instance_id}.yaml"))
         if existing:
-            _echo(
-                f"Problem file already exists for {instance_id}: {existing[0]}\n"
-                f"Overwriting with fresh data from HuggingFace (target: {set_name}/)..."
-            )
+            logger.warning(f"Overwriting existing problem for {instance_id}")
 
         row = _fetch_instance(instance_id)
         yaml_path = _write_problem(instance_id, row, problems_dir, patches_dir, set_name)
         return (instance_id, True, str(yaml_path))
     except LookupError as exc:
         return (instance_id, False, str(exc))
-    except Exception as exc:  # noqa: BLE001 — surface any fetch/write error per-id
-        return (instance_id, False, f"{type(exc).__name__}: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            f"Unexpected error processing {instance_id}: {type(exc).__name__}: {exc}",
+            exc_info=True,
+        )
+        return (instance_id, False, str(exc))
 
 
 @click.command("add")
@@ -289,7 +280,7 @@ def add_command(
         # Single-instance path — keep behaviour simple and serial.
         iid, ok, msg = _process_one(instance_id, problems_dir, patches_dir, set_name)
         if not ok:
-            _echo(f"ERROR: {iid}: {msg}", err=True)
+            logger.error(f"Failed to add {iid}: {msg}")
             sys.exit(1)
         return
 
@@ -297,12 +288,12 @@ def add_command(
     assert from_file is not None  # narrow for type-checkers
     ids = _iter_ids_file(from_file)
     if not ids:
-        _echo(f"ERROR: no instance IDs found in {from_file}.", err=True)
+        logger.error(f"No valid instance IDs found in {from_file}")
         sys.exit(1)
 
-    _echo(
-        f"Batch add: {len(ids)} instance(s) into problems/{set_name}/ "
-        f"with concurrency={concurrency}."
+    logger.info(
+        f"Batch add: {len(ids)} instances into problems/{set_name}/ "
+        f"(concurrency={concurrency})"
     )
 
     successes: list[str] = []
@@ -320,13 +311,10 @@ def add_command(
                 successes.append(iid)
             else:
                 failures.append((iid, msg))
-                _echo(f"FAILED: {iid}: {msg}", err=True)
+                logger.error(f"Batch failed for {iid}: {msg}")
 
-    _echo("")
-    _echo("=== Batch add summary ===")
-    _echo(f"  Succeeded: {len(successes)} / {len(ids)}")
+    logger.info(
+        f"Batch complete: {len(successes)} succeeded, {len(failures)} failed"
+    )
     if failures:
-        _echo(f"  Failed:    {len(failures)}", err=True)
-        for iid, msg in failures:
-            _echo(f"    - {iid}: {msg}", err=True)
         sys.exit(1)
