@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * exec-server.js — MCP server (stdio transport) with one tool: execute_code
+ * exec-server.js — MCP server (stdio transport) with tools: execute_code, list_tools
  *
  * Runs Python or Bash scripts in async subprocesses with:
  *   - Hard timeout with SIGKILL on expiry
  *   - Streaming stdout/stderr collection
- *   - Network isolation via unshare -n
+ *   - Network isolation via unshare -n (hard required — not best-effort)
  *   - Stripped environment (no HOME, no credentials)
  *   - Isolated working directory (temp dir)
  *   - Session logging to logs/session.jsonl
  *   - Retry on transient errors, fallback on repeated failures
+ *   - Bridge server for sub-MCP passthrough via mcp_bridge.py
+ *   - Content scanning via interceptor.js
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -21,9 +23,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, appendFile, mkdir } from "node:fs/promises";
+import { copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as bridgeServer from "./bridge-server.js";
+import { loadConfig, getBridgeSocketPath } from "./config-loader.js";
+import { checkContent } from "./interceptor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOG_DIR = join(__dirname, "logs");
@@ -93,27 +99,53 @@ async function executeCode(code, language, timeoutSeconds, cwd = null) {
   const workDir = cwd ?? await mkdtemp(join(tmpdir(), "onlycodes-"));
   const strippedEnv = buildStrippedEnv();
 
+  // Inject the bridge socket path into the subprocess env so mcp_bridge.py can connect
+  strippedEnv['ONLYCODES_BRIDGE_SOCK'] = getBridgeSocketPath();
+
+  // Copy mcp_bridge.py into the working directory so agent code can `import mcp_bridge`
+  const mcpBridgeSrc = join(__dirname, 'mcp_bridge.py');
+  const mcpBridgeDst = join(workDir, 'mcp_bridge.py');
+  try {
+    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
+  } catch (e) {
+    // non-fatal: log but continue
+    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
+  }
+
   const interpreter = language === "python" ? "python3" : "bash";
 
   // Build command with network isolation via unshare -n
-  // Falls back to direct execution if unshare is unavailable (e.g., no CAP_SYS_ADMIN)
+  // Hard requirement: if unshare is unavailable, return an error (no silent fallback)
+  // Try methods in order of preference (prefer user-namespace variant which works without root):
+  //   1. unshare --user --map-root-user --net  (works without CAP_SYS_ADMIN)
+  //   2. unshare -n                             (requires CAP_SYS_ADMIN or privileged container)
+  const unshareAttempts = [
+    { check: ["unshare", ["--user", "--map-root-user", "--net", "true"]], cmdFn: () => ({ cmd: "unshare", args: ["--user", "--map-root-user", "--net", interpreter, "-c", code] }) },
+    { check: ["unshare", ["-n", "true"]], cmdFn: () => ({ cmd: "unshare", args: ["-n", interpreter, "-c", code] }) },
+  ];
   let cmd, args;
-  try {
-    // Test if unshare -n is available
-    await new Promise((resolve, reject) => {
-      const test = spawn("unshare", ["-n", "true"], { stdio: "ignore" });
-      test.on("close", (exitCode) =>
-        exitCode === 0 ? resolve() : reject(new Error("unshare unavailable"))
-      );
-      test.on("error", reject);
-    });
-    cmd = "unshare";
-    args = ["-n", interpreter, "-c", code];
-  } catch {
-    // unshare not available — run without network isolation
-    // Log a warning but continue
-    cmd = interpreter;
-    args = ["-c", code];
+  let unshareAvailable = false;
+  for (const attempt of unshareAttempts) {
+    try {
+      await new Promise((resolve, reject) => {
+        const test = spawn(attempt.check[0], attempt.check[1], { stdio: "ignore" });
+        test.on("close", (exitCode) =>
+          exitCode === 0 ? resolve() : reject(new Error("unshare unavailable"))
+        );
+        test.on("error", reject);
+      });
+      const resolved = attempt.cmdFn();
+      cmd = resolved.cmd;
+      args = resolved.args;
+      unshareAvailable = true;
+      break;
+    } catch {
+      // Try next option
+    }
+  }
+  if (!unshareAvailable) {
+    // unshare not available — hard error, do not proceed without network isolation
+    throw new Error("network isolation (unshare -n) is required but not available on this system.");
   }
 
   const startTime = Date.now();
@@ -307,17 +339,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["code", "language"],
       },
     },
+    {
+      name: "list_tools",
+      description: "Returns a manifest of available sub-MCP tools accessible via mcp_bridge from inside execute_code.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    },
   ],
 }));
 
 // Call tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name !== "execute_code") {
+  const { name } = request.params;
+
+  // Handle list_tools
+  if (name === "list_tools") {
+    const config = loadConfig();
+    const lines = ['Available sub-MCP tools (call via mcp_bridge from inside execute_code):\n'];
+    for (const srv of config.subMcpServers) {
+      lines.push(`## ${srv.name}`);
+      lines.push(`import mcp_bridge`);
+      lines.push(`result = mcp_bridge.call("${srv.name}", "<tool_name>", {...})`);
+      lines.push(`schema = mcp_bridge.get_schema("${srv.name}", "<tool_name>")\n`);
+    }
+    return { content: [{ type: "text", text: lines.join('\n') }] };
+  }
+
+  if (name !== "execute_code") {
     return {
       content: [
         {
           type: "text",
-          text: `Unknown tool: ${request.params.name}`,
+          text: `Unknown tool: ${name}`,
         },
       ],
       isError: true,
@@ -352,12 +408,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const effectiveCwd = typeof cwd === "string" && cwd.length > 0 ? cwd : null;
 
-  const { result, fallback_used, warning } = await executeWithRetry(
-    code,
-    language,
-    timeout,
-    effectiveCwd
-  );
+  // Content scan: check code against deny-list before spawning subprocess
+  const denied = checkContent(code);
+  if (denied) {
+    return { content: [{ type: "text", text: `Blocked: ${denied.message}` }], isError: true };
+  }
+
+  // Handle unshare unavailability as a hard error
+  let result, fallback_used, warning;
+  try {
+    ({ result, fallback_used, warning } = await executeWithRetry(
+      code,
+      language,
+      timeout,
+      effectiveCwd
+    ));
+  } catch (err) {
+    if (err.message && err.message.includes("network isolation")) {
+      return {
+        content: [{ type: "text", text: `Error: ${err.message}` }],
+        isError: true,
+      };
+    }
+    throw err;
+  }
 
   // Log to session.jsonl
   await logSession({
@@ -411,6 +485,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // --- Start server ---
 
 async function main() {
+  // Start the bridge server so execute_code subprocesses can reach sub-MCP tools
+  const bridge = bridgeServer.start();
+  console.error(`Bridge server listening on ${getBridgeSocketPath()}`);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
