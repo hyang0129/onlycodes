@@ -91,7 +91,7 @@ def _run_arm(
         tools_flags = [
             "--mcp-config", mcp_config_path,
             "--strict-mcp-config",
-            "--tools", "mcp__codebox__execute_code",
+            "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
         ]
 
     start_time = time.time()
