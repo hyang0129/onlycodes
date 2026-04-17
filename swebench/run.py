@@ -229,6 +229,11 @@ def _setup_problem_cached(
         # Rebuild means: scrub any mutations the venv picked up. We can't
         # un-pip-install without knowing what was added, so the safest path is
         # to recreate the venv from scratch.
+        # First, reset the lowerdir to base_commit so it is clean before
+        # rebuilding — a prior run may have left the lowerdir in a modified
+        # state (e.g. partial edits, stale .egg-info from a previous
+        # setup_venv call that scrub_cache_dir later removed).
+        git_reset(lower, problem.base_commit)
         shutil.rmtree(venv_dir, ignore_errors=True)
         setup_venv(venv_dir, lower)
         scrub_cache_dir(lower)
@@ -243,9 +248,6 @@ def _setup_problem_cached(
         os.makedirs(d, exist_ok=True)
 
     mount_overlay(lower, upperdir, workdir, merged, overlay_backend)
-
-    # Regenerate .egg-info in the overlay so editable imports work.
-    reinstall_editable(venv_dir, merged)
 
     return (
         merged,
@@ -292,7 +294,6 @@ def _refresh_overlay(handle: _OverlayHandle, venv_dir: str) -> _OverlayHandle:
     os.makedirs(handle.upperdir, exist_ok=True)
     os.makedirs(handle.workdir, exist_ok=True)
     mount_overlay(handle.lowerdir, handle.upperdir, handle.workdir, handle.merged, handle.backend)
-    reinstall_editable(venv_dir, handle.merged)
     return handle
 
 

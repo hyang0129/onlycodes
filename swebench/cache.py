@@ -25,6 +25,7 @@ ordering (mount → use → unmount → cleanup) and for choosing when to invoke
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -179,10 +180,14 @@ def _pip_freeze(venv_dir: str) -> str:
     )
     # Normalise: drop editable-install lines (their hashes/paths fluctuate)
     # and sort for deterministic comparison.
+    # Also drop PEP 610 direct-URL lines (e.g. "package @ file:///path/to/repo")
+    # which differ between setup time (lowerdir path) and verify time (merged path).
     lines = [
         line.rstrip()
         for line in result.stdout.splitlines()
-        if line.strip() and not line.startswith("-e ")
+        if line.strip()
+        and not line.startswith("-e ")
+        and not re.match(r"^\S+ @ (file|https?)://", line)
     ]
     lines.sort()
     return "\n".join(lines) + "\n"
