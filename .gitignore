@@ -1,3 +1,5 @@
+.venv/
+venv/
 results/
 results_mcp/
 results_requests/

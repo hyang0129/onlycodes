@@ -8,7 +8,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
+
+# Per-slug locks so concurrent cache-setup threads don't race on the same bare clone.
+_bare_clone_locks: dict[str, threading.Lock] = {}
+_bare_clone_locks_mu = threading.Lock()
 
 
 def find_claude_binary() -> str:
@@ -42,16 +47,18 @@ def find_claude_binary() -> str:
 
 def git_reset(repo_dir: str, commit: str) -> None:
     """Hard-reset a repo to a given commit and clean untracked files."""
-    subprocess.run(
-        ["git", "-C", repo_dir, "checkout", commit, "--force", "--quiet"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
+    for cmd in [
+        ["git", "-C", repo_dir, "reset", "--hard", commit, "--quiet"],
         ["git", "-C", repo_dir, "clean", "-fd", "--quiet"],
-        check=True,
-        capture_output=True,
-    )
+    ]:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                cmd,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
 
 
 def clone_repo(repo_slug: str, dest: str) -> None:
@@ -60,6 +67,56 @@ def clone_repo(repo_slug: str, dest: str) -> None:
         return
     subprocess.run(
         ["gh", "repo", "clone", repo_slug, dest, "--", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+
+def clone_bare_repo(repo_slug: str, bare_dest: str) -> None:
+    """Create a bare clone of a GitHub repo if one does not already exist.
+
+    Bare clones are the shared source for ``clone_from_bare``; they let many
+    per-instance working trees share one set of pack files on disk.
+
+    Thread-safe: concurrent callers for the same slug serialize on a per-slug
+    lock so only one clone runs; the rest return immediately once HEAD exists.
+    """
+    with _bare_clone_locks_mu:
+        lock = _bare_clone_locks.setdefault(repo_slug, threading.Lock())
+
+    with lock:
+        if os.path.isdir(bare_dest) and os.path.isfile(
+            os.path.join(bare_dest, "HEAD")
+        ):
+            return
+        os.makedirs(os.path.dirname(bare_dest), exist_ok=True)
+        subprocess.run(
+            ["gh", "repo", "clone", repo_slug, bare_dest, "--", "--bare", "--quiet"],
+            check=True,
+            capture_output=True,
+        )
+
+
+def clone_from_bare(bare_src: str, dest: str) -> None:
+    """Clone a working tree from a local bare repo (``--local --shared``).
+
+    Much faster than a fresh network clone — shares ``.git/objects`` with the
+    bare repo via hardlinks/alternates. Safe to call repeatedly; no-op if
+    ``dest/.git`` already exists.
+
+    .. warning::
+        ``--shared`` writes ``dest/.git/objects/info/alternates`` pointing at
+        ``bare_src``.  If the bare repo is deleted while this working tree still
+        exists, every git operation on ``dest`` (reset, status, log, …) will
+        fail with "object not found".  Always remove all instance caches that
+        reference a bare repo **before** deleting the bare repo itself.  The
+        ``cache clean --include-bare`` command enforces this invariant.
+    """
+    if os.path.isdir(os.path.join(dest, ".git")):
+        return
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--local", "--shared", "--quiet", bare_src, dest],
         check=True,
         capture_output=True,
     )
@@ -78,6 +135,8 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
     subprocess.run(
         [pip, "install", "--quiet", "-e", repo_dir],
         capture_output=True,
+        text=True,
+        check=True,
     )
 
 
