@@ -624,7 +624,11 @@ def run_command(
                 if i < len(tasks) - 1:
                     handle = overlay_handles.get(pid)
                     if handle is not None and handle.lowerdir:
-                        _refresh_overlay(handle, task.venv_dir)
+                        try:
+                            _refresh_overlay(handle, task.venv_dir)
+                        except BaseException:
+                            _teardown_all_overlays()
+                            raise
     else:
         # Parallel execution — one thread per problem.  Arms within each
         # problem run serially to avoid repo_dir race conditions.
@@ -685,7 +689,11 @@ def run_command(
                 if i < len(tasks) - 1:
                     handle = overlay_handles.get(pid)
                     if handle is not None and handle.lowerdir:
-                        _refresh_overlay(handle, task.venv_dir)
+                        try:
+                            _refresh_overlay(handle, task.venv_dir)
+                        except BaseException:
+                            _teardown_all_overlays()
+                            raise
             return results
 
         try:
