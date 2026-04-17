@@ -65,6 +65,42 @@ def clone_repo(repo_slug: str, dest: str) -> None:
     )
 
 
+def clone_bare_repo(repo_slug: str, bare_dest: str) -> None:
+    """Create a bare clone of a GitHub repo if one does not already exist.
+
+    Bare clones are the shared source for ``clone_from_bare``; they let many
+    per-instance working trees share one set of pack files on disk.
+    """
+    if os.path.isdir(bare_dest):
+        # Presence of HEAD means it's a valid bare clone; if not, leave it
+        # alone — we don't want to silently destroy whatever is there.
+        if os.path.isfile(os.path.join(bare_dest, "HEAD")):
+            return
+    os.makedirs(os.path.dirname(bare_dest), exist_ok=True)
+    subprocess.run(
+        ["gh", "repo", "clone", repo_slug, bare_dest, "--", "--bare", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
+
+
+def clone_from_bare(bare_src: str, dest: str) -> None:
+    """Clone a working tree from a local bare repo (``--local --shared``).
+
+    Much faster than a fresh network clone — shares ``.git/objects`` with the
+    bare repo via hardlinks/alternates. Safe to call repeatedly; no-op if
+    ``dest/.git`` already exists.
+    """
+    if os.path.isdir(os.path.join(dest, ".git")):
+        return
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--local", "--shared", "--quiet", bare_src, dest],
+        check=True,
+        capture_output=True,
+    )
+
+
 def setup_venv(venv_dir: str, repo_dir: str) -> None:
     """Create a venv and pip install the project in editable mode (if not already done)."""
     if os.path.isdir(venv_dir):

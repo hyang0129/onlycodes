@@ -1,0 +1,348 @@
+"""OverlayFS-based environment caching for SWE-bench instances.
+
+Each instance that has been "warmed up" has a cached directory layout:
+
+    {CACHE_ROOT}/
+      repos/                        # bare clones (~12 repos)
+        {owner}__{name}.git/
+      instances/
+        {instance_id}/
+          repo/                     # checkout at base_commit, scrubbed
+          venv/                     # python3.11 venv with -e . installed
+          lockfile.txt              # `pip freeze` output at cache time
+
+At run time, each evaluation mounts the cached `repo/` as the lowerdir of an
+OverlayFS, hands the merged path to Claude, and `rm -rf`s the upperdir on
+teardown. The venv is **not** part of the overlay — it sits as a sibling
+directory because overlaying on top of a live venv introduces complexity
+(site-packages perms, `.egg-info` timestamps) for no real benefit.
+
+The module exposes stdlib-only helpers; the caller is responsible for
+ordering (mount → use → unmount → cleanup) and for choosing when to invoke
+`verify_lockfile` / `reinstall_editable`.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Literal
+
+
+# -- Layout ------------------------------------------------------------------
+
+# Override via the SWEBENCH_CACHE_ROOT env var (used by tests).
+CACHE_ROOT = os.environ.get("SWEBENCH_CACHE_ROOT", "/workspaces/.swebench-cache")
+
+
+def _root() -> Path:
+    """Resolve the cache root at call time, honouring SWEBENCH_CACHE_ROOT."""
+    return Path(os.environ.get("SWEBENCH_CACHE_ROOT", CACHE_ROOT))
+
+
+def repos_dir() -> Path:
+    """Directory holding bare clones of every referenced repo."""
+    return _root() / "repos"
+
+
+def instances_dir() -> Path:
+    """Directory holding per-instance snapshots."""
+    return _root() / "instances"
+
+
+def cache_paths(instance_id: str) -> dict:
+    """Return the canonical paths for an instance's cache entry.
+
+    Keys:
+      - ``instance``: top-level dir (``.../instances/{id}/``)
+      - ``repo``: checked-out working tree (overlay lowerdir)
+      - ``venv``: python venv (outside the overlay)
+      - ``lockfile``: path to the captured ``pip freeze`` output
+    """
+    base = instances_dir() / instance_id
+    return {
+        "instance": str(base),
+        "repo": str(base / "repo"),
+        "venv": str(base / "venv"),
+        "lockfile": str(base / "lockfile.txt"),
+    }
+
+
+def bare_repo_path(repo_slug: str) -> Path:
+    """Return the bare-clone path for a ``owner/name`` GitHub slug."""
+    safe = repo_slug.replace("/", "__")
+    return repos_dir() / f"{safe}.git"
+
+
+def has_cached_instance(instance_id: str) -> bool:
+    """True iff the instance has a complete cache entry (repo + venv + lockfile)."""
+    paths = cache_paths(instance_id)
+    return (
+        os.path.isdir(paths["repo"])
+        and os.path.isdir(paths["venv"])
+        and os.path.isfile(paths["lockfile"])
+    )
+
+
+# -- Scrub -------------------------------------------------------------------
+
+# Directory names (at any depth) to remove wholesale before caching.
+_SCRUB_DIR_NAMES = {"__pycache__", ".claude"}
+
+# File suffixes (case-sensitive) to remove at any depth.
+_SCRUB_FILE_SUFFIXES = (".pyc", ".pyo", ".swp")
+
+# Specific files under ``.git/`` that encode local editor state; keep the rest
+# of ``.git/`` intact so the working tree stays valid.
+_SCRUB_GIT_FILES = ("COMMIT_EDITMSG", "MERGE_MSG", "FETCH_HEAD")
+
+
+def scrub_cache_dir(repo_dir: str) -> None:
+    """Remove transient artifacts before a directory is cached.
+
+    Removes at any depth:
+      - ``__pycache__/`` directories and ``*.pyc`` / ``*.pyo`` files
+      - ``*.swp`` files (vim swap)
+      - ``.claude/`` directories (prior-run Claude context — prevents leakage)
+      - ``*.egg-info/`` directories (will be regenerated post-mount)
+    And specifically from ``.git/``:
+      - ``COMMIT_EDITMSG``, ``MERGE_MSG``, ``FETCH_HEAD``
+
+    The ``.git/`` directory itself is preserved so ``git status`` / ``git diff``
+    keep working inside the overlay.
+    """
+    root = Path(repo_dir)
+    if not root.is_dir():
+        return
+
+    # Walk once; collect then delete so we don't mutate during iteration.
+    dirs_to_remove: list[Path] = []
+    files_to_remove: list[Path] = []
+
+    for path in root.rglob("*"):
+        name = path.name
+        if path.is_dir():
+            if name in _SCRUB_DIR_NAMES:
+                dirs_to_remove.append(path)
+            elif name.endswith(".egg-info"):
+                dirs_to_remove.append(path)
+        else:
+            if name.endswith(_SCRUB_FILE_SUFFIXES):
+                files_to_remove.append(path)
+
+    git_dir = root / ".git"
+    if git_dir.is_dir():
+        for fname in _SCRUB_GIT_FILES:
+            p = git_dir / fname
+            if p.is_file():
+                files_to_remove.append(p)
+
+    for d in dirs_to_remove:
+        shutil.rmtree(d, ignore_errors=True)
+    for f in files_to_remove:
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+
+
+# -- Lockfile ----------------------------------------------------------------
+
+
+def _pip_freeze(venv_dir: str) -> str:
+    """Return the normalised `pip freeze` output for a venv."""
+    pip = os.path.join(venv_dir, "bin", "pip")
+    result = subprocess.run(
+        [pip, "freeze", "--disable-pip-version-check"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # Normalise: drop editable-install lines (their hashes/paths fluctuate)
+    # and sort for deterministic comparison.
+    lines = [
+        line.rstrip()
+        for line in result.stdout.splitlines()
+        if line.strip() and not line.startswith("-e ")
+    ]
+    lines.sort()
+    return "\n".join(lines) + "\n"
+
+
+def write_lockfile(venv_dir: str, lockfile_path: str) -> None:
+    """Capture `pip freeze` for the venv into a lockfile on disk."""
+    content = _pip_freeze(venv_dir)
+    Path(lockfile_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(lockfile_path).write_text(content)
+
+
+def verify_lockfile(venv_dir: str, lockfile_path: str) -> bool:
+    """Return True iff the venv's current `pip freeze` matches the lockfile.
+
+    Missing lockfile or missing venv returns False (callers treat this as
+    "rebuild the cache").
+    """
+    if not os.path.isfile(lockfile_path):
+        return False
+    if not os.path.isdir(venv_dir):
+        return False
+    try:
+        current = _pip_freeze(venv_dir)
+    except subprocess.CalledProcessError:
+        return False
+    expected = Path(lockfile_path).read_text()
+    return current == expected
+
+
+def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
+    """Re-run ``pip install -e .`` to regenerate ``.egg-info`` after overlay mount.
+
+    The scrub step removes stale ``*.egg-info/`` dirs so the cached lowerdir is
+    clean. When the overlay is mounted, we need to regenerate the egg-info so
+    ``import package_name`` keeps working. This writes to the upperdir, not
+    the cached lowerdir.
+    """
+    pip = os.path.join(venv_dir, "bin", "pip")
+    subprocess.run(
+        [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+        capture_output=True,
+    )
+
+
+# -- Overlay mount -----------------------------------------------------------
+
+Backend = Literal["kernel", "fuse", "none"]
+
+
+def _can_kernel_mount() -> bool:
+    """Test whether ``mount -t overlay`` works in the current process.
+
+    Uses a throwaway tmpdir so the test has zero side effects beyond the
+    mount/unmount itself.
+    """
+    if shutil.which("mount") is None:
+        return False
+    tmp = tempfile.mkdtemp(prefix="overlay-probe-")
+    try:
+        lower = os.path.join(tmp, "lower")
+        upper = os.path.join(tmp, "upper")
+        work = os.path.join(tmp, "work")
+        merged = os.path.join(tmp, "merged")
+        for d in (lower, upper, work, merged):
+            os.makedirs(d, exist_ok=True)
+        result = subprocess.run(
+            [
+                "mount",
+                "-t",
+                "overlay",
+                "overlay",
+                "-o",
+                f"lowerdir={lower},upperdir={upper},workdir={work}",
+                merged,
+            ],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            subprocess.run(["umount", merged], capture_output=True)
+            return True
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _has_fuse_overlayfs() -> bool:
+    return shutil.which("fuse-overlayfs") is not None
+
+
+def detect_overlay_backend() -> Backend:
+    """Pick the best available overlay backend.
+
+    Order of preference: kernel overlayfs (fastest, no FUSE overhead) →
+    ``fuse-overlayfs`` (works without ``CAP_SYS_ADMIN``) → ``"none"``.
+    """
+    if _can_kernel_mount():
+        return "kernel"
+    if _has_fuse_overlayfs():
+        return "fuse"
+    return "none"
+
+
+class OverlayError(RuntimeError):
+    """Raised when overlay mount/unmount fails."""
+
+
+def mount_overlay(
+    lowerdir: str,
+    upperdir: str,
+    workdir: str,
+    merged: str,
+    backend: Backend,
+) -> None:
+    """Mount an overlay using the chosen backend.
+
+    All four paths must exist before calling. ``backend`` must be ``"kernel"``
+    or ``"fuse"`` — callers that got ``"none"`` from ``detect_overlay_backend``
+    must handle that before reaching here.
+    """
+    for d in (lowerdir, upperdir, workdir, merged):
+        os.makedirs(d, exist_ok=True)
+
+    opts = f"lowerdir={lowerdir},upperdir={upperdir},workdir={workdir}"
+
+    if backend == "kernel":
+        cmd = ["mount", "-t", "overlay", "overlay", "-o", opts, merged]
+    elif backend == "fuse":
+        cmd = ["fuse-overlayfs", "-o", opts, merged]
+    else:
+        raise OverlayError(
+            f"mount_overlay: unsupported backend {backend!r}; "
+            "detect_overlay_backend returned 'none' — install "
+            "fuse-overlayfs or add CAP_SYS_ADMIN."
+        )
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise OverlayError(
+            f"overlay mount failed (backend={backend}): "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+
+
+def unmount_overlay(merged: str, backend: Backend) -> None:
+    """Unmount an overlay. Safe to call on already-unmounted paths.
+
+    Tries the backend-preferred command first; if the mount entry is gone or
+    the backend binary isn't installed, swallows the error.
+    """
+    if not os.path.isdir(merged):
+        return
+
+    if backend == "fuse":
+        binary = "fusermount"
+        cmd = [binary, "-u", merged]
+    else:
+        # kernel — also the default if backend is unknown
+        binary = "umount"
+        cmd = [binary, merged]
+
+    # If the backend binary isn't installed, there is also nothing to unmount —
+    # callers get here during cleanup after the overlay was never mounted, so
+    # a missing binary is equivalent to "already unmounted".
+    if shutil.which(binary) is None:
+        return
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        return
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").lower()
+        if "not mounted" in stderr or "not found" in stderr or "no such" in stderr:
+            return
+        # Fallback: try a lazy unmount (best-effort; don't raise on double-cleanup)
+        if shutil.which("umount") is not None:
+            subprocess.run(["umount", "-l", merged], capture_output=True)
