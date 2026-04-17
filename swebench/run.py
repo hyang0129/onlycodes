@@ -53,6 +53,53 @@ class _ArmTask(NamedTuple):
     needs_editable_reinstall: bool = False
 
 
+def _is_triple_complete(
+    results_dir: str | os.PathLike,
+    instance_id: str,
+    arm: str,
+    run_idx: int,
+) -> str | None:
+    """Return the recorded verdict if a (instance_id, arm, run_idx) triple is
+    already complete, else ``None``.
+
+    A triple is considered complete iff:
+
+    - ``<results_dir>/<instance_id>_<arm>_run<N>.jsonl`` exists, AND
+    - ``<results_dir>/<instance_id>_<arm>_run<N>_test.txt`` exists, AND
+    - the test file's last non-empty line (stripped of trailing whitespace) is
+      exactly ``PASS`` or ``FAIL``.
+
+    If any of those conditions fail (missing file, no verdict, empty file,
+    mid-run kill leaving partial output), the triple is **incomplete** and the
+    caller must re-run it. Returning ``None`` signals "re-run"; returning the
+    verdict string signals "skip".
+    """
+    results_dir = str(results_dir)
+    jsonl_path = os.path.join(results_dir, f"{instance_id}_{arm}_run{run_idx}.jsonl")
+    test_path = os.path.join(results_dir, f"{instance_id}_{arm}_run{run_idx}_test.txt")
+
+    if not os.path.isfile(jsonl_path) or not os.path.isfile(test_path):
+        return None
+
+    try:
+        with open(test_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+
+    # Walk backward for the last non-empty (stripped) line.
+    for raw in reversed(lines):
+        line = raw.strip()
+        if not line:
+            continue
+        if line == "PASS" or line == "FAIL":
+            return line
+        return None
+
+    # File was empty or whitespace-only.
+    return None
+
+
 def _run_arm(
     *,
     problem: Problem,
@@ -394,6 +441,25 @@ def _cleanup_stale_overlays(
     show_default=True,
     help="Randomize arm execution order per problem per run (default: on). Disable to always run baseline before onlycode.",
 )
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
+    default=None,
+    help="Directory for result files [default: <repo>/results_swebench/]. Created if it does not exist.",
+)
+@click.option(
+    "--resume/--no-resume",
+    "resume",
+    default=True,
+    show_default=True,
+    help=(
+        "Skip (instance, arm, run) triples that already have a completed "
+        "result in --output-dir. A triple is complete when both its .jsonl "
+        "and _test.txt exist and the test file's last non-empty line is "
+        "PASS or FAIL; otherwise it is re-run."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -402,6 +468,8 @@ def run_command(
     fail_fast: bool,
     use_cache: bool,
     shuffle_arms: bool,
+    output_dir: str | None,
+    resume: bool,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -410,7 +478,7 @@ def run_command(
 
     root = repo_root()
     problems_dir = root / "problems"
-    results_dir = root / "results_swebench"
+    results_dir = Path(output_dir) if output_dir else root / "results_swebench"
     mcp_config_path = str(root / "mcp-config.json")
     clone_base = "/tmp/swebench"
 
@@ -455,6 +523,8 @@ def run_command(
     click.echo(f"Parallel: {parallel}")
     click.echo(f"Fail-fast: {fail_fast}")
     click.echo(f"Use cache: {use_cache}")
+    click.echo(f"Resume: {resume}")
+    click.echo(f"Output dir: {results_dir}")
     click.echo(f"Claude binary: {claude_binary}")
     click.echo()
 
@@ -558,6 +628,11 @@ def run_command(
 
     # Build arm tasks grouped by problem.  Each problem's arms must run
     # serially because they share one repo_dir (git working tree).
+    #
+    # When --resume is on, any (instance, arm, run) triple whose result files
+    # already indicate a PASS/FAIL verdict is skipped at task-build time. This
+    # keeps the skip decision in one place, so serial and parallel execution
+    # paths see the exact same filtered task list.
     problem_tasks: dict[str, list[_ArmTask]] = {}
     for problem in problems:
         repo_dir, venv_dir = setup_map[problem.instance_id]
@@ -571,6 +646,16 @@ def run_command(
             if shuffle_arms and len(run_arms) > 1:
                 random.shuffle(run_arms)
             for arm in run_arms:
+                if resume:
+                    verdict = _is_triple_complete(
+                        str(results_dir), problem.instance_id, arm, run_idx
+                    )
+                    if verdict is not None:
+                        click.echo(
+                            f"  [{problem.instance_id} {arm} run {run_idx}] "
+                            f"Skipping — already complete ({verdict})"
+                        )
+                        continue
                 tasks.append(_ArmTask(
                     problem=problem,
                     arm=arm,
@@ -701,6 +786,7 @@ def run_command(
                 futures = {
                     pool.submit(_run_problem_tasks, tasks): pid
                     for pid, tasks in problem_tasks.items()
+                    if tasks  # every task was skipped by --resume; nothing to run
                 }
 
                 had_failure = False
