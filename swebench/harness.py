@@ -8,7 +8,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
+
+# Per-slug locks so concurrent cache-setup threads don't race on the same bare clone.
+_bare_clone_locks: dict[str, threading.Lock] = {}
+_bare_clone_locks_mu = threading.Lock()
 
 
 def find_claude_binary() -> str:
@@ -42,16 +47,18 @@ def find_claude_binary() -> str:
 
 def git_reset(repo_dir: str, commit: str) -> None:
     """Hard-reset a repo to a given commit and clean untracked files."""
-    subprocess.run(
-        ["git", "-C", repo_dir, "checkout", commit, "--force", "--quiet"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
+    for cmd in [
+        ["git", "-C", repo_dir, "reset", "--hard", commit, "--quiet"],
         ["git", "-C", repo_dir, "clean", "-fd", "--quiet"],
-        check=True,
-        capture_output=True,
-    )
+    ]:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                cmd,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
 
 
 def clone_repo(repo_slug: str, dest: str) -> None:
@@ -70,18 +77,24 @@ def clone_bare_repo(repo_slug: str, bare_dest: str) -> None:
 
     Bare clones are the shared source for ``clone_from_bare``; they let many
     per-instance working trees share one set of pack files on disk.
+
+    Thread-safe: concurrent callers for the same slug serialize on a per-slug
+    lock so only one clone runs; the rest return immediately once HEAD exists.
     """
-    if os.path.isdir(bare_dest):
-        # Presence of HEAD means it's a valid bare clone; if not, leave it
-        # alone — we don't want to silently destroy whatever is there.
-        if os.path.isfile(os.path.join(bare_dest, "HEAD")):
+    with _bare_clone_locks_mu:
+        lock = _bare_clone_locks.setdefault(repo_slug, threading.Lock())
+
+    with lock:
+        if os.path.isdir(bare_dest) and os.path.isfile(
+            os.path.join(bare_dest, "HEAD")
+        ):
             return
-    os.makedirs(os.path.dirname(bare_dest), exist_ok=True)
-    subprocess.run(
-        ["gh", "repo", "clone", repo_slug, bare_dest, "--", "--bare", "--quiet"],
-        check=True,
-        capture_output=True,
-    )
+        os.makedirs(os.path.dirname(bare_dest), exist_ok=True)
+        subprocess.run(
+            ["gh", "repo", "clone", repo_slug, bare_dest, "--", "--bare", "--quiet"],
+            check=True,
+            capture_output=True,
+        )
 
 
 def clone_from_bare(bare_src: str, dest: str) -> None:

@@ -286,8 +286,38 @@ def _can_kernel_mount() -> bool:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def _has_fuse_overlayfs() -> bool:
-    return shutil.which("fuse-overlayfs") is not None
+def _can_fuse_mount() -> bool:
+    """Test whether fuse-overlayfs actually works in the current process.
+
+    Checking for the binary alone is not sufficient — seccomp filters or a
+    missing /dev/fuse device node can block FUSE even when the binary is
+    installed. This probes with a throwaway tmpdir mount.
+    """
+    if shutil.which("fuse-overlayfs") is None:
+        return False
+    tmp = tempfile.mkdtemp(prefix="fuse-probe-")
+    try:
+        lower = os.path.join(tmp, "lower")
+        upper = os.path.join(tmp, "upper")
+        work = os.path.join(tmp, "work")
+        merged = os.path.join(tmp, "merged")
+        for d in (lower, upper, work, merged):
+            os.makedirs(d, exist_ok=True)
+        result = subprocess.run(
+            [
+                "fuse-overlayfs",
+                "-o",
+                f"lowerdir={lower},upperdir={upper},workdir={work}",
+                merged,
+            ],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            subprocess.run(["fusermount", "-u", merged], capture_output=True)
+            return True
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def detect_overlay_backend() -> Backend:
@@ -295,10 +325,14 @@ def detect_overlay_backend() -> Backend:
 
     Order of preference: kernel overlayfs (fastest, no FUSE overhead) →
     ``fuse-overlayfs`` (works without ``CAP_SYS_ADMIN``) → ``"none"``.
+
+    Both backends are probed with a real mount attempt — binary presence alone
+    is not sufficient (seccomp or a missing /dev/fuse can block FUSE even when
+    the binary is installed).
     """
     if _can_kernel_mount():
         return "kernel"
-    if _has_fuse_overlayfs():
+    if _can_fuse_mount():
         return "fuse"
     return "none"
 

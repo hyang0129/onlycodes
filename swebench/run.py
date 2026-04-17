@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import random
 import re
 import shutil
 import time
@@ -191,6 +192,7 @@ class _OverlayHandle(NamedTuple):
     upperdir: str
     workdir: str
     backend: Backend
+    lowerdir: str = ""  # set for cached overlays so they can be refreshed between arms
 
 
 def _setup_problem_cached(
@@ -253,6 +255,7 @@ def _setup_problem_cached(
             upperdir=upperdir,
             workdir=workdir,
             backend=overlay_backend,
+            lowerdir=lower,
         ),
     )
 
@@ -273,6 +276,26 @@ def _teardown_overlay(handle: _OverlayHandle) -> None:
         pass
 
 
+def _refresh_overlay(handle: _OverlayHandle, venv_dir: str) -> _OverlayHandle:
+    """Reset a cached overlay to a clean state for the next arm.
+
+    fuse-overlayfs copy-up makes files written by arm N unresettable via
+    ``git reset --hard`` (EEXIST on the upperdir entry). Refreshing the overlay
+    — unmount, delete upper+work, recreate, remount — gives the next arm a
+    pristine view of the cached lowerdir without touching it.
+
+    Returns the same handle (paths unchanged); the mount is fresh.
+    """
+    unmount_overlay(handle.merged, handle.backend)
+    shutil.rmtree(handle.upperdir, ignore_errors=True)
+    shutil.rmtree(handle.workdir, ignore_errors=True)
+    os.makedirs(handle.upperdir, exist_ok=True)
+    os.makedirs(handle.workdir, exist_ok=True)
+    mount_overlay(handle.lowerdir, handle.upperdir, handle.workdir, handle.merged, handle.backend)
+    reinstall_editable(venv_dir, handle.merged)
+    return handle
+
+
 # Global lock for serialised stdout flushing.
 _print_lock = threading.Lock()
 
@@ -285,6 +308,32 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
         if text:
             click.echo(text, nl=False)
         click.echo()
+
+
+def _cleanup_stale_overlays(
+    problems: list[Problem], overlay_tmp_root: str, backend: "Backend"
+) -> None:
+    """Unmount and remove leftover overlay dirs from a previously interrupted run."""
+    instance_ids = {p.instance_id for p in problems}
+    try:
+        entries = os.listdir(overlay_tmp_root)
+    except OSError:
+        return
+    for entry in entries:
+        # Match any dir named "{instance_id}-*" (e.g. "-eval", "-baseline-1-eval")
+        for iid in instance_ids:
+            if entry.startswith(f"{iid}-"):
+                overlay_root = os.path.join(overlay_tmp_root, entry)
+                if not os.path.isdir(overlay_root):
+                    break
+                merged = os.path.join(overlay_root, "merged")
+                try:
+                    unmount_overlay(merged, backend)
+                except Exception:
+                    pass
+                shutil.rmtree(overlay_root, ignore_errors=True)
+                click.echo(f"  cleaned stale overlay: {overlay_root}")
+                break
 
 
 @click.command("run")
@@ -332,6 +381,13 @@ def _flush_buffer(header: str, buf: io.StringIO) -> None:
         "to the default clone+venv path for any instance that isn't cached."
     ),
 )
+@click.option(
+    "--shuffle-arms/--no-shuffle-arms",
+    "shuffle_arms",
+    default=True,
+    show_default=True,
+    help="Randomize arm execution order per problem per run (default: on). Disable to always run baseline before onlycode.",
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -339,6 +395,7 @@ def run_command(
     parallel: int,
     fail_fast: bool,
     use_cache: bool,
+    shuffle_arms: bool,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -411,6 +468,7 @@ def run_command(
         else:
             click.echo(f"Overlay backend: {overlay_backend}")
             click.echo()
+            _cleanup_stale_overlays(problems, overlay_tmp_root, overlay_backend)
 
     # Track overlay handles so Phase 3 can tear them down even on exception.
     overlay_handles: dict[str, _OverlayHandle] = {}
@@ -503,7 +561,10 @@ def run_command(
         needs_reinstall = problem.instance_id in overlay_handles
         tasks: list[_ArmTask] = []
         for run_idx in range(1, num_runs + 1):
-            for arm in arm_list:
+            run_arms = list(arm_list)
+            if shuffle_arms and len(run_arms) > 1:
+                random.shuffle(run_arms)
+            for arm in run_arms:
                 tasks.append(_ArmTask(
                     problem=problem,
                     arm=arm,
@@ -518,7 +579,7 @@ def run_command(
         # Serial execution — matches original behaviour exactly
         last_instance: str | None = None
         for pid, tasks in problem_tasks.items():
-            for task in tasks:
+            for i, task in enumerate(tasks):
                 if task.problem.instance_id != last_instance:
                     click.echo(f"--- Instance: {task.problem.instance_id} ---")
                     click.echo(f"  Repo: {task.problem.repo_slug}")
@@ -546,6 +607,12 @@ def run_command(
                     _teardown_all_overlays()
                     click.echo("FAIL detected with --fail-fast; stopping early.")
                     raise SystemExit(1)
+                # Refresh the overlay between arms so the next arm sees a clean
+                # lowerdir — avoids fuse-overlayfs EEXIST on copy-up'd files.
+                if i < len(tasks) - 1:
+                    handle = overlay_handles.get(pid)
+                    if handle is not None and handle.lowerdir:
+                        overlay_handles[pid] = _refresh_overlay(handle, task.venv_dir)
     else:
         # Parallel execution — one thread per problem.  Arms within each
         # problem run serially to avoid repo_dir race conditions.
@@ -554,7 +621,8 @@ def run_command(
         def _run_problem_tasks(tasks: list[_ArmTask]) -> list[tuple[str, str]]:
             """Run all arm tasks for one problem serially; returns list of (id, verdict)."""
             results: list[tuple[str, str]] = []
-            for task in tasks:
+            pid = tasks[0].problem.instance_id if tasks else ""
+            for i, task in enumerate(tasks):
                 if _fail_event.is_set():
                     results.append((task.problem.instance_id, "CANCELLED"))
                     continue
@@ -575,7 +643,10 @@ def run_command(
                         needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except Exception as exc:
+                    stderr_detail = getattr(exc, "stderr", None)
                     buf.write(f"\nERROR: {exc}\n")
+                    if stderr_detail:
+                        buf.write(f"stderr: {stderr_detail}\n")
                     buf.write(traceback.format_exc())
                     verdict = "ERROR"
 
@@ -589,6 +660,13 @@ def run_command(
                     _fail_event.set()
 
                 results.append((task.problem.instance_id, verdict))
+
+                # Refresh the overlay between arms so the next arm sees a clean
+                # lowerdir — avoids fuse-overlayfs EEXIST on copy-up'd files.
+                if i < len(tasks) - 1:
+                    handle = overlay_handles.get(pid)
+                    if handle is not None and handle.lowerdir:
+                        overlay_handles[pid] = _refresh_overlay(handle, task.venv_dir)
             return results
 
         try:
