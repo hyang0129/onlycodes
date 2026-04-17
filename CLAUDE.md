@@ -21,8 +21,19 @@ python -m swebench run --arms baseline          # baseline arm only
 python -m swebench run --filter django__django-16379  # specific instance
 python -m swebench run --runs 3                 # multiple runs per arm
 
-# Analyze results
-python -m swebench analyze
+# Analyze results — summary table
+python -m swebench analyze summary
+python -m swebench analyze summary --out results.csv   # write to CSV
+
+# Analyze results — pathology pipeline (stages 1 → 2 → 3)
+python -m swebench analyze pathology                   # all three stages, concurrency 8
+python -m swebench analyze pathology --dry-run         # print composed commands/prompts, no claude invocations
+python -m swebench analyze pathology --stage mechanical  # stage 1 only
+python -m swebench analyze pathology --stage subagents   # stage 2 only
+python -m swebench analyze pathology --stage synthesize  # stage 3 only
+python -m swebench analyze pathology --force           # re-run even if sidecar JSON already exists
+python -m swebench analyze pathology --run-id my-run   # use custom run identifier (default: UTC timestamp)
+python -m swebench analyze pathology --concurrency 4   # limit parallel subagent invocations
 
 # Cache (OverlayFS-backed environment reuse — see "SWE-bench Cache" below)
 python -m swebench cache setup                         # warm every instance
@@ -40,6 +51,56 @@ ad-hoc additions. Current sets:
 The runner recurses into every subfolder of `problems/`, so additional curated sets can be
 introduced simply by passing a new `--set <name>` to `add`. Results go to `results_swebench/`
 keyed by `instance_id` (flat, regardless of set).
+
+## patterns.json
+
+`patterns.json` (repo root) is the canonical pathology vocabulary written by `analyze pathology`
+(Stage 3 synthesize). It accumulates every distinct failure pattern observed across analysis runs.
+
+**Location:** `/workspaces/hub_1/onlycodes/patterns.json`
+
+**Schema** (version 1):
+
+```jsonc
+{
+  "version": 1,           // integer — incremented only on breaking schema change
+  "patterns": [           // list of pattern entries (may be empty)
+    {
+      "id": "tool-call-loop",          // slug: lowercase alnum + hyphen/underscore, 2–64 chars
+      "description": "Agent enters...", // human-readable string
+      "evidence_refs": [               // up to 20 references; each entry:
+        {
+          "log_ref":  "django__django-16379_onlycode_run1",  // JSONL stem
+          "run_id":   "2025-07-01T12:00:00Z",               // analysis run identifier
+          "turn":     42,                                    // 0-based turn index
+          "excerpt":  "..."                                  // ≤240 chars from the log
+        }
+      ],
+      "frequency": 7,                  // total count across all evidence
+      "arm_distribution": {            // per-arm hit counts
+        "baseline": 3,
+        "onlycode": 4
+      },
+      "first_seen_run_id": "2025-07-01T12:00:00Z",
+      "last_seen_run_id":  "2025-07-02T09:15:00Z"
+    }
+  ]
+}
+```
+
+> **Mutable.** `patterns.json` is updated in-place by `analyze pathology --stage synthesize`
+> (merge semantics: new patterns are appended; existing entries are updated with fresh
+> evidence and counts). Edit it by hand only to remove stale entries or fix descriptions —
+> any manual edits must preserve the schema above or the next pipeline run will reject the file.
+
+Analysis sidecar output lives under:
+
+```
+results_swebench/_analysis/<run_id>/
+├── mechanical/          # Stage 1: one JSON per JSONL log (mechanical flags + metrics)
+├── subagents/           # Stage 2: one JSON per flagged log (subagent pathology findings)
+└── synthesizer.json     # Stage 3: full synthesizer output before merge into patterns.json
+```
 
 ## SWE-bench Cache
 
