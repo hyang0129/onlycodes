@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from loguru import logger
 
 
 @dataclass
@@ -34,20 +35,44 @@ class Problem:
             "hf_split": self.hf_split,
         }
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        try:
+            with open(path, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        except OSError as exc:
+            logger.error(f"Failed to write YAML to {path}: {exc}")
+            raise
 
     @classmethod
     def from_yaml(cls, path: Path) -> Problem:
         """Load a Problem from a YAML file."""
-        with open(path) as f:
-            data = yaml.safe_load(f)
+        # Gap 3: OSError on open; Gap 1: YAMLError on parse
+        try:
+            with open(path) as f:
+                raw = f.read()
+        except OSError as exc:
+            logger.error(f"Failed to read YAML from {path}: {exc}")
+            raise
+        try:
+            data = yaml.safe_load(raw)
+        except yaml.YAMLError as exc:
+            logger.error(f"Failed to parse YAML from {path}: {exc}")
+            raise
+        # Gap 2: KeyError on missing required field
+        try:
+            instance_id = data["instance_id"]
+            repo_slug = data["repo"]
+            base_commit = data["base_commit"]
+            test_cmd = data["test_cmd"]
+            problem_statement = data["problem_statement"]
+        except KeyError as exc:
+            logger.error(f"Missing required field {exc} in YAML at {path}")
+            raise
         return cls(
-            instance_id=data["instance_id"],
-            repo_slug=data["repo"],
-            base_commit=data["base_commit"],
-            test_cmd=data["test_cmd"],
-            problem_statement=data["problem_statement"],
+            instance_id=instance_id,
+            repo_slug=repo_slug,
+            base_commit=base_commit,
+            test_cmd=test_cmd,
+            problem_statement=problem_statement,
             patch_file=data.get("patch_file"),
             added_at=data.get("added_at", ""),
             hf_split=data.get("hf_split", "test"),
