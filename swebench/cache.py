@@ -173,7 +173,7 @@ def scrub_cache_dir(repo_dir: str) -> None:
         try:
             f.unlink()
         except FileNotFoundError:
-            pass
+            logger.debug(f"Scrub target missing (race or already removed): {f}")
     logger.info(
         f"Scrub complete for {repo_dir}: removed {len(dirs_to_remove)} dirs, "
         f"{len(files_to_remove)} files"

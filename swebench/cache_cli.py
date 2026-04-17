@@ -249,10 +249,13 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
             sys.exit(1)
 
     if not yes:
+        # user-facing output — not logged (interactive confirmation prompt)
         click.echo(f"About to remove {len(targets)} cached instance(s):")
         for t in targets:
+            # user-facing output — not logged (interactive confirmation prompt)
             click.echo(f"  - {t}")
         if include_bare:
+            # user-facing output — not logged (interactive confirmation prompt)
             click.echo(f"  (also removing bare repos under {repos_dir()})")
         click.confirm("Proceed?", abort=True)
 
