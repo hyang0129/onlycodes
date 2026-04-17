@@ -1,0 +1,32 @@
+{
+  "_schema": {
+    "description": "Passthrough MCP configuration for the onlycodes exec-server. Defines sub-MCP servers to manage as stdio child processes and interception rules for content-scan (execute_code) and dispatch (tool-call) deny-lists. See EPIC_13_DECOMPOSITION.md and EPIC_13_ADR.md for the full design.",
+    "fields": {
+      "subMcpServers": "Array of sub-MCP server definitions. Each has: name (string, unique key used by mcp_bridge.call), command (string, executable to spawn), args (array of strings), env (array of env var NAMES to pass through from the main process — values pulled from the main process env at spawn time).",
+      "interceptRules": "Array of interception rules. Each has: surface ('execute_code' for content scan or 'dispatch' for tool-call deny), pattern (regex string, only for surface='execute_code'), tool (tool name string, only for surface='dispatch'), message (error string returned to caller when the rule fires). Each rule MUST have a message, and exactly one of pattern (for execute_code) or tool (for dispatch)."
+    },
+    "udsFramingContract": "The Unix domain socket bridge between mcp_bridge.py (Python client in execute_code sandbox) and bridge-server.js (Node server in main MCP process) uses newline-delimited JSON (NDJSON). Each message is a single JSON object serialized by json.dumps / JSON.stringify with a trailing '\\n' terminator. UTF-8 on the wire. Receivers buffer until '\\n', strip it, then parse. Senders MUST NOT emit raw newlines inside payloads — this is guaranteed by the standard JSON encoders. ADR: EPIC_13_ADR.md Decision 1.",
+    "socketPathContract": "The bridge socket path is environmental, NOT a field in this config. exec-server.js computes it as: process.env.ONLYCODES_BRIDGE_SOCK || `/tmp/onlycodes-bridge-${process.pid}.sock`. Per-PID default prevents collisions when swebench run launches parallel exec-server instances. exec-server.js exports ONLYCODES_BRIDGE_SOCK into the env passed to every execute_code subprocess so mcp_bridge.py can find the socket. bridge-server.js reads the same env var. ADR: EPIC_13_ADR.md Decision 2.",
+    "addingRules": "Adding a new interception rule or a new sub-MCP server is a JSON-only change — no code edits required. The loader (config-loader.js) and interceptor (interceptor.js) pull rules dynamically from this file at startup."
+  },
+  "subMcpServers": [
+    {
+      "name": "github",
+      "command": "node",
+      "args": ["node_modules/@modelcontextprotocol/server-github/dist/index.js"],
+      "env": ["GITHUB_TOKEN"]
+    }
+  ],
+  "interceptRules": [
+    {
+      "surface": "execute_code",
+      "pattern": "\\bgh\\b",
+      "message": "Direct use of the 'gh' CLI is not permitted inside execute_code. Use mcp_bridge.call(\"github\", ...) from Python instead. See list_tools for available GitHub sub-MCP tools."
+    },
+    {
+      "surface": "dispatch",
+      "tool": "delete_repo",
+      "message": "The 'delete_repo' tool is blocked by the interception layer. Repository deletion is considered irreversible and is denied at the dispatch boundary."
+    }
+  ]
+}

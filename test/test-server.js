@@ -303,19 +303,25 @@ async function testSessionLogger() {
 async function testNetworkIsolation() {
   console.log("\n--- Test: Network isolation ---");
 
-  // Try to check if unshare is available first
+  // Try to check if unshare is available (user+net variant first, then plain -n)
   let unshareAvailable = false;
-  try {
-    await new Promise((resolve, reject) => {
-      const test = spawn("unshare", ["-n", "true"], { stdio: "ignore" });
-      test.on("close", (code) =>
-        code === 0 ? resolve() : reject()
-      );
-      test.on("error", reject);
-    });
-    unshareAvailable = true;
-  } catch {
-    console.log("  SKIP: unshare -n not available (need CAP_SYS_ADMIN)");
+  for (const attempt of [
+    ["unshare", ["--user", "--map-root-user", "--net", "true"]],
+    ["unshare", ["-n", "true"]],
+  ]) {
+    try {
+      await new Promise((resolve, reject) => {
+        const test = spawn(attempt[0], attempt[1], { stdio: "ignore" });
+        test.on("close", (code) =>
+          code === 0 ? resolve() : reject()
+        );
+        test.on("error", reject);
+      });
+      unshareAvailable = true;
+      break;
+    } catch {
+      // try next option
+    }
   }
 
   if (unshareAvailable) {
@@ -330,6 +336,18 @@ async function testNetworkIsolation() {
     assert(
       output.stdout.includes("EXIT:") && !output.stdout.includes("EXIT:0"),
       "Network-isolated script cannot reach external endpoints"
+    );
+  } else {
+    // unshare not available: execute_code must return a hard error (no silent fallback)
+    const response = await callExecuteCode('echo "hello"', "bash", 5);
+    assert(
+      response.result.isError === true,
+      "execute_code returns isError:true when unshare is unavailable"
+    );
+    const text = response.result.content[0].text;
+    assert(
+      text.includes("network isolation") || text.includes("unshare"),
+      "Error message mentions network isolation or unshare"
     );
   }
 }
@@ -366,19 +384,24 @@ async function testSyntaxError() {
 }
 
 async function testToolDescription() {
-  console.log("\n--- Test: Tool description under 100 words ---");
+  console.log("\n--- Test: Tool descriptions ---");
   const response = await callServer({
     method: "tools/list",
     params: {},
   });
 
   const tools = response.result.tools;
-  assert(tools.length === 1, "Server exposes exactly one tool");
-  assert(tools[0].name === "execute_code", "Tool is named execute_code");
+  assert(tools.length === 2, "Server exposes exactly two tools");
 
-  const desc = tools[0].description;
+  const executeCodeTool = tools.find((t) => t.name === "execute_code");
+  const listToolsTool = tools.find((t) => t.name === "list_tools");
+
+  assert(executeCodeTool !== undefined, "execute_code tool is present");
+  assert(listToolsTool !== undefined, "list_tools tool is present");
+
+  const desc = executeCodeTool.description;
   const wordCount = desc.split(/\s+/).length;
-  assert(wordCount < 100, `Tool description is ${wordCount} words (< 100)`);
+  assert(wordCount < 100, `execute_code tool description is ${wordCount} words (< 100)`);
 }
 
 // --- Runner ---
