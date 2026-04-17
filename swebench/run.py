@@ -17,6 +17,7 @@ import click
 
 from swebench import repo_root
 from swebench.cache import (
+    Backend,
     cache_paths,
     detect_overlay_backend,
     has_cached_instance,
@@ -48,6 +49,7 @@ class _ArmTask(NamedTuple):
     run_idx: int
     repo_dir: str
     venv_dir: str
+    needs_editable_reinstall: bool = False
 
 
 def _run_arm(
@@ -62,12 +64,19 @@ def _run_arm(
     mcp_config_path: str,
     root: Path,
     log_buffer: io.StringIO | None = None,
+    needs_editable_reinstall: bool = False,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
     Returns the verdict string ("PASS", "FAIL", or "ERROR").
     When *log_buffer* is provided, all output is written there instead of
     directly to stdout so that parallel runs don't interleave.
+
+    When *needs_editable_reinstall* is True, ``reinstall_editable`` is run
+    after ``git_reset`` to regenerate the ``.egg-info`` directory that
+    ``git clean -fd`` removes. This is required for the cached/overlay path
+    because the egg-info is untracked by git and would otherwise disappear
+    between arm runs.
     """
 
     def _echo(msg: str) -> None:
@@ -80,6 +89,13 @@ def _run_arm(
 
     # Reset repo to base commit
     git_reset(repo_dir, problem.base_commit)
+
+    # The git_reset above runs `git clean -fd`, which wipes the untracked
+    # .egg-info/ directory that reinstall_editable placed in the overlay
+    # upperdir. For cached/overlay runs, regenerate it here so editable
+    # imports (entry_points, console scripts) keep working.
+    if needs_editable_reinstall:
+        reinstall_editable(venv_dir, repo_dir)
 
     # Apply test patch
     if problem.patch_file:
@@ -174,7 +190,7 @@ class _OverlayHandle(NamedTuple):
     merged: str
     upperdir: str
     workdir: str
-    backend: str
+    backend: Backend
 
 
 def _setup_problem_cached(
@@ -182,7 +198,7 @@ def _setup_problem_cached(
     *,
     run_tag: str,
     overlay_tmp_root: str,
-    overlay_backend: str,
+    overlay_backend: Backend,
 ) -> tuple[str, str, _OverlayHandle | None]:
     """Cache-aware per-problem setup.
 
@@ -380,7 +396,7 @@ def run_command(
     click.echo()
 
     # --- Cache backend selection (only relevant when --use-cache) ---------------
-    overlay_backend = "none"
+    overlay_backend: Backend = "none"
     overlay_tmp_root = "/tmp"
     if use_cache:
         overlay_backend = detect_overlay_backend()
@@ -476,6 +492,10 @@ def run_command(
     problem_tasks: dict[str, list[_ArmTask]] = {}
     for problem in problems:
         repo_dir, venv_dir = setup_map[problem.instance_id]
+        # Cached instances run inside an overlay merged dir; git_reset's
+        # `git clean -fd` wipes .egg-info there, so each arm must re-run
+        # `pip install --no-deps -e` before the test suite runs.
+        needs_reinstall = problem.instance_id in overlay_handles
         tasks: list[_ArmTask] = []
         for run_idx in range(1, num_runs + 1):
             for arm in arm_list:
@@ -485,6 +505,7 @@ def run_command(
                     run_idx=run_idx,
                     repo_dir=repo_dir,
                     venv_dir=venv_dir,
+                    needs_editable_reinstall=needs_reinstall,
                 ))
         problem_tasks[problem.instance_id] = tasks
 
@@ -510,6 +531,7 @@ def run_command(
                         claude_binary=claude_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
+                        needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -545,6 +567,7 @@ def run_command(
                         mcp_config_path=mcp_config_path,
                         root=root,
                         log_buffer=buf,
+                        needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except Exception as exc:
                     buf.write(f"\nERROR: {exc}\n")
@@ -583,14 +606,16 @@ def run_command(
                     if had_failure and fail_fast:
                         for other_fut in futures:
                             other_fut.cancel()
+
+            # Exit non-zero if any arm FAILed under --fail-fast. SystemExit is
+            # a BaseException, so the outer except clause below will still run
+            # _teardown_all_overlays() before the process exits.
+            if had_failure:
+                click.echo("FAIL detected with --fail-fast; stopping early.")
+                raise SystemExit(1)
         except BaseException:
             _teardown_all_overlays()
             raise
-
-            if had_failure:
-                _teardown_all_overlays()
-                click.echo("FAIL detected with --fail-fast; stopping early.")
-                raise SystemExit(1)
 
     _teardown_all_overlays()
     click.echo(f"=== Done. Results in {results_dir}/ ===")

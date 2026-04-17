@@ -204,12 +204,22 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
     clean. When the overlay is mounted, we need to regenerate the egg-info so
     ``import package_name`` keeps working. This writes to the upperdir, not
     the cached lowerdir.
+
+    Raises ``OverlayError`` on non-zero pip exit — a silent failure here would
+    leave the venv's egg-link pointing at a path with no egg-info, causing
+    confusing ImportErrors at test time.
     """
     pip = os.path.join(venv_dir, "bin", "pip")
-    subprocess.run(
+    result = subprocess.run(
         [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
         capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        raise OverlayError(
+            f"reinstall_editable failed for {repo_dir}: "
+            f"{result.stderr.strip() or result.stdout.strip() or 'pip returned non-zero'}"
+        )
 
 
 # -- Overlay mount -----------------------------------------------------------
