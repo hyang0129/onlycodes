@@ -15,7 +15,10 @@ Pipeline overview (epic #62):
   to ``results_swebench/_analysis/<run_id>/subagents/<log_ref>.json``.
   Parallel fan-out follows the ``swebench/add.py`` template: ``_print_lock``
   serialises ``click.echo`` and ``_process_one`` returns ``(id, ok, msg)``.
-- **Stage 3 (synthesize).** Placeholder — implemented in sub-issue #74.
+- **Stage 3 (synthesize).** Read every Stage 2 subagent sidecar, pass the
+  full set plus the current ``patterns.json`` to a single synthesizer
+  ``claude -p`` invocation, then merge its output into the registry via
+  :func:`swebench.analyze.registry.merge` + atomic write.
 
 All stages are idempotent: runs whose sidecar JSON already exists are skipped
 unless ``--force`` is passed. ``--dry-run`` prints the composed commands and
@@ -38,6 +41,7 @@ from typing import Iterable
 import click
 
 from swebench import repo_root
+from swebench.analyze import registry
 from swebench.analyze.compress import compress
 from swebench.analyze.extractor import extract, triage_rank
 from swebench.harness import find_claude_binary, make_isolated_claude_config
@@ -359,15 +363,179 @@ def _stage_subagents(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3: placeholder
+# Stage 3: synthesize
 # ---------------------------------------------------------------------------
 
 
-def _stage_synthesize(*, analysis_root: Path, dry_run: bool) -> None:
-    _echo(
-        "[stage3] Stage 3 (synthesize) not yet implemented — "
-        "will be added in sub-issue #74."
+#: Path to the synthesizer system prompt, shipped alongside this module.
+SYNTHESIZER_PROMPT_PATH = Path(__file__).parent / "synthesizer_prompt.md"
+
+#: Dry-run preview cap on the synthesizer user prompt (characters).
+DRY_RUN_SYNTH_PREVIEW_CHARS = 400
+
+
+def _read_synthesizer_prompt() -> str:
+    """Read and return the Stage 3 synthesizer system prompt."""
+    return SYNTHESIZER_PROMPT_PATH.read_text()
+
+
+def _collect_subagent_outputs(analysis_root: Path) -> list[dict]:
+    """Load every valid subagent sidecar under ``analysis_root/subagents/``.
+
+    Invalid or unparseable sidecars are logged via :func:`_echo` and skipped
+    — one bad subagent reply must not block synthesis of the rest.
+    """
+    sub_dir = analysis_root / "subagents"
+    if not sub_dir.is_dir():
+        return []
+    outputs: list[dict] = []
+    for sc in sorted(sub_dir.glob("*.json")):
+        try:
+            data = json.loads(sc.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            _echo(f"[stage3] skip unreadable sidecar {sc.name}: {exc}", err=True)
+            continue
+        errs = registry.validate_subagent_output(data)
+        if errs:
+            _echo(
+                f"[stage3] skip invalid sidecar {sc.name}: {'; '.join(errs[:3])}",
+                err=True,
+            )
+            continue
+        outputs.append(data)
+    return outputs
+
+
+def _build_synth_user_prompt(
+    existing_registry: dict, subagent_outputs: list[dict]
+) -> str:
+    """Build the user prompt for the synthesizer agent."""
+    return (
+        "## Current patterns.json\n\n"
+        f"```json\n{json.dumps(existing_registry, indent=2, sort_keys=True)}\n```\n\n"
+        "## Per-log subagent outputs\n\n"
+        f"```json\n{json.dumps(subagent_outputs, indent=2, sort_keys=True)}\n```\n"
     )
+
+
+def _compose_synth_cmd(claude_binary: str, user_prompt: str, system_prompt: str) -> list[str]:
+    """Compose the ``claude -p`` command for the Stage 3 synthesizer."""
+    return [
+        claude_binary,
+        "-p", user_prompt,
+        "--system-prompt", system_prompt,
+        "--allowedTools", "Read,Write",
+        "--dangerously-skip-permissions",
+        "--no-session-persistence",
+        "--output-format", "text",
+    ]
+
+
+def _stage_synthesize(
+    *,
+    analysis_root: Path,
+    run_id: str,
+    patterns_path: Path,
+    force: bool,
+    dry_run: bool,
+) -> tuple[bool, str]:
+    """Synthesize per-log findings into ``patterns.json``.
+
+    Returns ``(ok, message)``. Refuses to run on a malformed existing
+    ``patterns.json`` unless ``force`` is set (ADR Q2).
+    """
+    outputs = _collect_subagent_outputs(analysis_root)
+    _echo(f"[stage3] loaded {len(outputs)} subagent sidecar(s) for synthesis")
+
+    # Load existing registry; refuse to run on malformed unless --force.
+    if patterns_path.exists():
+        data, err = registry.load_patterns(patterns_path)
+        if err is not None and not force:
+            msg = (
+                f"patterns.json at {patterns_path} failed schema validation: "
+                f"{err}. Re-run with --force to overwrite, or manually repair."
+            )
+            _echo(f"[stage3] ERROR: {msg}", err=True)
+            return (False, msg)
+        existing = data if data is not None else {"version": registry.SCHEMA_VERSION, "patterns": []}
+    else:
+        existing = {"version": registry.SCHEMA_VERSION, "patterns": []}
+
+    system_prompt = _read_synthesizer_prompt()
+
+    claude_binary: str | None
+    if dry_run:
+        try:
+            claude_binary = find_claude_binary()
+        except FileNotFoundError:
+            claude_binary = None
+    else:
+        claude_binary = find_claude_binary()
+
+    user_prompt = _build_synth_user_prompt(existing, outputs)
+
+    if dry_run:
+        binary_display = claude_binary or "<claude>"
+        cmd = _compose_synth_cmd(binary_display, user_prompt, system_prompt)
+        preview = user_prompt[:DRY_RUN_SYNTH_PREVIEW_CHARS]
+        _echo(
+            f"--- DRY RUN: stage3 synthesizer ---\n"
+            f"patterns_path: {patterns_path}\n"
+            f"run_id: {run_id}\n"
+            f"subagent outputs: {len(outputs)}\n"
+            f"cmd: {' '.join(_shlex_quote(p) for p in cmd[:6])} ...\n"
+            f"user prompt preview (first {DRY_RUN_SYNTH_PREVIEW_CHARS} chars):\n"
+            f"{preview}\n"
+            f"--- /DRY RUN ---"
+        )
+        return (True, "dry-run")
+
+    if not outputs:
+        _echo("[stage3] no subagent outputs — skipping synthesizer call, registry unchanged.")
+        return (True, "no outputs")
+
+    assert claude_binary is not None
+    cmd = _compose_synth_cmd(claude_binary, user_prompt, system_prompt)
+
+    cfg_dir = make_isolated_claude_config()
+    try:
+        import os as _os
+        merged_env = {**_os.environ, "CLAUDE_CONFIG_DIR": cfg_dir}
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=merged_env)
+        if proc.returncode != 0:
+            msg = f"synthesizer exit {proc.returncode}: {proc.stderr.strip()[:500]}"
+            _echo(f"[stage3] ERROR: {msg}", err=True)
+            return (False, msg)
+        try:
+            synth = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            msg = f"synthesizer output not valid JSON: {exc}"
+            _echo(f"[stage3] ERROR: {msg}", err=True)
+            # Persist raw output alongside for debugging.
+            (analysis_root / "synthesizer_raw.txt").write_text(proc.stdout)
+            return (False, msg)
+    finally:
+        shutil.rmtree(cfg_dir, ignore_errors=True)
+
+    findings = synth.get("findings", []) if isinstance(synth, dict) else []
+    if not isinstance(findings, list):
+        msg = "synthesizer output missing 'findings' list"
+        _echo(f"[stage3] ERROR: {msg}", err=True)
+        return (False, msg)
+
+    merged = registry.merge(existing, findings, run_id=run_id)
+    errs = registry.validate(merged)
+    if errs:
+        msg = f"merged registry failed schema validation: {'; '.join(errs[:3])}"
+        _echo(f"[stage3] ERROR: {msg}", err=True)
+        return (False, msg)
+
+    registry.write_patterns(patterns_path, merged)
+    _echo(
+        f"[stage3] wrote {patterns_path} "
+        f"({len(merged['patterns'])} patterns after merge)"
+    )
+    return (True, str(patterns_path))
 
 
 # ---------------------------------------------------------------------------
@@ -486,11 +654,21 @@ def register_pathology_command(analyze_command: click.Group) -> None:
                 sys.exit(1)
 
         if want_stage3:
-            _stage_synthesize(analysis_root=aroot, dry_run=dry_run)
+            patterns_path = repo_root() / "patterns.json"
+            ok, msg = _stage_synthesize(
+                analysis_root=aroot,
+                run_id=rid,
+                patterns_path=patterns_path,
+                force=force,
+                dry_run=dry_run,
+            )
+            if not ok:
+                sys.exit(1)
 
 
 __all__ = [
     "register_pathology_command",
     "SUBAGENT_PROMPT_PATH",
+    "SYNTHESIZER_PROMPT_PATH",
     "STAGE_CHOICES",
 ]

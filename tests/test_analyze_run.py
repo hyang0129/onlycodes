@@ -1,7 +1,7 @@
 """Offline tests for ``swebench analyze pathology``.
 
 These cover the ``--dry-run`` path, resume/skip semantics, option surface,
-and that Stage 3 is a recognisable placeholder. They never invoke the
+and Stage 3's composed synthesizer command. They never invoke the
 ``claude`` binary — ``find_claude_binary`` is tolerated via ``--dry-run``.
 """
 
@@ -55,7 +55,8 @@ def test_pathology_dry_run_emits_commands_and_previews(tmp_path: Path) -> None:
     assert "claude" in out  # binary path (or <claude>) appears
     assert "--allowedTools" in out
     assert "compressed preview" in out
-    assert "Stage 3 (synthesize) not yet implemented" in out
+    # Stage 3 synthesizer should also emit its own dry-run banner.
+    assert "stage3 synthesizer" in out
 
     # Dry-run must NOT create sidecars on disk.
     analysis = work / "_analysis" / "test-run"
@@ -138,7 +139,13 @@ def test_pathology_triage_json_written(tmp_path: Path) -> None:
     assert any(entry.get("flagged") for entry in data["ranked"])
 
 
-def test_pathology_stage_synthesize_is_placeholder(tmp_path: Path) -> None:
+def test_pathology_stage_synthesize_dry_run(tmp_path: Path) -> None:
+    """Stage 3 synthesizer prints its composed claude command under --dry-run.
+
+    Runs with ``--stage synthesize`` only (skipping stages 1 and 2), which
+    means the synthesizer sees zero subagent outputs — but should still
+    compose + display its command against the seeded repo-root registry.
+    """
     work = tmp_path / "results"
     work.mkdir()
     for p in FIXTURES_DIR.glob("*.jsonl"):
@@ -151,7 +158,10 @@ def test_pathology_stage_synthesize_is_placeholder(tmp_path: Path) -> None:
         "--dry-run",
     ])
     assert result.exit_code == 0, result.output
-    assert "Stage 3 (synthesize) not yet implemented" in result.output
+    assert "stage3 synthesizer" in result.output
+    assert "--system-prompt" in result.output or "synthesizer_prompt" in result.output
+    # Stage 3 dry-run must not mutate the repo-root patterns.json; the
+    # autouse guard in conftest.py enforces this.
 
 
 def test_pathology_rejects_bad_concurrency(tmp_path: Path) -> None:
