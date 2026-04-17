@@ -33,7 +33,7 @@ def _render_csv_golden(name: str, fixture_dir: Path) -> str:
 
 def _run(results_dir: Path, out_path: Path | None = None):
     runner = CliRunner()
-    args = ["--results-dir", str(results_dir)]
+    args = ["summary", "--results-dir", str(results_dir)]
     if out_path is not None:
         args += ["--out", str(out_path)]
     return runner.invoke(analyze_command, args, catch_exceptions=False)
@@ -128,7 +128,9 @@ def test_missing_results_dir_errors_out(tmp_path: Path):
     missing = tmp_path / "does-not-exist"
     runner = CliRunner()
     result = runner.invoke(
-        analyze_command, ["--results-dir", str(missing)], catch_exceptions=False
+        analyze_command,
+        ["summary", "--results-dir", str(missing)],
+        catch_exceptions=False,
     )
     assert result.exit_code != 0
 
