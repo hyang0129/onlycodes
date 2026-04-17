@@ -103,6 +103,14 @@ def clone_from_bare(bare_src: str, dest: str) -> None:
     Much faster than a fresh network clone — shares ``.git/objects`` with the
     bare repo via hardlinks/alternates. Safe to call repeatedly; no-op if
     ``dest/.git`` already exists.
+
+    .. warning::
+        ``--shared`` writes ``dest/.git/objects/info/alternates`` pointing at
+        ``bare_src``.  If the bare repo is deleted while this working tree still
+        exists, every git operation on ``dest`` (reset, status, log, …) will
+        fail with "object not found".  Always remove all instance caches that
+        reference a bare repo **before** deleting the bare repo itself.  The
+        ``cache clean --include-bare`` command enforces this invariant.
     """
     if os.path.isdir(os.path.join(dest, ".git")):
         return
@@ -127,6 +135,8 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
     subprocess.run(
         [pip, "install", "--quiet", "-e", repo_dir],
         capture_output=True,
+        text=True,
+        check=True,
     )
 
 

@@ -292,10 +292,23 @@ def _can_fuse_mount() -> bool:
     Checking for the binary alone is not sufficient — seccomp filters or a
     missing /dev/fuse device node can block FUSE even when the binary is
     installed. This probes with a throwaway tmpdir mount.
+
+    We also require ``fusermount`` to be present: without it we cannot
+    unmount real FUSE mounts later, so the backend would be unusable even
+    if the probe succeeds.
     """
     if shutil.which("fuse-overlayfs") is None:
         return False
+    # fusermount is required to tear down real mounts; if it is absent we
+    # cannot safely use the fuse backend regardless of whether the probe mount
+    # succeeds.
+    if shutil.which("fusermount") is None:
+        return False
     tmp = tempfile.mkdtemp(prefix="fuse-probe-")
+    # Track whether the probe mount is still active so the finally block
+    # knows whether it is safe to rmtree tmp (walking into a live overlay
+    # would corrupt the cached lowerdir).
+    mount_is_active = False
     try:
         lower = os.path.join(tmp, "lower")
         upper = os.path.join(tmp, "upper")
@@ -313,11 +326,34 @@ def _can_fuse_mount() -> bool:
             capture_output=True,
         )
         if result.returncode == 0:
-            subprocess.run(["fusermount", "-u", merged], capture_output=True)
+            mount_is_active = True
+            # Try a normal unmount first; fall back to lazy unmount (-uz).
+            # Only proceed to rmtree once we are certain the mount is gone —
+            # walking into a live overlay could corrupt the cached lowerdir.
+            umount_rc = subprocess.run(
+                ["fusermount", "-u", merged], capture_output=True
+            ).returncode
+            if umount_rc != 0:
+                lazy_rc = subprocess.run(
+                    ["fusermount", "-uz", merged], capture_output=True
+                ).returncode
+                if lazy_rc != 0:
+                    # Neither unmount worked; leave the tmpdir in place to
+                    # avoid walking into a live mount, and report failure.
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "_can_fuse_mount: probe mount at %s could not be "
+                        "unmounted (fusermount -u and -uz both failed); "
+                        "skipping rmtree to protect the filesystem.",
+                        merged,
+                    )
+                    return False
+            mount_is_active = False
             return True
         return False
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        if not mount_is_active:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 def detect_overlay_backend() -> Backend:

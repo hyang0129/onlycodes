@@ -239,6 +239,26 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
         click.echo("Nothing to remove.")
         return
 
+    # Guard: refuse to remove the bare-repo cache while any instance caches
+    # still reference it via .git/objects/info/alternates (written by
+    # `git clone --shared`).  Removing the bare repo first would make every
+    # subsequent git operation on those instances fail with "object not found".
+    # We allow --include-bare only when the clean operation also removes ALL
+    # instance directories (i.e. no --filter was given).
+    if include_bare and filter_ids is not None:
+        # Check whether any instance dirs remain after the targeted removal.
+        all_instance_dirs = {p for p in inst_root.iterdir() if p.is_dir()} if inst_root.is_dir() else set()
+        remaining = all_instance_dirs - set(targets)
+        if remaining:
+            click.echo(
+                "ERROR: Cannot remove bare-repo cache while instance caches still "
+                "reference it via git alternates.\n"
+                "Run `cache clean --yes` (without --filter) first to remove all "
+                "instance caches, or omit --include-bare.",
+                err=True,
+            )
+            sys.exit(1)
+
     if not yes:
         click.echo(f"About to remove {len(targets)} cached instance(s):")
         for t in targets:
