@@ -138,6 +138,20 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
         text=True,
         check=True,
     )
+    # Try common test/dev extras; ignore failures (not all packages define them).
+    for extra in ("test", "tests", "dev", "testing"):
+        subprocess.run(
+            [pip, "install", "--quiet", "-e", f"{repo_dir}[{extra}]"],
+            capture_output=True,
+            text=True,
+        )
+    # Always ensure pytest is present as a final fallback.
+    subprocess.run(
+        [pip, "install", "--quiet", "pytest"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
 
 def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
