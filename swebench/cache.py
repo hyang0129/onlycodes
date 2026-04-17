@@ -395,7 +395,15 @@ def mount_overlay(
     or ``"fuse"`` — callers that got ``"none"`` from ``detect_overlay_backend``
     must handle that before reaching here.
     """
-    for d in (lowerdir, upperdir, workdir, merged):
+    # lowerdir must already exist (it is the cached repo snapshot).  Creating
+    # it silently on a missing cache would mount an empty overlay and cause
+    # mysterious test failures — raise early instead (F-19).
+    if not os.path.isdir(lowerdir):
+        raise OverlayError(
+            f"mount_overlay: lowerdir does not exist: {lowerdir!r}. "
+            "Re-run 'python -m swebench cache setup' to rebuild the cache entry."
+        )
+    for d in (upperdir, workdir, merged):
         os.makedirs(d, exist_ok=True)
 
     opts = f"lowerdir={lowerdir},upperdir={upperdir},workdir={workdir}"

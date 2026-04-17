@@ -328,6 +328,11 @@ def _cleanup_stale_overlays(
                 if not os.path.isdir(overlay_root):
                     break
                 merged = os.path.join(overlay_root, "merged")
+                # Only remove dirs that look like overlay roots — skip any
+                # unrelated tool that creates /tmp/{iid}-something for other
+                # reasons (F-9: verify overlay structure before deleting).
+                if not os.path.isdir(merged):
+                    break
                 try:
                     unmount_overlay(merged, backend)
                 except Exception:

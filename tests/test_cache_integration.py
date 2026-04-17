@@ -14,6 +14,7 @@ and persists across runs so subsequent runs skip the clone+venv setup.
 
 from __future__ import annotations
 
+import glob
 import os
 import subprocess
 import sys
@@ -35,7 +36,18 @@ CACHE_DIR = Path(
 
 WORK_DIR = Path("/workspaces/hub_1/onlycodes-issue-11")
 
-pytestmark = pytest.mark.integration
+
+def _instance_yaml_exists() -> bool:
+    return bool(glob.glob(f"problems/**/{INSTANCE_ID}.yaml", recursive=True))
+
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _instance_yaml_exists(),
+        reason=f"Problem YAML for {INSTANCE_ID} not found in problems/",
+    ),
+]
 
 
 # ---------------------------------------------------------------------------

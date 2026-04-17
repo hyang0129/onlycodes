@@ -5,11 +5,14 @@ import csv
 import json
 import os
 import glob
+import re
 import statistics
 import sys
 from collections import defaultdict
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_swebench")
+
+_RUN_RE = re.compile(r"^(?P<id>.+)_(?P<arm>baseline|onlycode)_run(?P<run>\d+)$")
 
 
 def load_result_record(jsonl_path: str) -> dict | None:
@@ -30,7 +33,7 @@ def load_result_record(jsonl_path: str) -> dict | None:
 
 
 def load_test_outcome(test_txt_path: str) -> str | None:
-    """Return 'PASS', 'FAIL', or None if file missing."""
+    """Return 'PASS', 'FAIL', 'UNKNOWN' (bad content), or None (file missing)."""
     if not os.path.exists(test_txt_path):
         return None
     with open(test_txt_path) as f:
@@ -53,11 +56,12 @@ def collect_runs() -> list[dict]:
 
         usage = result.get("usage", {})
         # parse arm and run number from filename e.g. django__django-15814_onlycode_run1
-        parts = stem.rsplit("_run", 1)
-        run_num = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else None
-        name_parts = parts[0].rsplit("_", 1)
-        arm = name_parts[-1] if len(name_parts) == 2 else "unknown"
-        instance_id = name_parts[0] if len(name_parts) == 2 else parts[0]
+        m = _RUN_RE.match(stem)
+        if m is None:
+            continue
+        instance_id = m.group("id")
+        arm = m.group("arm")
+        run_num = int(m.group("run"))
 
         runs.append(
             {
