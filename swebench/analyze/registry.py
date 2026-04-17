@@ -468,6 +468,48 @@ def flatten_findings(subagent_outputs: list[dict]) -> list[dict]:
     return out
 
 
+def flatten_synth_findings(synth_findings: list[dict]) -> list[dict]:
+    """Convert synthesizer output into :func:`merge`-compatible flat findings.
+
+    Synthesizer evidence_refs carry ``log_ref`` and ``arm`` per ref (a single
+    pattern aggregates evidence across multiple logs/arms).  We fan out each
+    finding into one entry per distinct ``(log_ref, arm)`` pair so
+    :func:`merge` can correctly populate ``arm_distribution`` and
+    ``evidence_refs``.  Evidence refs for unrecognised arms are dropped so
+    they never reach the schema validator.
+    """
+    from collections import defaultdict  # local to avoid circular imports
+
+    out: list[dict] = []
+    for f in synth_findings:
+        cid = f.get("candidate_id", "")
+        desc = f.get("description", "")
+        refs = f.get("evidence_refs", []) or []
+
+        by_source: dict[tuple[str, str], list[dict]] = defaultdict(list)
+        for r in refs:
+            arm = r.get("arm", "")
+            log_ref = r.get("log_ref", "")
+            if arm not in VALID_ARMS:
+                continue  # drop unrecognised arms silently
+            by_source[(log_ref, arm)].append(r)
+
+        if not by_source:
+            continue  # nothing usable — skip this finding entirely
+
+        for (log_ref, arm), source_refs in by_source.items():
+            out.append(
+                {
+                    "candidate_id": cid,
+                    "description": desc,
+                    "log_ref": log_ref,
+                    "arm": arm,
+                    "evidence_refs": source_refs,
+                }
+            )
+    return out
+
+
 __all__ = [
     "SCHEMA_VERSION",
     "MAX_EVIDENCE_REFS",
@@ -479,4 +521,5 @@ __all__ = [
     "validate_subagent_output",
     "merge",
     "flatten_findings",
+    "flatten_synth_findings",
 ]

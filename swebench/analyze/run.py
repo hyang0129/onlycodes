@@ -210,15 +210,16 @@ def _read_subagent_prompt() -> str:
     return SUBAGENT_PROMPT_PATH.read_text()
 
 
-def _compose_claude_cmd(claude_binary: str, user_prompt: str, system_prompt: str) -> list[str]:
+def _compose_claude_cmd(claude_binary: str, system_prompt: str) -> list[str]:
     """Compose the ``claude -p`` command for a single subagent invocation.
 
+    The user prompt is passed via stdin to avoid ARG_MAX limits on large logs.
     We restrict the subagent to ``Read,Write`` (it doesn't need a shell); the
     system prompt is responsible for telling it to emit JSON only.
     """
     return [
         claude_binary,
-        "-p", user_prompt,
+        "-p",
         "--system-prompt", system_prompt,
         "--allowedTools", "Read,Write",
         "--dangerously-skip-permissions",
@@ -263,7 +264,7 @@ def _process_one(
 
     if dry_run:
         binary_display = claude_binary or "<claude>"
-        cmd = _compose_claude_cmd(binary_display, user_prompt, system_prompt)
+        cmd = _compose_claude_cmd(binary_display, system_prompt)
         preview = compressed[:DRY_RUN_LOG_PREVIEW_CHARS]
         _echo(
             f"--- DRY RUN: {log_ref} ---\n"
@@ -276,7 +277,7 @@ def _process_one(
         return (log_ref, True, "dry-run")
 
     assert claude_binary is not None  # narrowed by caller
-    cmd = _compose_claude_cmd(claude_binary, user_prompt, system_prompt)
+    cmd = _compose_claude_cmd(claude_binary, system_prompt)
 
     cfg_dir = make_isolated_claude_config()
     try:
@@ -285,6 +286,7 @@ def _process_one(
         merged = {**os.environ, **env}
         proc = subprocess.run(
             cmd,
+            input=user_prompt,
             capture_output=True,
             text=True,
             env=merged,
@@ -418,11 +420,14 @@ def _build_synth_user_prompt(
     )
 
 
-def _compose_synth_cmd(claude_binary: str, user_prompt: str, system_prompt: str) -> list[str]:
-    """Compose the ``claude -p`` command for the Stage 3 synthesizer."""
+def _compose_synth_cmd(claude_binary: str, system_prompt: str) -> list[str]:
+    """Compose the ``claude -p`` command for the Stage 3 synthesizer.
+
+    User prompt is passed via stdin to avoid ARG_MAX limits on large inputs.
+    """
     return [
         claude_binary,
-        "-p", user_prompt,
+        "-p",
         "--system-prompt", system_prompt,
         "--allowedTools", "Read,Write",
         "--dangerously-skip-permissions",
@@ -476,7 +481,7 @@ def _stage_synthesize(
 
     if dry_run:
         binary_display = claude_binary or "<claude>"
-        cmd = _compose_synth_cmd(binary_display, user_prompt, system_prompt)
+        cmd = _compose_synth_cmd(binary_display, system_prompt)
         preview = user_prompt[:DRY_RUN_SYNTH_PREVIEW_CHARS]
         _echo(
             f"--- DRY RUN: stage3 synthesizer ---\n"
@@ -495,13 +500,13 @@ def _stage_synthesize(
         return (True, "no outputs")
 
     assert claude_binary is not None
-    cmd = _compose_synth_cmd(claude_binary, user_prompt, system_prompt)
+    cmd = _compose_synth_cmd(claude_binary, system_prompt)
 
     cfg_dir = make_isolated_claude_config()
     try:
         import os as _os
         merged_env = {**_os.environ, "CLAUDE_CONFIG_DIR": cfg_dir}
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=merged_env)
+        proc = subprocess.run(cmd, input=user_prompt, capture_output=True, text=True, env=merged_env)
         if proc.returncode != 0:
             msg = f"synthesizer exit {proc.returncode}: {proc.stderr.strip()[:500]}"
             _echo(f"[stage3] ERROR: {msg}", err=True)
@@ -523,7 +528,11 @@ def _stage_synthesize(
         _echo(f"[stage3] ERROR: {msg}", err=True)
         return (False, msg)
 
-    merged = registry.merge(existing, findings, run_id=run_id)
+    # Synthesizer findings have arm/log_ref inside each evidence_ref (since
+    # one pattern aggregates across multiple logs). Fan them out into the
+    # per-(log_ref, arm) shape that registry.merge() expects.
+    flat_findings = registry.flatten_synth_findings(findings)
+    merged = registry.merge(existing, flat_findings, run_id=run_id)
     errs = registry.validate(merged)
     if errs:
         msg = f"merged registry failed schema validation: {'; '.join(errs[:3])}"
