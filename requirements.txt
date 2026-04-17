@@ -2,4 +2,5 @@ datasets>=2.18      # HuggingFace streaming fetch (add command only)
 click>=8.1          # CLI
 pyyaml>=6.0         # YAML problem files
 tabulate>=0.9       # analyze output table
+loguru>=0.7         # structured logging (configured in swebench/_log.py)
 pytest>=7.0         # test-only; unit tests under tests/
