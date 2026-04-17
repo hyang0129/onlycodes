@@ -137,15 +137,18 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
             ]
             for r in results
         ]
+        # user-facing output — not logged (machine-readable table on stdout)
         click.echo(tabulate(rows, headers=headers, tablefmt="plain"))
     except ImportError:
         logger.debug("tabulate not installed; using manual formatting")
         # Fallback: manual column formatting
         header = f"{'instance_id':<30} {'arm':<12} {'run':<5} {'verdict':<8} {'cost':<10} {'turns':<7}"
+        # user-facing output — not logged (table header on stdout)
         click.echo(header)
         for r in results:
             cost_str = f"${r.cost_usd:.3f}" if r.cost_usd is not None else "N/A"
             turns_str = str(r.num_turns) if r.num_turns is not None else "N/A"
+            # user-facing output — not logged (table row on stdout)
             click.echo(
                 f"{r.instance_id:<30} {r.arm:<12} {r.run_idx:<5} {r.verdict:<8} "
                 f"{cost_str:<10} {turns_str:<7}"
