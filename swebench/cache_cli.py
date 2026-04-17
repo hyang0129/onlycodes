@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import shutil
 import sys
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import click
+from loguru import logger
 
 from swebench import repo_root
 from swebench.cache import (
@@ -43,24 +43,13 @@ from swebench.harness import (
 from swebench.models import Problem
 
 
-# Serialise stdout across parallel workers.
-_print_lock = threading.Lock()
-
-
-def _echo(msg: str, *, err: bool = False) -> None:
-    with _print_lock:
-        click.echo(msg, err=err)
-
-
 def _load_problems(filter_ids: str | None) -> list[Problem]:
     root = repo_root()
     problems_dir = root / "problems"
     yaml_files = sorted(problems_dir.rglob("*.yaml"))
     if not yaml_files:
-        click.echo(
-            "ERROR: No problem files found in problems/. "
-            "Run 'python -m swebench add' first.",
-            err=True,
+        logger.error(
+            f"No problem YAML files in {problems_dir}; run 'python -m swebench add' first"
         )
         sys.exit(1)
 
@@ -69,10 +58,7 @@ def _load_problems(filter_ids: str | None) -> list[Problem]:
         wanted = {s.strip() for s in filter_ids.split(",") if s.strip()}
         problems = [p for p in problems if p.instance_id in wanted]
         if not problems:
-            click.echo(
-                f"ERROR: No matching problems for --filter: {filter_ids}",
-                err=True,
-            )
+            logger.error(f"Filter matched 0 of {len(yaml_files)} problems")
             sys.exit(1)
     return problems
 
@@ -83,6 +69,7 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
     paths = cache_paths(instance_id)
 
     if not force and has_cached_instance(instance_id):
+        logger.debug(f"{instance_id}: cache hit, skipping (--force to rebuild)")
         return (instance_id, True, "already cached (skip)")
 
     started = time.time()
@@ -95,6 +82,7 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
         # 1. Bare repo
         bare = str(bare_repo_path(problem.repo_slug))
         clone_bare_repo(problem.repo_slug, bare)
+        logger.debug(f"{instance_id}: bare repo ready at {bare}")
 
         # 2. Working tree from bare
         repo_dir = paths["repo"]
@@ -105,18 +93,21 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
 
         # 3. Checkout base commit
         git_reset(repo_dir, problem.base_commit)
+        logger.debug(f"{instance_id}: reset to {problem.base_commit}")
 
         # 4. Venv + editable install
         venv_dir = paths["venv"]
         if force and Path(venv_dir).exists():
             shutil.rmtree(venv_dir, ignore_errors=True)
         setup_venv(venv_dir, repo_dir)
+        logger.debug(f"{instance_id}: venv built at {venv_dir}")
 
         # 5. Scrub transient artifacts
         scrub_cache_dir(repo_dir)
 
         # 6. Write lockfile
         write_lockfile(venv_dir, paths["lockfile"])
+        logger.debug(f"{instance_id}: lockfile written to {paths['lockfile']}")
 
         elapsed = int(time.time() - started)
         return (instance_id, True, f"built in {elapsed}s")
@@ -157,7 +148,7 @@ def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
     ``venv/`` (python3.11 + editable install), and ``lockfile.txt``.
     """
     if concurrency < 1:
-        click.echo("ERROR: --concurrency must be >= 1.", err=True)
+        logger.error("--concurrency must be >= 1")
         sys.exit(1)
 
     problems = _load_problems(filter_ids)
@@ -166,7 +157,7 @@ def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
     repos_dir().mkdir(parents=True, exist_ok=True)
     instances_dir().mkdir(parents=True, exist_ok=True)
 
-    _echo(
+    logger.info(
         f"cache setup: {len(problems)} instance(s), concurrency={concurrency}, "
         f"force={force}"
     )
@@ -182,18 +173,17 @@ def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
             iid, ok, msg = fut.result()
             if ok:
                 successes.append(iid)
-                _echo(f"  {iid}: {msg}")
+                logger.debug(f"{iid}: {msg}")
             else:
                 failures.append((iid, msg))
-                _echo(f"FAILED: {iid}: {msg}", err=True)
+                logger.warning(f"{iid}: setup failed — {msg}")
 
-    _echo("")
-    _echo("=== cache setup summary ===")
-    _echo(f"  Succeeded: {len(successes)} / {len(problems)}")
+    logger.info(
+        f"Setup complete: {len(successes)} OK, {len(failures)} failed"
+    )
     if failures:
-        _echo(f"  Failed:    {len(failures)}", err=True)
         for iid, msg in failures:
-            _echo(f"    - {iid}: {msg}", err=True)
+            logger.error(f"{iid}: {msg}")
         sys.exit(1)
 
 
@@ -221,7 +211,7 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
     targets: list[Path] = []
     inst_root = instances_dir()
     if not inst_root.is_dir():
-        click.echo(f"No cache at {inst_root}; nothing to clean.")
+        logger.info(f"No cache at {inst_root}; nothing to clean")
         return
 
     if filter_ids:
@@ -231,12 +221,12 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
             if p.is_dir():
                 targets.append(p)
             else:
-                click.echo(f"  {name}: not cached (skip)")
+                logger.debug(f"{name}: not cached (skip)")
     else:
         targets = [p for p in inst_root.iterdir() if p.is_dir()]
 
     if not targets and not include_bare:
-        click.echo("Nothing to remove.")
+        logger.info("Nothing to remove")
         return
 
     # Guard: refuse to remove the bare-repo cache while any instance caches
@@ -250,12 +240,11 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
         all_instance_dirs = {p for p in inst_root.iterdir() if p.is_dir()} if inst_root.is_dir() else set()
         remaining = all_instance_dirs - set(targets)
         if remaining:
-            click.echo(
-                "ERROR: Cannot remove bare-repo cache while instance caches still "
-                "reference it via git alternates.\n"
-                "Run `cache clean --yes` (without --filter) first to remove all "
-                "instance caches, or omit --include-bare.",
-                err=True,
+            logger.error(
+                "Cannot remove bare-repo cache while instance caches still "
+                "reference it via git alternates. Run `cache clean --yes` "
+                "(without --filter) first to remove all instance caches, or "
+                "omit --include-bare."
             )
             sys.exit(1)
 
@@ -267,14 +256,15 @@ def clean(filter_ids: str | None, yes: bool, include_bare: bool) -> None:
             click.echo(f"  (also removing bare repos under {repos_dir()})")
         click.confirm("Proceed?", abort=True)
 
+    logger.info(f"Removing {len(targets)} cached instance(s)")
     for t in targets:
         shutil.rmtree(t, ignore_errors=True)
-        click.echo(f"  removed {t}")
+        logger.info(f"Removed: {t}")
 
     if include_bare:
         br = repos_dir()
         if br.is_dir():
             shutil.rmtree(br, ignore_errors=True)
-            click.echo(f"  removed {br}")
+            logger.info(f"Removed bare repos: {br}")
 
-    click.echo("Done.")
+    logger.info("Cache clean complete")
