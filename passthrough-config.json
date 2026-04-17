@@ -12,8 +12,8 @@
   "subMcpServers": [
     {
       "name": "github",
-      "command": "npx",
-      "args": ["-y", "@github/mcp"],
+      "command": "node",
+      "args": ["node_modules/@modelcontextprotocol/server-github/dist/index.js"],
       "env": ["GITHUB_TOKEN"]
     }
   ],
