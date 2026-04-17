@@ -485,12 +485,21 @@ def run_command(
             # would collide on /tmp/swe-{id}-eval/. Deferred per PR scope;
             # assign a PID- or uuid-based tag here if that becomes a real
             # use case.
-            merged, venv_dir, handle = _setup_problem_cached(
-                problem,
-                run_tag="eval",
-                overlay_tmp_root=overlay_tmp_root,
-                overlay_backend=overlay_backend,
-            )
+            try:
+                merged, venv_dir, handle = _setup_problem_cached(
+                    problem,
+                    run_tag="eval",
+                    overlay_tmp_root=overlay_tmp_root,
+                    overlay_backend=overlay_backend,
+                )
+            except OverlayError as exc:
+                click.echo(
+                    f"  {problem.instance_id}: overlay mount failed ({exc}); "
+                    "falling back to clone+venv.",
+                    err=True,
+                )
+                repo_dir, venv_dir = _setup_problem(problem, clone_base)
+                return (repo_dir, venv_dir, None)
             if handle is not None:
                 return (merged, venv_dir, handle)
             click.echo(
@@ -505,16 +514,7 @@ def run_command(
         # Serial setup — no thread overhead
         for problem in problems:
             click.echo(f"  Setting up {problem.instance_id}...")
-            try:
-                repo_dir, venv_dir, handle = _setup_one(problem)
-            except OverlayError as exc:
-                click.echo(
-                    f"  {problem.instance_id}: overlay mount failed ({exc}); "
-                    "falling back to clone+venv.",
-                    err=True,
-                )
-                repo_dir, venv_dir = _setup_problem(problem, clone_base)
-                handle = None
+            repo_dir, venv_dir, handle = _setup_one(problem)
             setup_map[problem.instance_id] = (repo_dir, venv_dir)
             if handle is not None:
                 overlay_handles[problem.instance_id] = handle
