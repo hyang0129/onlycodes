@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import click
+from loguru import logger
 
 from swebench import repo_root
 from swebench.models import ArmResult
@@ -43,8 +44,12 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
                 last_line = lines[-1].strip()
                 if last_line in ("PASS", "FAIL"):
                     verdict = last_line
-        except OSError:
-            pass
+                else:
+                    logger.debug(f"No verdict in {test_file}; defaulting to ERROR")
+            else:
+                logger.debug(f"No verdict in {test_file}; defaulting to ERROR")
+        except OSError as exc:
+            logger.warning(f"Failed to read {test_file}: {exc}")
 
         # Find matching jsonl file
         jsonl_name = f"{instance_id}_{arm}_run{run_idx}.jsonl"
@@ -63,8 +68,8 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
                     cost_usd = float(cost_matches[-1])
                 if turns_matches:
                     num_turns = int(turns_matches[-1])
-            except (OSError, ValueError):
-                pass
+            except (OSError, ValueError) as exc:
+                logger.warning(f"Failed to read {jsonl_path}: {exc}")
 
         results.append(
             ArmResult(
@@ -105,20 +110,21 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
         rdir = repo_root() / "results_swebench"
 
     if not rdir.is_dir():
-        click.echo(f"ERROR: Results directory not found: {rdir}", err=True)
-        click.echo("Run 'python -m swebench run' first, or specify --results-dir.", err=True)
+        logger.error(f"Results directory not found: {rdir}")
+        logger.info("Run 'python -m swebench run' first, or specify --results-dir.")
         raise SystemExit(1)
 
     results = _parse_results(rdir)
 
     if not results:
-        click.echo(f"No result files found in {rdir}/")
+        logger.warning(f"No result files in {rdir}/ — run 'swebench run' first")
         return
 
     # Print table using tabulate if available, otherwise manual formatting
     try:
         from tabulate import tabulate
 
+        logger.debug("Using tabulate for formatting")
         headers = ["instance_id", "arm", "run", "verdict", "cost", "turns"]
         rows = [
             [
@@ -133,6 +139,7 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
         ]
         click.echo(tabulate(rows, headers=headers, tablefmt="plain"))
     except ImportError:
+        logger.debug("tabulate not installed; using manual formatting")
         # Fallback: manual column formatting
         header = f"{'instance_id':<30} {'arm':<12} {'run':<5} {'verdict':<8} {'cost':<10} {'turns':<7}"
         click.echo(header)
@@ -166,4 +173,4 @@ def analyze_command(results_dir: str | None, out_path: str | None) -> None:
                     "jsonl_path": r.jsonl_path,
                     "test_txt_path": r.test_txt_path,
                 })
-        click.echo(f"\nCSV written to {out_path}")
+        logger.info(f"Wrote {len(results)}-row CSV to {out_path}")
