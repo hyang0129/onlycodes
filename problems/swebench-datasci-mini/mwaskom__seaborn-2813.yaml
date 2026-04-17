@@ -1,0 +1,20 @@
+instance_id: mwaskom__seaborn-2813
+repo: mwaskom/seaborn
+base_commit: 60e58eb07e4448694ca25e887684d39d5138babd
+test_cmd: python -m pytest seaborn/tests/test_statistics.py::TestHistogram::test_odd_single_observation
+  seaborn/tests/test_statistics.py::TestHistogram::test_binwidth_roundoff
+patch_file: patches/mwaskom__seaborn-2813_tests.patch
+problem_statement: "histplot stat=count does not count all data points\n`import matplotlib.pyplot\
+  \ as plt\r\nimport seaborn as sns\r\nimport numpy as np\r\n\r\nsns.set(style=\"\
+  whitegrid\")\r\n\r\ndata_a = [1, 2, 3]\r\ndata_b = [2.4, 2.5, 2.6]\r\n\r\nsns.histplot(np.array(data_a),\
+  \    color=\"red\", binwidth=0.01, stat=\"count\")\r\nsns.histplot(np.array(data_b),\
+  \    color=\"blue\", binwidth=0.01, stat=\"count\")\r\n\r\n`plt.savefig(\"output.png\"\
+  )``\r\n\r\nThis produces  [https://i.stack.imgur.com/TM6al.png](url)\r\n\r\nThe\
+  \ data point 2.6 is omitted in the output produced by histplot.\r\n\r\nThe problem\
+  \ also exists, if the first sns.histplot command is removed.\r\nInterestingly, it\
+  \ has been pointed out to me that the following command works:\r\n\r\n`sns.histplot([data_a,\
+  \ data_b], palette=['red', 'blue'], binwidth=0.01, stat=\"count\")`\r\n\r\nbut as\
+  \ I said, the single command \r\n\r\n`sns.histplot(np.array(data_b),    color=\"\
+  blue\", binwidth=0.01, stat=\"count\")`\r\n\r\nalso does not work.\r\n\n"
+added_at: '2026-04-17'
+hf_split: test

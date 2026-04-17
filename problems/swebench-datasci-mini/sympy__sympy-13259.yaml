@@ -1,0 +1,18 @@
+instance_id: sympy__sympy-13259
+repo: sympy/sympy
+base_commit: 8850d4eb343002601ba3c8fb37cb20dcf4a551cb
+test_cmd: python -m pytest test_hyper_as_trig test_hyperbolic_simp
+patch_file: patches/sympy__sympy-13259_tests.patch
+problem_statement: "simplify: wrong simplification with trigonometric functions with\
+  \ complex arguments\nsympy version is 1.0\n\n```\n>>> from sympy import *\n>>> a\
+  \ = 2*sqrt(2)*I*cos(pi/6 - `I*asinh(5*sqrt(2)/2)/3)/3`\n>>> a\n2*sqrt(2)*I*cos(pi/6\
+  \ - I*asinh(5*sqrt(2)/2)/3)/3\n>>> a.evalf()\n-0.333333333333333 + 1.0*I\n>>> b\
+  \ = a.simplify()\n>>> b\n2*sqrt(2)*I*cosh(pi/6 + asinh(5*sqrt(2)/2)/3)/3\n>>> b.evalf()\n\
+  1.6818694524863*I\n```\n\n> > > So **a** should equal **b** numerically, which is\
+  \ not at all the case. The reason seems to be  that \n> > > `cos(pi/6 -I*asinh()\
+  \ )` is converted into `cosh(pi/6 + asinh())` instead of \n> > > `cosh(I*pi/6 +\
+  \ asinh())`\n\nRemarkably: if we remove the factors in the expression above, simplify\
+  \ leaves the expression unchanged \n\n```\n>>> c= cos(pi/6 - I*asinh(5*sqrt(2)/2)/3)\n\
+  >>> c.simplify()\ncos(pi/6 - I*asinh(5*sqrt(2)/2)/3)\n```\n\n"
+added_at: '2026-04-17'
+hf_split: test

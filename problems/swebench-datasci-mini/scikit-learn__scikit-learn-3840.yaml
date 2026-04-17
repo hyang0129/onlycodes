@@ -1,0 +1,18 @@
+instance_id: scikit-learn__scikit-learn-3840
+repo: scikit-learn/scikit-learn
+base_commit: 6b5440a9964480ccb0fe1b59ab516d9228186571
+test_cmd: python -m pytest sklearn/metrics/tests/test_common.py::test_sample_order_invariance_multilabel_and_multioutput
+  sklearn/metrics/tests/test_common.py::test_invariance_string_vs_numbers_labels sklearn/metrics/tests/test_common.py::test_inf_nan_input
+  sklearn/metrics/tests/test_ranking.py::test_partial_roc_auc_score
+patch_file: patches/scikit-learn__scikit-learn-3840_tests.patch
+problem_statement: 'partial AUC
+
+  I suggest adding partial AUC to the metrics. this would compute the area under the
+  curve up to a specified FPR (in the case of the ROC curve). this measure is important
+  for comparing classifiers in cases where FPR is much more important than TPR. The
+  partial AUC should also allow applying the McClish correction. see here: http://cran.r-project.org/web/packages/pROC/pROC.pdf
+
+
+  '
+added_at: '2026-04-17'
+hf_split: test

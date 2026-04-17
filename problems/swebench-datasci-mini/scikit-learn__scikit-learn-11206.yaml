@@ -1,0 +1,36 @@
+instance_id: scikit-learn__scikit-learn-11206
+repo: scikit-learn/scikit-learn
+base_commit: 4143356c3c51831300789e4fdf795d83716dbab6
+test_cmd: python -m pytest sklearn/preprocessing/tests/test_common.py::test_missing_value_handling[est1-scale-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[asarray-True-True]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[asarray-True-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[asarray-False-True]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[asarray-False-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[csc_matrix-True-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[csc_matrix-False-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[csr_matrix-True-False]
+  sklearn/preprocessing/tests/test_data.py::test_scaler_n_samples_seen_with_nan[csr_matrix-False-False]
+  sklearn/preprocessing/tests/test_data.py::test_scale_input_finiteness_validation
+  sklearn/utils/tests/test_extmath.py::test_incremental_variance_update_formulas sklearn/utils/tests/test_extmath.py::test_incremental_mean_and_variance_ignore_nan
+  sklearn/utils/tests/test_extmath.py::test_incremental_variance_numerical_stability
+  sklearn/utils/tests/test_extmath.py::test_incremental_variance_ddof
+patch_file: patches/scikit-learn__scikit-learn-11206_tests.patch
+problem_statement: "increment_mean_and_var can now handle NaN values\n<!--\r\nThanks\
+  \ for contributing a pull request! Please ensure you have taken a look at\r\nthe\
+  \ contribution guidelines: https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md#pull-request-checklist\r\
+  \n-->\r\n\r\n#### Reference Issues/PRs\r\n<!--\r\nExample: Fixes #1234. See also\
+  \ #3456.\r\nPlease use keywords (e.g., Fixes) to create link to the issues or pull\
+  \ requests\r\nyou resolved, so that they will automatically be closed when your\
+  \ pull request\r\nis merged. See https://github.com/blog/1506-closing-issues-via-pull-requests\r\
+  \n-->\r\n#10457 check if incremental_mean_and_var gives a green tick without failing\
+  \ in numerical_stability\r\n\r\n#### What does this implement/fix? Explain your\
+  \ changes.\r\n\r\n\r\n#### Any other comments?\r\n\r\n\r\n<!--\r\nPlease be aware\
+  \ that we are a loose team of volunteers so patience is\r\nnecessary; assistance\
+  \ handling other issues is very welcome. We value\r\nall user contributions, no\
+  \ matter how minor they are. If we are slow to\r\nreview, either the pull request\
+  \ needs some benchmarking, tinkering,\r\nconvincing, etc. or more likely the reviewers\
+  \ are simply busy. In either\r\ncase, we ask for your understanding during the review\
+  \ process.\r\nFor more information, see our FAQ on this topic:\r\nhttp://scikit-learn.org/dev/faq.html#why-is-my-pull-request-not-getting-any-attention.\r\
+  \n\r\nThanks for contributing!\r\n-->\r\n\n"
+added_at: '2026-04-17'
+hf_split: test

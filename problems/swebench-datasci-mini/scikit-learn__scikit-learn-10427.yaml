@@ -1,0 +1,21 @@
+instance_id: scikit-learn__scikit-learn-10427
+repo: scikit-learn/scikit-learn
+base_commit: cc50b90034a9cda77a8aabedc8a853fe92de60b5
+test_cmd: python -m pytest sklearn/datasets/tests/test_base.py::test_data_home sklearn/datasets/tests/test_base.py::test_default_empty_load_files
+  sklearn/datasets/tests/test_base.py::test_default_load_files sklearn/datasets/tests/test_base.py::test_load_files_w_categories_desc_and_encoding
+  sklearn/datasets/tests/test_base.py::test_load_files_wo_load_content sklearn/datasets/tests/test_base.py::test_load_sample_images
+  sklearn/datasets/tests/test_base.py::test_load_digits sklearn/datasets/tests/test_base.py::test_load_digits_n_class_lt_10
+  sklearn/datasets/tests/test_base.py::test_load_sample_image sklearn/datasets/tests/test_base.py::test_load_missing_sample_image_error
+  sklearn/datasets/tests/test_base.py::test_load_diabetes sklearn/datasets/tests/test_base.py::test_load_linnerud
+  sklearn/datasets/tests/test_base.py::test_load_iris sklearn/datasets/tests/test_base.py::test_load_wine
+  sklearn/datasets/tests/test_base.py::test_load_breast_cancer sklearn/datasets/tests/test_base.py::test_load_boston
+  sklearn/datasets/tests/test_base.py::test_loads_dumps_bunch sklearn/datasets/tests/test_base.py::test_bunch_pickle_generated_with_0_16_and_read_with_0_17
+  sklearn/datasets/tests/test_base.py::test_bunch_dir sklearn/datasets/tests/test_lfw.py::test_load_empty_lfw_people
+  sklearn/datasets/tests/test_lfw.py::test_load_fake_lfw_people sklearn/datasets/tests/test_lfw.py::test_load_fake_lfw_people_too_restrictive
+  sklearn/datasets/tests/test_lfw.py::test_load_empty_lfw_pairs sklearn/datasets/tests/test_lfw.py::test_load_fake_lfw_pairs
+patch_file: patches/scikit-learn__scikit-learn-10427_tests.patch
+problem_statement: "load_sample_images uses deprecated imread\n>DeprecationWarning:\
+  \ `imread` is deprecated!\r\n`imread` is deprecated in SciPy 1.0.0, and will be\
+  \ removed in 1.2.0.\n"
+added_at: '2026-04-17'
+hf_split: test
