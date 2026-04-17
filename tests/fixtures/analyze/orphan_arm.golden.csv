@@ -1,0 +1,2 @@
+instance_id,arm,run_idx,verdict,cost_usd,num_turns,wall_secs,jsonl_path,test_txt_path
+sphinx-doc__sphinx-8721,baseline,1,PASS,0.025,3,0,{FIXTURE_DIR}/sphinx-doc__sphinx-8721_baseline_run1.jsonl,{FIXTURE_DIR}/sphinx-doc__sphinx-8721_baseline_run1_test.txt
