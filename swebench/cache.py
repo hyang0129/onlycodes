@@ -32,6 +32,8 @@ import tempfile
 from pathlib import Path
 from typing import Literal
 
+from loguru import logger
+
 
 # -- Layout ------------------------------------------------------------------
 
@@ -43,7 +45,10 @@ _DEFAULT_CACHE_ROOT = "/workspaces/.swebench-cache"
 
 def _root() -> Path:
     """Resolve the cache root at call time, honouring SWEBENCH_CACHE_ROOT."""
-    return Path(os.environ.get("SWEBENCH_CACHE_ROOT", _DEFAULT_CACHE_ROOT))
+    if cache_root := os.environ.get("SWEBENCH_CACHE_ROOT"):
+        logger.debug(f"Cache root resolved from SWEBENCH_CACHE_ROOT: {cache_root}")
+        return Path(cache_root)
+    return Path(_DEFAULT_CACHE_ROOT)
 
 
 def repos_dir() -> Path:
@@ -157,13 +162,22 @@ def scrub_cache_dir(repo_dir: str) -> None:
             if p.is_file():
                 files_to_remove.append(p)
 
+    logger.debug(
+        f"Scrubbing {repo_dir}: {len(dirs_to_remove)} dirs, "
+        f"{len(files_to_remove)} files to remove"
+    )
     for d in dirs_to_remove:
+        logger.debug(f"Removing directory (ignore_errors): {d}")
         shutil.rmtree(d, ignore_errors=True)
     for f in files_to_remove:
         try:
             f.unlink()
         except FileNotFoundError:
             pass
+    logger.info(
+        f"Scrub complete for {repo_dir}: removed {len(dirs_to_remove)} dirs, "
+        f"{len(files_to_remove)} files"
+    )
 
 
 # -- Lockfile ----------------------------------------------------------------
@@ -190,6 +204,9 @@ def _pip_freeze(venv_dir: str) -> str:
         and not re.match(r"^\S+ @ (file|https?)://", line)
     ]
     lines.sort()
+    logger.debug(f"pip freeze: {len(lines)} packages from {venv_dir}")
+    if result.stderr:
+        logger.warning(f"pip freeze stderr (non-fatal): {result.stderr.strip()}")
     return "\n".join(lines) + "\n"
 
 
@@ -198,6 +215,9 @@ def write_lockfile(venv_dir: str, lockfile_path: str) -> None:
     content = _pip_freeze(venv_dir)
     Path(lockfile_path).parent.mkdir(parents=True, exist_ok=True)
     Path(lockfile_path).write_text(content)
+    logger.debug(
+        f"Lockfile written: {lockfile_path} ({len(content.splitlines())} packages)"
+    )
 
 
 def verify_lockfile(venv_dir: str, lockfile_path: str) -> bool:
@@ -215,7 +235,14 @@ def verify_lockfile(venv_dir: str, lockfile_path: str) -> bool:
     except subprocess.CalledProcessError:
         return False
     expected = Path(lockfile_path).read_text()
-    return current == expected
+    if current != expected:
+        logger.warning(
+            f"Lockfile mismatch for {venv_dir}: current pip freeze differs from "
+            f"cached lockfile at {lockfile_path}"
+        )
+        return False
+    logger.debug(f"Lockfile verified: {lockfile_path}")
+    return True
 
 
 def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
@@ -231,12 +258,17 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
     confusing ImportErrors at test time.
     """
     pip = os.path.join(venv_dir, "bin", "pip")
+    logger.debug(f"Running pip install -e in overlay: {repo_dir}")
     result = subprocess.run(
         [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
+        logger.error(
+            f"pip install -e failed for {repo_dir} (rc={result.returncode}): "
+            f"{(result.stderr or result.stdout or 'no output').strip()}"
+        )
         raise OverlayError(
             f"reinstall_editable failed for {repo_dir}: "
             f"{result.stderr.strip() or result.stdout.strip() or 'pip returned non-zero'}"
@@ -283,11 +315,22 @@ def _can_kernel_mount() -> bool:
             umount_rc = subprocess.run(
                 ["umount", merged], capture_output=True
             ).returncode
+            logger.debug(
+                f"Kernel overlay probe: mount_rc={result.returncode}, "
+                f"umount_rc={umount_rc}"
+            )
             if umount_rc != 0:
+                logger.warning(
+                    f"Kernel overlay unmount failed during probe (rc={umount_rc}); "
+                    "tried lazy unmount"
+                )
                 subprocess.run(["umount", "-l", merged], capture_output=True)
+            logger.info("Kernel overlay backend available")
             return True
+        logger.debug(f"Kernel overlay probe: mount_rc={result.returncode}")
         return False
     finally:
+        logger.debug(f"Removing directory (ignore_errors): {tmp}")
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -330,6 +373,7 @@ def _can_fuse_mount() -> bool:
             ],
             capture_output=True,
         )
+        logger.debug(f"FUSE overlay probe: mount_rc={result.returncode}")
         if result.returncode == 0:
             mount_is_active = True
             # Try a normal unmount first; fall back to lazy unmount (-uz).
@@ -345,19 +389,19 @@ def _can_fuse_mount() -> bool:
                 if lazy_rc != 0:
                     # Neither unmount worked; leave the tmpdir in place to
                     # avoid walking into a live mount, and report failure.
-                    import logging as _logging
-                    _logging.getLogger(__name__).warning(
-                        "_can_fuse_mount: probe mount at %s could not be "
+                    logger.warning(
+                        f"_can_fuse_mount: probe mount at {merged} could not be "
                         "unmounted (fusermount -u and -uz both failed); "
-                        "skipping rmtree to protect the filesystem.",
-                        merged,
+                        "skipping rmtree to protect the filesystem."
                     )
                     return False
             mount_is_active = False
+            logger.info("FUSE overlay backend (fuse-overlayfs) available")
             return True
         return False
     finally:
         if not mount_is_active:
+            logger.debug(f"Removing directory (ignore_errors): {tmp}")
             shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -371,11 +415,19 @@ def detect_overlay_backend() -> Backend:
     is not sufficient (seccomp or a missing /dev/fuse can block FUSE even when
     the binary is installed).
     """
-    if _can_kernel_mount():
-        return "kernel"
-    if _can_fuse_mount():
-        return "fuse"
-    return "none"
+    can_kernel = _can_kernel_mount()
+    can_fuse = False if can_kernel else _can_fuse_mount()
+    if can_kernel:
+        backend: Backend = "kernel"
+    elif can_fuse:
+        backend = "fuse"
+    else:
+        backend = "none"
+    logger.info(
+        f"Overlay backend selection: kernel={can_kernel}, fuse={can_fuse}, "
+        f"chosen={backend}"
+    )
+    return backend
 
 
 class OverlayError(RuntimeError):
@@ -419,12 +471,18 @@ def mount_overlay(
             "fuse-overlayfs or add CAP_SYS_ADMIN."
         )
 
+    logger.debug(f"Mounting overlay: backend={backend}, merged={merged}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
+        logger.error(
+            f"Overlay mount failed (rc={result.returncode}): "
+            f"{result.stderr.strip()}"
+        )
         raise OverlayError(
             f"overlay mount failed (backend={backend}): "
             f"{result.stderr.strip() or result.stdout.strip()}"
         )
+    logger.info(f"Overlay mounted at {merged} (backend={backend})")
 
 
 def unmount_overlay(merged: str, backend: Backend) -> None:
@@ -450,11 +508,16 @@ def unmount_overlay(merged: str, backend: Backend) -> None:
     if shutil.which(binary) is None:
         return
 
+    logger.debug(f"Unmounting {merged} (backend={backend})")
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError:
+        logger.debug(
+            f"Unmount binary not found: {binary} (expected on non-overlay systems)"
+        )
         return
 
+    logger.debug(f"Unmount attempt rc={result.returncode}")
     if result.returncode != 0:
         stderr = (result.stderr or "").lower()
         if "not mounted" in stderr or "not found" in stderr or "no such" in stderr:
@@ -463,11 +526,17 @@ def unmount_overlay(merged: str, backend: Backend) -> None:
         # double-cleanup). For fuse, prefer `fusermount -uz` so we stay on
         # the canonical fuse teardown path; fall back to `umount -l` only
         # if that isn't available.
+        logger.warning(
+            f"Primary unmount failed; attempting lazy unmount of {merged}"
+        )
         if backend == "fuse":
             rc = subprocess.run(
                 ["fusermount", "-uz", merged], capture_output=True
             ).returncode
             if rc == 0:
+                logger.info(f"Unmount successful: {merged}")
                 return
         if shutil.which("umount") is not None:
             subprocess.run(["umount", "-l", merged], capture_output=True)
+        return
+    logger.info(f"Unmount successful: {merged}")
