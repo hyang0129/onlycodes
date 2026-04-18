@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import random
 import re
@@ -34,6 +35,7 @@ from swebench.harness import (
     apply_test_patch,
     clone_repo,
     find_claude_binary,
+    get_claude_version,
     git_reset,
     run_claude,
     run_tests,
@@ -178,7 +180,8 @@ def _run_arm(
             "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
             "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
             "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
-            "PowerShell,Read,ReadMcpResourceTool,SendMessage,Skill,"
+            "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
+            "RemoteTrigger,SendMessage,Skill,"
             "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
             "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
         )
@@ -190,6 +193,18 @@ def _run_arm(
         ]
 
     start_time = time.time()
+
+    # Prepend a metadata record so every JSONL is self-describing.
+    claude_version = get_claude_version(claude_binary)
+    with open(result_file, "w") as _meta_f:
+        _meta_f.write(json.dumps({
+            "type": "meta",
+            "instance_id": problem.instance_id,
+            "arm": arm,
+            "run": run_idx,
+            "claude_binary": claude_binary,
+            "claude_version": claude_version,
+        }) + "\n")
 
     run_claude(
         prompt=prompt,
@@ -562,6 +577,8 @@ def run_command(
     click.echo(f"Resume: {resume}")
     click.echo(f"Output dir: {results_dir}")
     click.echo(f"Claude binary: {claude_binary}")
+    claude_version = get_claude_version(claude_binary)
+    click.echo(f"Claude version: {claude_version}")
     click.echo()
 
     # --- Cache backend selection (only relevant when --use-cache) ---------------
