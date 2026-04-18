@@ -16,6 +16,18 @@ _bare_clone_locks: dict[str, threading.Lock] = {}
 _bare_clone_locks_mu = threading.Lock()
 
 
+def get_claude_version(claude_binary: str) -> str:
+    """Return the version string reported by `claude --version`, or 'unknown'."""
+    try:
+        proc = subprocess.run(
+            [claude_binary, "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return proc.stdout.strip() or proc.stderr.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def find_claude_binary() -> str:
     """Locate the claude binary — PATH first, then VS Code extension glob.
 
