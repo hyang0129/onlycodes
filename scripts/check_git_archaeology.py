@@ -192,11 +192,22 @@ def extract_git_turns(path: Path) -> list[dict]:
 
 def _find_claude() -> str:
     """Return path to the `claude` binary or raise FileNotFoundError."""
+    # Delegate to the harness helper which knows about the VS Code extension path.
+    try:
+        from swebench.harness import find_claude_binary
+        return find_claude_binary()
+    except ImportError:
+        pass
+    # Fallback for use outside the swebench package.
     binary = shutil.which("claude")
     if binary:
         return binary
-    # Common install locations inside dev containers.
-    for candidate in ("/usr/local/bin/claude", "/home/vscode/.local/bin/claude"):
+    import glob as _glob
+    for ext_dir in sorted(
+        _glob.glob("/home/vscode/.vscode-server/extensions/anthropic.claude-code-*-linux-x64"),
+        reverse=True,
+    ):
+        candidate = os.path.join(ext_dir, "resources", "native-binary", "claude")
         if os.path.isfile(candidate):
             return candidate
     raise FileNotFoundError(
@@ -216,8 +227,17 @@ def _build_user_prompt(log_ref: str, git_turns: list[dict]) -> str:
 
 
 def _make_isolated_config() -> str:
-    """Create a throw-away Claude config dir so the subprocess has no session."""
+    """Create a throw-away Claude config dir with credentials but no session."""
+    try:
+        from swebench.harness import make_isolated_claude_config
+        return make_isolated_claude_config()
+    except ImportError:
+        pass
     d = tempfile.mkdtemp(prefix="git_arch_claude_")
+    for fname in (".credentials.json", ".claude.json"):
+        src = os.path.expanduser(f"~/.claude/{fname}")
+        if os.path.isfile(src):
+            shutil.copy2(src, d)
     return d
 
 

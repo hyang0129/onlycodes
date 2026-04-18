@@ -232,6 +232,9 @@ def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
     """
     repo_dir = os.path.join(clone_base, problem.instance_id)
     venv_dir = os.path.join(clone_base, "venvs", problem.instance_id)
+    # Always wipe the repo dir before cloning: a prior stripped run leaves only
+    # the orphan commit, so git_reset to base_commit would fail on reuse.
+    shutil.rmtree(repo_dir, ignore_errors=True)
     clone_repo(problem.repo_slug, repo_dir)
     git_reset(repo_dir, problem.base_commit)
     # Strip history so the agent cannot recover the upstream fix via git log.
