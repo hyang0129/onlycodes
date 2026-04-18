@@ -65,9 +65,10 @@ Emit **exactly one JSON object**, no prose, no markdown fences:
 - If no pathologies were reported across all subagent outputs, emit
   `{"findings": []}`.
 
-Your output is consumed by a deterministic merge step that increments
-frequency counts, de-dups evidence refs by `(log_ref, run_id, turn)`, and
-stamps `first_seen_run_id` / `last_seen_run_id`. You do **not** compute
-those fields — the Python caller does.
+Your output is consumed by a deterministic merge step that appends new
+`candidate_id`s to `patterns.json`. Tracking metadata (frequency counts,
+arm distribution, evidence refs) lives in the per-run sidecar
+(`synthesizer.json`) — not in `patterns.json`. You do **not** compute
+those fields.
 
 Emit the JSON object only.

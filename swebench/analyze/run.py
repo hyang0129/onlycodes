@@ -532,7 +532,7 @@ def _stage_synthesize(
     # one pattern aggregates across multiple logs). Fan them out into the
     # per-(log_ref, arm) shape that registry.merge() expects.
     flat_findings = registry.flatten_synth_findings(findings)
-    merged = registry.merge(existing, flat_findings, run_id=run_id)
+    merged = registry.merge(existing, flat_findings)
     errs = registry.validate(merged)
     if errs:
         msg = f"merged registry failed schema validation: {'; '.join(errs[:3])}"
