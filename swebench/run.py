@@ -171,10 +171,22 @@ def _run_arm(
     # Build tools flags based on arm
     tools_flags: list[str] = []
     if arm == "onlycode":
+        # --tools whitelists MCP tools but does not reliably block built-ins
+        # like Monitor (added v2.1.98). --disallowedTools explicitly removes
+        # every built-in so the agent can only use the two codebox MCP tools.
+        _BLOCKED_BUILTINS = (
+            "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
+            "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
+            "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
+            "PowerShell,Read,ReadMcpResourceTool,SendMessage,Skill,"
+            "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
+            "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
+        )
         tools_flags = [
             "--mcp-config", mcp_config_path,
             "--strict-mcp-config",
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
+            "--disallowedTools", _BLOCKED_BUILTINS,
         ]
 
     start_time = time.time()
