@@ -28,7 +28,8 @@ python -m swebench analyze
 python -m swebench cache setup                         # warm every instance
 python -m swebench cache setup --filter django__django-16379
 python -m swebench cache clean --filter django__django-16379
-python -m swebench run --use-cache                     # opt into cached setup
+python -m swebench run                                 # uses cache by default
+python -m swebench run --no-cache                      # opt out of cached setup
 ```
 
 Problem definitions live under `problems/<set>/*.yaml` — curated sets are separated from
@@ -63,10 +64,11 @@ python -m swebench cache setup --concurrency 8   # parallelise setup
 python -m swebench cache setup --force           # rebuild existing entries
 ```
 
-Then run with caching:
+Then run (cache is on by default):
 
 ```bash
-python -m swebench run --use-cache --filter django__django-16379
+python -m swebench run --filter django__django-16379
+python -m swebench run --no-cache --filter django__django-16379   # opt out
 ```
 
 Each evaluation mounts the cached `repo/` as the lowerdir of an OverlayFS, hands the

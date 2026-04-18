@@ -424,14 +424,15 @@ def _cleanup_stale_overlays(
     help="Stop on first FAIL verdict. Cancels queued tasks; already-running Claude invocations finish.",
 )
 @click.option(
-    "--use-cache/--no-use-cache",
+    "--use-cache/--no-cache",
     "use_cache",
-    default=False,
+    default=True,
     show_default=True,
     help=(
-        "Use the OverlayFS-backed instance cache when available. Requires "
-        "`python -m swebench cache setup` to have been run first. Falls back "
-        "to the default clone+venv path for any instance that isn't cached."
+        "Use the OverlayFS-backed instance cache when available (default: on). "
+        "Requires `python -m swebench cache setup` to have been run first. Falls back "
+        "to the default clone+venv path for any instance that isn't cached. "
+        "Pass --no-cache to opt out."
     ),
 )
 @click.option(
