@@ -64,34 +64,22 @@ keyed by `instance_id` (flat, regardless of set).
 
 ```jsonc
 {
-  "version": 1,           // integer — incremented only on breaking schema change
-  "patterns": [           // list of pattern entries (may be empty)
+  "version": 1,      // integer — incremented only on breaking schema change
+  "patterns": [      // list of pattern entries (may be empty)
     {
-      "id": "tool-call-loop",          // slug: lowercase alnum + hyphen/underscore, 2–64 chars
-      "description": "Agent enters...", // human-readable string
-      "evidence_refs": [               // up to 20 references; each entry:
-        {
-          "log_ref":  "django__django-16379_onlycode_run1",  // JSONL stem
-          "run_id":   "2025-07-01T12:00:00Z",               // analysis run identifier
-          "turn":     42,                                    // 0-based turn index
-          "excerpt":  "..."                                  // ≤240 chars from the log
-        }
-      ],
-      "frequency": 7,                  // total count across all evidence
-      "arm_distribution": {            // per-arm hit counts
-        "baseline": 3,
-        "onlycode": 4
-      },
-      "first_seen_run_id": "2025-07-01T12:00:00Z",
-      "last_seen_run_id":  "2025-07-02T09:15:00Z"
+      "id": "tool-call-loop",           // slug: lowercase alnum + hyphen/underscore, 2–64 chars
+      "description": "Agent enters..."  // human-readable string
     }
   ]
 }
 ```
 
+Tracking metadata (frequency, arm distribution, evidence refs) lives in the per-run
+analysis sidecar under `results_swebench/_analysis/<run_id>/synthesizer.json`, not here.
+
 > **Mutable.** `patterns.json` is updated in-place by `analyze pathology --stage synthesize`
-> (merge semantics: new patterns are appended; existing entries are updated with fresh
-> evidence and counts). Edit it by hand only to remove stale entries or fix descriptions —
+> (merge semantics: new pattern ids are appended; existing entries are never overwritten).
+> Edit it by hand only to remove stale entries or fix descriptions —
 > any manual edits must preserve the schema above or the next pipeline run will reject the file.
 
 Analysis sidecar output lives under:
