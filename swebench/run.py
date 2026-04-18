@@ -567,6 +567,46 @@ def run_command(
     if arms in ("onlycode", "both"):
         arm_list.append("onlycode")
 
+    # --- Environment pre-flight checks ------------------------------------------
+    env_errors: list[str] = []
+    if "onlycode" in arm_list:
+        # MCP config must exist
+        if not os.path.isfile(mcp_config_path):
+            env_errors.append(f"mcp-config.json not found at {mcp_config_path}")
+        else:
+            # Parse config and check each server's command binary exists
+            try:
+                with open(mcp_config_path) as _f:
+                    _mcp = json.load(_f)
+                for _srv_name, _srv in _mcp.get("mcpServers", {}).items():
+                    _cmd = _srv.get("command", "")
+                    if _cmd and not (os.path.isfile(_cmd) and os.access(_cmd, os.X_OK)):
+                        # Also check PATH
+                        if not shutil.which(_cmd):
+                            env_errors.append(
+                                f"MCP server '{_srv_name}' command not found or not executable: {_cmd!r}"
+                            )
+                    _args = _srv.get("args", [])
+                    for _arg in _args:
+                        if _arg.endswith((".mjs", ".js", ".cjs")) and not os.path.isfile(_arg):
+                            env_errors.append(
+                                f"MCP server '{_srv_name}' script not found: {_arg!r}"
+                            )
+            except (json.JSONDecodeError, OSError) as _e:
+                env_errors.append(f"Failed to parse {mcp_config_path}: {_e}")
+
+    if env_errors:
+        click.echo("ERROR: Environment pre-flight failed:", err=True)
+        for _err in env_errors:
+            click.echo(f"  • {_err}", err=True)
+        click.echo(
+            "\nFix the issues above before running the onlycode arm.\n"
+            "  - Node.js must be installed for exec-server.bundle.mjs\n"
+            "  - Install with: sudo apt-get install -y nodejs",
+            err=True,
+        )
+        raise SystemExit(1)
+
     click.echo(f"=== SWE-bench Evaluation ===")
     click.echo(f"Problems: {len(problems)}")
     click.echo(f"Arms: {', '.join(arm_list)}")
