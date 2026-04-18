@@ -61,6 +61,139 @@ def git_reset(repo_dir: str, commit: str) -> None:
             )
 
 
+def strip_git_history(repo_dir: str) -> None:
+    """Reduce a repo to a single orphan root commit at the current worktree state.
+
+    After this call, ``git log --all --oneline`` in ``repo_dir`` prints exactly
+    one line (the orphan root), ``rev-list --all --count`` returns ``1``, and
+    nothing in ``.git/objects/info/alternates``, ``.git/packed-refs``, or
+    ``.git/logs/`` references pre-strip objects.
+
+    This is how the SWE-bench harness prevents an agent under evaluation from
+    recovering the upstream reference fix via ``git log``/``git show``/etc.
+
+    The procedure is idempotent: re-running on an already-stripped repo is a
+    no-op (still results in a single orphan commit with the same tree).
+
+    Ordering (the alternates file and reflog must be handled carefully):
+
+    1. Record the current branch name (HEAD may be symbolic or detached).
+    2. Create an orphan commit at the current HEAD's tree via ``commit-tree``.
+    3. Repoint the current branch (or HEAD if detached) at the new orphan SHA.
+    4. Delete every other ref: other local branches, all remote-tracking refs,
+       all tags, and the packed-refs file.
+    5. Delete ``.git/logs/`` so ``git reflog`` cannot surface pre-strip SHAs.
+    6. Run ``git repack -a -d`` so objects borrowed via alternates are pulled
+       into a local pack — required before the alternates file is removed or
+       the new orphan commit's tree/blobs become unreachable.
+    7. Delete ``.git/objects/info/alternates``.
+    8. Run ``git gc --prune=now`` to drop the now-unreachable pre-strip
+       objects. With alternates gone and reflog gone, only the orphan commit
+       and its tree/blobs remain reachable.
+
+    Only the working tree at ``repo_dir`` is touched. Any bare repo that
+    ``repo_dir`` was previously borrowing objects from (via ``--local
+    --shared`` alternates) is left unchanged — the strip materialises those
+    objects locally first, then severs the link.
+    """
+    def _run(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+        proc = subprocess.run(
+            ["git", "-C", repo_dir, *args],
+            capture_output=True,
+            text=True,
+        )
+        if check and proc.returncode != 0:
+            raise subprocess.CalledProcessError(
+                proc.returncode,
+                ["git", "-C", repo_dir, *args],
+                output=proc.stdout,
+                stderr=proc.stderr,
+            )
+        return proc
+
+    # 1. Detect current branch. If HEAD is detached, `symbolic-ref HEAD` exits
+    # non-zero; in that case we rewrite HEAD directly.
+    sym = _run(["symbolic-ref", "-q", "HEAD"], check=False)
+    current_ref = sym.stdout.strip() if sym.returncode == 0 else ""  # e.g. "refs/heads/main"
+
+    # 2. Create orphan commit with the same tree as the current HEAD.
+    tree = _run(["rev-parse", "HEAD^{tree}"]).stdout.strip()
+    # Use GIT_AUTHOR_*/GIT_COMMITTER_* to make the orphan SHA deterministic
+    # for a given tree — helpful for idempotency testing but not load-bearing.
+    env = os.environ.copy()
+    env.update({
+        "GIT_AUTHOR_NAME": "swebench",
+        "GIT_AUTHOR_EMAIL": "swebench@localhost",
+        "GIT_AUTHOR_DATE": "1970-01-01T00:00:00+0000",
+        "GIT_COMMITTER_NAME": "swebench",
+        "GIT_COMMITTER_EMAIL": "swebench@localhost",
+        "GIT_COMMITTER_DATE": "1970-01-01T00:00:00+0000",
+    })
+    proc = subprocess.run(
+        ["git", "-C", repo_dir, "commit-tree", tree, "-m", "base"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            proc.returncode,
+            ["git", "-C", repo_dir, "commit-tree", tree, "-m", "base"],
+            output=proc.stdout,
+            stderr=proc.stderr,
+        )
+    new_sha = proc.stdout.strip()
+
+    # 3. Repoint the current branch (or HEAD if detached) at the orphan commit.
+    # We write the loose ref file directly rather than using `git update-ref`
+    # because `update-ref` is a no-op when the target SHA already matches —
+    # which happens on idempotent re-runs (same tree + fixed author/date =>
+    # same orphan SHA). A no-op means the ref stays only in ``packed-refs``,
+    # and step 4 below deletes that file, leaving the branch unreachable.
+    # Writing the loose file unconditionally guarantees the ref survives
+    # ``packed-refs`` removal.
+    if current_ref:
+        loose_path = os.path.join(repo_dir, ".git", *current_ref.split("/"))
+        os.makedirs(os.path.dirname(loose_path), exist_ok=True)
+        with open(loose_path, "w") as f:
+            f.write(new_sha + "\n")
+    else:
+        # Detached HEAD: rewrite HEAD directly.
+        _run(["update-ref", "--no-deref", "HEAD", new_sha])
+
+    # 4. Delete every other ref: other local branches, remote refs, tags, packed-refs.
+    # Enumerate every ref and delete those that aren't the current branch.
+    refs_proc = _run(["for-each-ref", "--format=%(refname)"])
+    for refname in refs_proc.stdout.splitlines():
+        refname = refname.strip()
+        if not refname:
+            continue
+        if refname == current_ref:
+            continue
+        # --no-deref so we delete the ref itself, not what it points to.
+        _run(["update-ref", "-d", refname], check=False)
+    packed_refs = os.path.join(repo_dir, ".git", "packed-refs")
+    if os.path.isfile(packed_refs):
+        os.remove(packed_refs)
+
+    # 5. Delete the reflog so `git reflog` can't surface pre-strip SHAs.
+    logs_dir = os.path.join(repo_dir, ".git", "logs")
+    shutil.rmtree(logs_dir, ignore_errors=True)
+
+    # 6. Pack all reachable objects locally — required before removing alternates.
+    # -a: include all objects reachable from refs; -d: remove redundant packs/loose.
+    _run(["repack", "-a", "-d"])
+
+    # 7. Remove the alternates file so future reads cannot reach the shared bare repo.
+    alternates = os.path.join(repo_dir, ".git", "objects", "info", "alternates")
+    if os.path.isfile(alternates):
+        os.remove(alternates)
+
+    # 8. Drop now-unreachable objects (the original history). --prune=now forces
+    # immediate pruning rather than the default 2-week grace period.
+    _run(["gc", "--prune=now", "--quiet"])
+
+
 def clone_repo(repo_slug: str, dest: str) -> None:
     """Clone a GitHub repo if not already cloned."""
     if os.path.isdir(os.path.join(dest, ".git")):

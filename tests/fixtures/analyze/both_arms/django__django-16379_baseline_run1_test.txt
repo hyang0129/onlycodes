@@ -1,0 +1,3 @@
+some preamble
+running tests
+PASS
