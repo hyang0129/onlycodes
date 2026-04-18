@@ -38,6 +38,7 @@ from swebench.harness import (
     run_claude,
     run_tests,
     setup_venv,
+    strip_git_history,
 )
 from swebench.models import Problem
 
@@ -135,8 +136,13 @@ def _run_arm(
 
     _echo(f"  [{arm} run {run_idx}] Starting...")
 
-    # Reset repo to base commit
-    git_reset(repo_dir, problem.base_commit)
+    # Reset repo to its current HEAD rather than ``problem.base_commit``: the
+    # history-strip routine (see ``strip_git_history``) has already collapsed
+    # the repo to a single orphan commit whose tree matches ``base_commit``
+    # but whose SHA differs. ``git_reset(repo_dir, "HEAD")`` gives us the same
+    # "discard agent edits, clean untracked" semantics without needing the
+    # original SHA that no longer exists in the object graph.
+    git_reset(repo_dir, "HEAD")
 
     # The git_reset above runs `git clean -fd`, which wipes the untracked
     # .egg-info/ directory that reinstall_editable placed in the overlay
@@ -228,6 +234,9 @@ def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
     venv_dir = os.path.join(clone_base, "venvs", problem.instance_id)
     clone_repo(problem.repo_slug, repo_dir)
     git_reset(repo_dir, problem.base_commit)
+    # Strip history so the agent cannot recover the upstream fix via git log.
+    # Safe to do here: this clone is thrown away after the run.
+    strip_git_history(repo_dir)
     setup_venv(venv_dir, repo_dir)
     return repo_dir, venv_dir
 
@@ -296,6 +305,13 @@ def _setup_problem_cached(
 
     mount_overlay(lower, upperdir, workdir, merged, overlay_backend)
 
+    # Strip git history in the merged overlay view. Writes materialise into
+    # the upperdir only — the cached lowerdir (``repo/``) and the shared bare
+    # repo remain untouched. Without this, an agent could run ``git log`` /
+    # ``git show`` against the overlay and read the upstream reference fix
+    # through the alternates link to the bare repo.
+    strip_git_history(merged)
+
     return (
         merged,
         venv_dir,
@@ -341,6 +357,10 @@ def _refresh_overlay(handle: _OverlayHandle, venv_dir: str) -> _OverlayHandle:
     os.makedirs(handle.upperdir, exist_ok=True)
     os.makedirs(handle.workdir, exist_ok=True)
     mount_overlay(handle.lowerdir, handle.upperdir, handle.workdir, handle.merged, handle.backend)
+    # Between-arm refresh wiped the upperdir, so the merged view now exposes
+    # the full history from the lowerdir again. Re-strip so the next arm
+    # starts from a single-orphan-commit view.
+    strip_git_history(handle.merged)
     return handle
 
 
