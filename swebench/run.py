@@ -232,6 +232,9 @@ def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
     """
     repo_dir = os.path.join(clone_base, problem.instance_id)
     venv_dir = os.path.join(clone_base, "venvs", problem.instance_id)
+    # Always wipe the repo dir before cloning: a prior stripped run leaves only
+    # the orphan commit, so git_reset to base_commit would fail on reuse.
+    shutil.rmtree(repo_dir, ignore_errors=True)
     clone_repo(problem.repo_slug, repo_dir)
     git_reset(repo_dir, problem.base_commit)
     # Strip history so the agent cannot recover the upstream fix via git log.
@@ -444,14 +447,15 @@ def _cleanup_stale_overlays(
     help="Stop on first FAIL verdict. Cancels queued tasks; already-running Claude invocations finish.",
 )
 @click.option(
-    "--use-cache/--no-use-cache",
+    "--use-cache/--no-cache",
     "use_cache",
-    default=False,
+    default=True,
     show_default=True,
     help=(
-        "Use the OverlayFS-backed instance cache when available. Requires "
-        "`python -m swebench cache setup` to have been run first. Falls back "
-        "to the default clone+venv path for any instance that isn't cached."
+        "Use the OverlayFS-backed instance cache when available (default: on). "
+        "Requires `python -m swebench cache setup` to have been run first. Falls back "
+        "to the default clone+venv path for any instance that isn't cached. "
+        "Pass --no-cache to opt out."
     ),
 )
 @click.option(
