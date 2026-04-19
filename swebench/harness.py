@@ -58,10 +58,18 @@ def find_claude_binary() -> str:
 
 
 def git_reset(repo_dir: str, commit: str) -> None:
-    """Hard-reset a repo to a given commit and clean untracked files."""
+    """Hard-reset a repo to a given commit and clean untracked files.
+
+    Compiled C extension binaries (*.so, *.pyd) are excluded from the clean so
+    that packages like matplotlib — which compile extensions into the source tree
+    during ``pip install -e .`` — remain importable after the reset.  Agents on
+    SWE-bench fix Python source, not C code, so preserving these files across
+    resets does not meaningfully affect evaluation isolation.
+    """
     for cmd in [
         ["git", "-C", repo_dir, "reset", "--hard", commit, "--quiet"],
-        ["git", "-C", repo_dir, "clean", "-fd", "--quiet"],
+        ["git", "-C", repo_dir, "clean", "-fd",
+         "-e", "*.so", "-e", "*.pyd", "--quiet"],
     ]:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
@@ -269,14 +277,31 @@ def clone_from_bare(bare_src: str, dest: str) -> None:
 
 def setup_venv(venv_dir: str, repo_dir: str) -> None:
     """Create a venv and pip install the project in editable mode (if not already done)."""
+    pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
+        # Venv exists from a prior run. Re-run the editable install so that C
+        # extension .so files are recompiled if git clean removed them (fast no-op
+        # when they already exist). Also ensure pytest is present.
+        subprocess.run(
+            [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run([pip, "install", "--quiet", "pytest"], capture_output=True, text=True)
         return
     subprocess.run(
         ["python3.11", "-m", "venv", venv_dir],
         check=True,
         capture_output=True,
     )
-    pip = os.path.join(venv_dir, "bin", "pip")
+    # Pre-install setuptools/wheel so old projects using setup.py + pkg_resources
+    # can build under pip's build isolation without hitting ModuleNotFoundError.
+    subprocess.run(
+        [pip, "install", "--quiet", "setuptools", "wheel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     subprocess.run(
         [pip, "install", "--quiet", "-e", repo_dir],
         capture_output=True,
