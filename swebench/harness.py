@@ -294,11 +294,12 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
             result = subprocess.run(
                 [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
                 capture_output=True,
+                text=True,
             )
             if result.returncode != 0:
                 print(
                     f"[harness] pip editable-install failed (rc={result.returncode}):\n"
-                    f"{result.stderr.decode(errors='replace')}",
+                    f"{result.stderr}",
                     flush=True,
                 )
                 raise subprocess.CalledProcessError(
@@ -307,11 +308,12 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
             result = subprocess.run(
                 [pip, "install", "--quiet", "pytest"],
                 capture_output=True,
+                text=True,
             )
             if result.returncode != 0:
                 print(
                     f"[harness] pip install pytest failed (rc={result.returncode}):\n"
-                    f"{result.stderr.decode(errors='replace')}",
+                    f"{result.stderr}",
                     flush=True,
                 )
                 raise subprocess.CalledProcessError(

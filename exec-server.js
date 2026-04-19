@@ -173,7 +173,9 @@ function _killKernel(handle, reason) {
       timed_out: reason === "timeout",
     });
   }
-  _pythonKernels.delete(handle.cwd);
+  if (_pythonKernels.get(handle.cwd) === handle) {
+    _pythonKernels.delete(handle.cwd);
+  }
   _kernelResetPending.add(handle.cwd);
 }
 

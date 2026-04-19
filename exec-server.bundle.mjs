@@ -22758,6 +22758,7 @@ function _stageHelperModules(workDir) {
 var DEFAULT_TIMEOUT_SECONDS = 30;
 var MAX_OUTPUT_BYTES = 1024 * 1024;
 var _pythonKernels = /* @__PURE__ */ new Map();
+var _kernelResetPending = /* @__PURE__ */ new Set();
 function _killKernel(handle, reason) {
   if (handle.dead) return;
   handle.dead = true;
@@ -22776,7 +22777,10 @@ function _killKernel(handle, reason) {
       timed_out: reason === "timeout"
     });
   }
-  _pythonKernels.delete(handle.cwd);
+  if (_pythonKernels.get(handle.cwd) === handle) {
+    _pythonKernels.delete(handle.cwd);
+  }
+  _kernelResetPending.add(handle.cwd);
 }
 async function _spawnPythonKernel(workDir) {
   const strippedEnv = buildStrippedEnv();
@@ -22882,7 +22886,9 @@ async function _spawnPythonKernel(workDir) {
         timed_out: false
       });
     }
-    _pythonKernels.delete(workDir);
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
   });
   child.on("error", (err) => {
     handle.dead = true;
@@ -22897,7 +22903,9 @@ async function _spawnPythonKernel(workDir) {
         timed_out: false
       });
     }
-    _pythonKernels.delete(workDir);
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
   });
   return handle;
 }
@@ -22911,7 +22919,8 @@ async function _getOrSpawnKernel(workDir) {
 async function executePythonStateful(code, timeoutSeconds, cwd) {
   const startTime = Date.now();
   const handle = await _getOrSpawnKernel(cwd);
-  return new Promise((resolve) => {
+  const hadResetPending = _kernelResetPending.has(cwd);
+  const result = await new Promise((resolve) => {
     if (handle.dead) {
       resolve({
         stdout: "",
@@ -22935,10 +22944,10 @@ async function executePythonStateful(code, timeoutSeconds, cwd) {
     const timer = setTimeout(() => {
       _killKernel(handle, "timeout");
     }, timeoutSeconds * 1e3);
-    handle.pendingResolve = (result) => {
+    handle.pendingResolve = (result2) => {
       clearTimeout(timer);
-      result.duration_ms = Date.now() - startTime;
-      resolve(result);
+      result2.duration_ms = Date.now() - startTime;
+      resolve(result2);
     };
     const payload = JSON.stringify({ code });
     const buf = Buffer.from(payload, "utf-8");
@@ -22950,6 +22959,11 @@ async function executePythonStateful(code, timeoutSeconds, cwd) {
       _killKernel(handle, `write error: ${e.message}`);
     }
   });
+  if (hadResetPending) {
+    _kernelResetPending.delete(cwd);
+    result.stderr = "[kernel was reset before this call \u2014 prior state lost]\n" + result.stderr;
+  }
+  return result;
 }
 process.on("exit", () => {
   for (const handle of _pythonKernels.values()) {
