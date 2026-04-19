@@ -163,13 +163,25 @@ def _run_arm(
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     venv_python = os.path.join(venv_dir, "bin", "python")
-    prompt = (
-        f"You are working in the repository at: {repo_dir}\n\n"
-        f"The project's Python interpreter and dependencies are pre-installed at: {venv_python}\n"
-        f"Use this interpreter to run tests (e.g. `{venv_python} tests/runtests.py ...`).\n\n"
+    prompt_parts = [
+        f"You are working in the repository at: {repo_dir}\n",
+        f"The project's Python interpreter and dependencies are pre-installed at: {venv_python}",
+        f"Use this interpreter to run tests (e.g. `{venv_python} tests/runtests.py ...`).\n",
+    ]
+    if arm == "onlycode":
+        prompt_parts.append(
+            "The execute_code Python interpreter is a PERSISTENT REPL keyed by cwd: "
+            "variables, imports, and opened-file contents survive across calls. "
+            "After you read a file once with `src = open(path).read()`, reference "
+            "`src` on later turns instead of re-reading. Re-reading a file you "
+            "already loaded wastes tokens — before issuing any read, check what "
+            "you already have in memory.\n"
+        )
+    prompt_parts.append(
         f"Fix the following bug. Make the minimal change needed.\n\n"
         f"{problem.problem_statement}"
     )
+    prompt = "\n".join(prompt_parts)
 
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
