@@ -162,8 +162,11 @@ def _run_arm(
             _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
+    venv_python = os.path.join(venv_dir, "bin", "python")
     prompt = (
         f"You are working in the repository at: {repo_dir}\n\n"
+        f"The project's Python interpreter and dependencies are pre-installed at: {venv_python}\n"
+        f"Use this interpreter to run tests (e.g. `{venv_python} tests/runtests.py ...`).\n\n"
         f"Fix the following bug. Make the minimal change needed.\n\n"
         f"{problem.problem_statement}"
     )

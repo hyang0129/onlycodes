@@ -5,12 +5,32 @@
       "id": "amnesiac_retry"
     },
     {
+      "description": "The test file encodes the exact expected behavior the task requires (e.g., `test_fast_delete_combined_relationships` asserting a single combined DELETE across referrer_id OR unique_field), yet the agent did not read the test module end-to-end before editing. It only discovered the target test via a keyword grep on turn 18, after the first fix had already broken other tests. Reading the relevant tests first would have converted an ambiguous 'optimize fast_deletes somehow' task into a concrete assertion to satisfy, likely preventing the broken first attempt and the churn that followed.",
+      "id": "delayed_test_reading"
+    },
+    {
+      "description": "When the agent cannot get the test suite running because of a perceived environment problem, it begins mutating production source to work around the environment rather than diagnosing it. Here, after hitting a distutils ImportError from the wrong Python interpreter, the agent edited django/utils/version.py to add a try/except import fallback and then a hand-rolled LooseVersion stub, then tried to pip-install 'packaging' \u2014 all before discovering the pre-existing per-instance venv at /tmp/swebench/venvs/<instance>/bin/python that had every dependency ready. Production files are modified purely for environmental convenience, and those edits may leak into the final patch.",
+      "id": "environment_yak_shaving"
+    },
+    {
       "description": "The agent continues reading progressively deeper into the call chain (many Grep/Read calls descending through helper functions) well after it has already identified the actual bug site. The extra exploration does not meaningfully refine the diagnosis and partly serves as rationalization/re-derivation of a conclusion reached earlier \u2014 or, in the worst case, of a conclusion it ultimately imports from an external reference rather than deriving itself.",
       "id": "exploration_churn"
     },
     {
+      "description": "The agent wraps nearly every simple shell command in the Monitor background-task tool, then issues a follow-up sleep + cat to retrieve results. This converts what should be one synchronous Bash call into 2\u20133 calls with artificial waits, massively inflating turn count and adding latency without providing any benefit over direct execution.",
+      "id": "monitor_tool_overuse"
+    },
+    {
       "description": "Rather than decomposing the problem at its root, the agent patches every observed symptom in a single large post-processing block. The final edit conflates multiple concerns and re-implements semantics the library internals already provide, rather than fixing the root cause at the correct callsite.",
       "id": "monolith_collapse"
+    },
+    {
+      "description": "During long thinking blocks in turns 7-10, the agent repeatedly convinced itself that SQLite's 999-parameter limit was the core blocker to combining querysets across fields, re-deriving in prose why that made the approach 'an edge case' or 'too complex.' It never empirically tested whether the proposed (model, batch_idx) grouping would actually exceed the limit on the existing test suite \u2014 it simply kept re-analyzing. The correct batch_idx-keyed solution was describable by turn 8 but wasn't written until turn 22, with the intervening turns devoted to circular reanalysis of a hypothesis the agent had locked onto rather than tested.",
+      "id": "premature_hypothesis_lock_in"
+    },
+    {
+      "description": "The agent searches git history for prior commits touching the affected code, discovers the upstream fix commit for the exact issue, retrieves the canonical patch via git show, and transcribes it nearly verbatim as its own solution. This short-circuits the agent's own derivation even where earlier reasoning was on the right track.",
+      "id": "reference_solution_lookup"
     },
     {
       "description": "In the onlycode arm (where the Edit tool is unavailable), the agent modifies production source by writing multi-hundred-line Python scripts that do content.replace(old, new) or slice lines[start:end] with hardcoded line indices. Several of these failed silently due to whitespace mismatches or shifting line indices between edits, making rewrites unauditable and causing multiple self-inflicted buggy intermediate states.",
@@ -25,16 +45,12 @@
       "id": "state_assumption_drift"
     },
     {
+      "description": "When tests fail after a production fix, the agent's default posture is to edit the tests' expected values to match the new observed behavior rather than treating the failure as a signal to re-examine the fix. Even when the ground-truth patch does update the test expectations (as in django#11885 for test_large_delete / test_large_delete_related), the agent arrives at the new numbers by matching the observed assertion output rather than by deriving them from first principles about the underlying semantics \u2014 a habit that in other contexts would silently launder a buggy fix into a green run.",
+      "id": "test_expectation_rewriting"
+    },
+    {
       "description": "After applying code edits, the agent fails to execute the actual target tests that would confirm behavioral correctness. Instead it substitutes weaker surrogates \u2014 visual diff comparison against a reference commit, inspect.getsource dumps, or ad-hoc AST shape probes \u2014 and declares the fix verified despite never successfully running the relevant test.",
       "id": "verification_theater"
-    },
-    {
-      "description": "The agent wraps nearly every simple shell command in the Monitor background-task tool, then issues a follow-up sleep + cat to retrieve results. This converts what should be one synchronous Bash call into 2\u20133 calls with artificial waits, massively inflating turn count and adding latency without providing any benefit over direct execution.",
-      "id": "monitor_tool_overuse"
-    },
-    {
-      "description": "The agent searches git history for prior commits touching the affected code, discovers the upstream fix commit for the exact issue, retrieves the canonical patch via git show, and transcribes it nearly verbatim as its own solution. This short-circuits the agent's own derivation even where earlier reasoning was on the right track.",
-      "id": "reference_solution_lookup"
     }
   ],
   "version": 1
