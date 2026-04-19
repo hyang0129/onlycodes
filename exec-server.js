@@ -142,6 +142,9 @@ const MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB per stream
 /** Map<cwd_string, KernelHandle> */
 const _pythonKernels = new Map();
 
+/** Set of cwd strings whose kernel was killed — next spawn surfaces a reset notice. */
+const _kernelResetPending = new Set();
+
 /**
  * @typedef {Object} KernelHandle
  * @property {import("node:child_process").ChildProcessWithoutNullStreams} child
@@ -171,6 +174,7 @@ function _killKernel(handle, reason) {
     });
   }
   _pythonKernels.delete(handle.cwd);
+  _kernelResetPending.add(handle.cwd);
 }
 
 /** Spawn a fresh persistent Python kernel for a given cwd. */
@@ -293,7 +297,9 @@ async function _spawnPythonKernel(workDir) {
         timed_out: false,
       });
     }
-    _pythonKernels.delete(workDir);
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
   });
 
   child.on("error", (err) => {
@@ -309,7 +315,9 @@ async function _spawnPythonKernel(workDir) {
         timed_out: false,
       });
     }
-    _pythonKernels.delete(workDir);
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
   });
 
   return handle;
@@ -328,7 +336,12 @@ async function executePythonStateful(code, timeoutSeconds, cwd) {
   const startTime = Date.now();
   const handle = await _getOrSpawnKernel(cwd);
 
-  return new Promise((resolve) => {
+  // Check for a pending reset notice before we run. We defer the flag clear
+  // until after the call resolves so that if the kernel dies again immediately
+  // we do not lose the notice.
+  const hadResetPending = _kernelResetPending.has(cwd);
+
+  const result = await new Promise((resolve) => {
     if (handle.dead) {
       resolve({
         stdout: "",
@@ -370,6 +383,12 @@ async function executePythonStateful(code, timeoutSeconds, cwd) {
       _killKernel(handle, `write error: ${e.message}`);
     }
   });
+
+  if (hadResetPending) {
+    _kernelResetPending.delete(cwd);
+    result.stderr = '[kernel was reset before this call — prior state lost]\n' + result.stderr;
+  }
+  return result;
 }
 
 // Cleanly shut down all kernels on server exit.

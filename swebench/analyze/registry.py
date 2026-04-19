@@ -20,6 +20,7 @@ aggregate multiple problems in a single error message.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -95,6 +96,11 @@ def validate(data: Any) -> list[str]:
     else:
         for i, pat in enumerate(data["patterns"]):
             errs.extend(_validate_pattern(pat, i))
+
+        ids = [p["id"] for p in data["patterns"]]
+        if len(ids) != len(set(ids)):
+            dupes = [id for id in ids if ids.count(id) > 1]
+            errs.append(f"duplicate pattern ids: {sorted(set(dupes))}")
 
     return errs
 
@@ -285,7 +291,7 @@ def merge(existing: dict, findings: list[dict]) -> dict:
     if existing is None:
         merged = _empty_registry()
     else:
-        merged = json.loads(json.dumps(existing))
+        merged = copy.deepcopy(existing)
         merged.setdefault("version", SCHEMA_VERSION)
         merged.setdefault("patterns", [])
 

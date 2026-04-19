@@ -980,8 +980,10 @@ def run_command(
                         for instance_id, verdict in fut.result():
                             if verdict == "FAIL" and fail_fast:
                                 had_failure = True
-                    except Exception:
-                        had_failure = True
+                    except Exception as exc:
+                        click.echo(f"Thread raised an exception: {exc}", err=True)
+                        if fail_fast:
+                            had_failure = True
 
                     # Cancel remaining unstarted futures on failure
                     if had_failure and fail_fast:
@@ -992,7 +994,7 @@ def run_command(
             # a BaseException, so the outer except clause below will still run
             # _teardown_all_overlays() before the process exits.
             if had_failure:
-                click.echo("FAIL detected with --fail-fast; stopping early.")
+                click.echo("FAIL detected — stopping.")
                 raise SystemExit(1)
         except BaseException:
             _teardown_all_overlays()

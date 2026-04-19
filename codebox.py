@@ -35,6 +35,8 @@ def read_lines(path: str, start: int = 1, end: int | None = None) -> str:
     """
     if start < 1:
         start = 1
+    if end is not None and end < start:
+        raise ValueError(f"read_lines: end ({end}) must be >= start ({start})")
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
     sliced = lines[start - 1 : end]
@@ -107,6 +109,8 @@ def edit_replace(path: str, old: str, new: str) -> None:
 
 def write(path: str, content: str) -> None:
     """Write ``content`` to ``path`` (overwrites). Creates parent dirs."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)

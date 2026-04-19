@@ -68,8 +68,9 @@ def git_reset(repo_dir: str, commit: str) -> None:
     """
     for cmd in [
         ["git", "-C", repo_dir, "reset", "--hard", commit, "--quiet"],
-        ["git", "-C", repo_dir, "clean", "-fd",
-         "-e", "*.so", "-e", "*.pyd", "--quiet"],
+        # git clean -e uses gitignore pattern syntax: '*.so' matches at any depth
+        ["git", "-C", repo_dir, "clean", "-fd", "--quiet",
+         "-e", "*.so", "-e", "*.pyd"],
     ]:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
@@ -279,16 +280,44 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
     """Create a venv and pip install the project in editable mode (if not already done)."""
     pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
-        # Venv exists from a prior run. Re-run the editable install so that C
-        # extension .so files are recompiled if git clean removed them (fast no-op
-        # when they already exist). Also ensure pytest is present.
-        subprocess.run(
-            [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run([pip, "install", "--quiet", "pytest"], capture_output=True, text=True)
-        return
+        # F-19: Guard against a partially-built venv skeleton that has the
+        # directory but not bin/pip (e.g. venv creation crashed mid-way).
+        # If pip is missing, wipe the directory so the new-venv branch below
+        # recreates it cleanly.
+        if not os.path.isfile(pip):
+            shutil.rmtree(venv_dir, ignore_errors=True)
+        else:
+            # Venv exists from a prior run. Re-run the editable install so that C
+            # extension .so files are recompiled if git clean removed them (fast no-op
+            # when they already exist). Also ensure pytest is present.
+            # F-1: capture stderr and surface failures rather than silently continuing.
+            result = subprocess.run(
+                [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                print(
+                    f"[harness] pip editable-install failed (rc={result.returncode}):\n"
+                    f"{result.stderr.decode(errors='replace')}",
+                    flush=True,
+                )
+                raise subprocess.CalledProcessError(
+                    result.returncode, result.args, result.stdout, result.stderr
+                )
+            result = subprocess.run(
+                [pip, "install", "--quiet", "pytest"],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                print(
+                    f"[harness] pip install pytest failed (rc={result.returncode}):\n"
+                    f"{result.stderr.decode(errors='replace')}",
+                    flush=True,
+                )
+                raise subprocess.CalledProcessError(
+                    result.returncode, result.args, result.stdout, result.stderr
+                )
+            return
     subprocess.run(
         ["python3.11", "-m", "venv", venv_dir],
         check=True,

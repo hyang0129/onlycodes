@@ -28,6 +28,14 @@ from contextlib import redirect_stderr, redirect_stdout
 # behaves like a script (e.g. `if __name__ == "__main__":` works).
 _ns: dict = {"__name__": "__main__"}
 
+# F-20: cap per-call output at 1 MB to prevent OOM on runaway output.
+_MAX_OUTPUT_BYTES = 1 * 1024 * 1024
+
+
+def _safe_str(s: str) -> str:
+    """F-21: Remove lone surrogates that would cause json.dumps to raise UnicodeEncodeError."""
+    return s.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+
 
 def _read_msg() -> str | None:
     """Read one length-prefixed message from stdin. None on EOF."""
@@ -89,9 +97,19 @@ def main() -> None:
             exit_code = 1
             err_buf.write(traceback.format_exc())
 
+        out_str = out_buf.getvalue()
+        err_str = err_buf.getvalue()
+
+        # F-20: truncate oversized output to avoid OOM and huge framed responses.
+        if len(out_str) > _MAX_OUTPUT_BYTES:
+            out_str = out_str[:_MAX_OUTPUT_BYTES] + "\n[output truncated]"
+        if len(err_str) > _MAX_OUTPUT_BYTES:
+            err_str = err_str[:_MAX_OUTPUT_BYTES] + "\n[output truncated]"
+
+        # F-21: sanitize lone surrogates before JSON serialization.
         _write_msg({
-            "stdout": out_buf.getvalue(),
-            "stderr": err_buf.getvalue(),
+            "stdout": _safe_str(out_str),
+            "stderr": _safe_str(err_str),
             "exit_code": exit_code,
         })
 
