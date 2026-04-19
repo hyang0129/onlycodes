@@ -81,6 +81,47 @@ async function logSession(entry) {
   }
 }
 
+// --- Output canonicalisation -----------------------------------------------
+//
+// Sub-process output often contains non-deterministic noise — ANSI escape
+// sequences, ephemeral temp paths, transient PIDs in tracebacks. Two calls
+// that succeed identically can produce different stdout/stderr bytes. The
+// prompt cache keys on byte-identical prefixes, so this noise blocks
+// cache reuse. We strip the most common offenders before returning.
+
+const _ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+const _TMP_RE = /\/tmp\/[A-Za-z0-9_.-]*onlycodes-[A-Za-z0-9]+/g;
+
+function canonicalizeOutput(text) {
+  if (typeof text !== "string" || text.length === 0) return text;
+  let out = text.replace(_ANSI_RE, "");
+  out = out.replace(_TMP_RE, "<tmpdir>");
+  // Normalise CRLF / lone CR — agent never needs to see them and they
+  // create cache misses against runs that produced LF for the same content.
+  out = out.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return out;
+}
+
+// --- Helper module staging --------------------------------------------------
+//
+// Copy mcp_bridge.py (sub-MCP passthrough) and codebox.py (file-ops helpers
+// with byte-stable output) into the agent's cwd so `import mcp_bridge` and
+// `import codebox` work. Both are dropped per-cwd; copies are idempotent.
+
+const _HELPER_MODULES = ["mcp_bridge.py", "codebox.py"];
+
+function _stageHelperModules(workDir) {
+  for (const fname of _HELPER_MODULES) {
+    const src = join(__dirname, fname);
+    const dst = join(workDir, fname);
+    try {
+      copyFileSync(src, dst);
+    } catch (e) {
+      console.error(`Warning: could not copy ${fname} to cwd: ${e.message}`);
+    }
+  }
+}
+
 // --- Subprocess execution ---
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
@@ -137,14 +178,8 @@ async function _spawnPythonKernel(workDir) {
   const strippedEnv = buildStrippedEnv();
   strippedEnv["ONLYCODES_BRIDGE_SOCK"] = getBridgeSocketPath();
 
-  // Ensure mcp_bridge.py is importable from inside the kernel.
-  const mcpBridgeSrc = join(__dirname, "mcp_bridge.py");
-  const mcpBridgeDst = join(workDir, "mcp_bridge.py");
-  try {
-    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
-  } catch (e) {
-    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
-  }
+  // Ensure mcp_bridge.py and codebox.py are importable from inside the kernel.
+  _stageHelperModules(workDir);
 
   const kernelScript = join(__dirname, "python_kernel.py");
 
@@ -364,15 +399,8 @@ async function executeCode(code, language, timeoutSeconds, cwd = null) {
   // Inject the bridge socket path into the subprocess env so mcp_bridge.py can connect
   strippedEnv['ONLYCODES_BRIDGE_SOCK'] = getBridgeSocketPath();
 
-  // Copy mcp_bridge.py into the working directory so agent code can `import mcp_bridge`
-  const mcpBridgeSrc = join(__dirname, 'mcp_bridge.py');
-  const mcpBridgeDst = join(workDir, 'mcp_bridge.py');
-  try {
-    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
-  } catch (e) {
-    // non-fatal: log but continue
-    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
-  }
+  // Stage mcp_bridge.py and codebox.py into cwd so user code can import them.
+  _stageHelperModules(workDir);
 
   const interpreter = language === "python" ? "python3" : "bash";
 
@@ -519,12 +547,20 @@ let fallbackCount = 0;
  *
  * @returns {{result: object, fallback_used: boolean, warning: string|null}}
  */
+// Set ONLYCODES_PERSISTENT_KERNEL=1 in the server's env to route Python
+// through the kernel pool. Default off — the stateless contract is what
+// the agent's training prior expects, and the stateless arm is the
+// canonical onlycode mode. The stateful variant is opted into by a
+// separate MCP config.
+const PERSISTENT_KERNEL_ENABLED =
+  process.env.ONLYCODES_PERSISTENT_KERNEL === "1";
+
 async function executeWithRetry(code, language, timeoutSeconds, cwd = null) {
-  // Python goes through the persistent kernel pool so state carries across
-  // calls. cwd must be a real path — fall back to a temp dir when omitted so
-  // every kernel has a stable key. Bash stays per-call stateless.
+  // Python optionally routes through the persistent kernel pool when
+  // PERSISTENT_KERNEL_ENABLED is set; otherwise every call gets a fresh
+  // subprocess (matching pre-kernel behavior). Bash always stateless.
   const runOnce = async () => {
-    if (language === "python") {
+    if (language === "python" && PERSISTENT_KERNEL_ENABLED) {
       const effectiveCwd =
         cwd ?? (await mkdtemp(join(tmpdir(), "onlycodes-")));
       return executePythonStateful(code, timeoutSeconds, effectiveCwd);
@@ -584,8 +620,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "execute_code",
-      description:
-        "Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash — when that happens, stderr will say \"kernel reset\" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call — no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.",
+      description: PERSISTENT_KERNEL_ENABLED
+        ? "Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash — when that happens, stderr will say \"kernel reset\" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call — no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls — its output is byte-stable across identical reads, which keeps prompt-cache reuse high."
+        : "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter — no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls — its output is byte-stable across identical reads, which keeps prompt-cache reuse high.",
       inputSchema: {
         type: "object",
         properties: {
@@ -719,14 +756,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     fallback_used,
   });
 
+  // Canonicalise stdout/stderr so byte-identical reads produce byte-identical
+  // tool results, maximising prompt-cache reuse on subsequent turns.
+  const canonStdout = canonicalizeOutput(result.stdout);
+  const canonStderr = canonicalizeOutput(result.stderr);
+
   // Build response content blocks
   const content = [
     {
       type: "text",
       text: JSON.stringify(
         {
-          stdout: result.stdout,
-          stderr: result.stderr,
+          stdout: canonStdout,
+          stderr: canonStderr,
           exit_code: result.exit_code,
         },
         null,

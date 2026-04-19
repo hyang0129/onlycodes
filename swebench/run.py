@@ -163,16 +163,31 @@ def _run_arm(
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     venv_python = os.path.join(venv_dir, "bin", "python")
+    is_onlycode = arm in ("onlycode", "onlycode-stateful")
     prompt_parts = [
         f"You are working in the repository at: {repo_dir}\n",
         f"The project's Python interpreter and dependencies are pre-installed at: {venv_python}",
         f"Use this interpreter to run tests (e.g. `{venv_python} tests/runtests.py ...`).\n",
     ]
-    if arm == "onlycode":
+    if is_onlycode:
+        prompt_parts.append(
+            "A `codebox` helper module is auto-imported into your cwd. Prefer it "
+            "over hand-rolled subprocess.run(['cat', ...]) — its output is "
+            "byte-stable across identical reads, which keeps prompt-cache reuse "
+            "high. API:\n"
+            "  import codebox\n"
+            "  src   = codebox.read(path)              # full file as string\n"
+            "  block = codebox.read_lines(path, 200, 250)  # inclusive 1-indexed\n"
+            "  hits  = codebox.grep('pattern', path)   # 'path:line:text', sorted\n"
+            "  paths = codebox.files(root, pattern=None)   # recursive, sorted\n"
+            "  codebox.edit_replace(path, old, new)    # exact-once, raises if 0/many\n"
+            "  codebox.write(path, content)            # overwrite, mkdir -p\n"
+        )
+    if arm == "onlycode-stateful":
         prompt_parts.append(
             "The execute_code Python interpreter is a PERSISTENT REPL keyed by cwd: "
             "variables, imports, and opened-file contents survive across calls. "
-            "After you read a file once with `src = open(path).read()`, reference "
+            "After you read a file once with `src = codebox.read(path)`, reference "
             "`src` on later turns instead of re-reading. Re-reading a file you "
             "already loaded wastes tokens — before issuing any read, check what "
             "you already have in memory.\n"
@@ -187,7 +202,7 @@ def _run_arm(
 
     # Build tools flags based on arm
     tools_flags: list[str] = []
-    if arm == "onlycode":
+    if is_onlycode:
         # --tools whitelists MCP tools but does not reliably block built-ins
         # like Monitor (added v2.1.98). --disallowedTools explicitly removes
         # every built-in so the agent can only use the two codebox MCP tools.
@@ -200,8 +215,13 @@ def _run_arm(
             "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
             "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
         )
+        # The stateful arm points at a separate MCP config that sets the
+        # ONLYCODES_PERSISTENT_KERNEL=1 env var on the codebox server.
+        effective_mcp_config = mcp_config_path
+        if arm == "onlycode-stateful":
+            effective_mcp_config = str(root / "mcp-config-stateful.json")
         tools_flags = [
-            "--mcp-config", mcp_config_path,
+            "--mcp-config", effective_mcp_config,
             "--strict-mcp-config",
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
             "--disallowedTools", _BLOCKED_BUILTINS,
@@ -463,9 +483,12 @@ def _cleanup_stale_overlays(
 )
 @click.option(
     "--arms",
-    type=click.Choice(["baseline", "onlycode", "both"]),
+    type=click.Choice(["baseline", "onlycode", "onlycode-stateful", "both", "all"]),
     default="both",
-    help="Which arms to run (default: both).",
+    help=(
+        "Which arms to run. 'both' = baseline + onlycode (the default pair); "
+        "'all' = baseline + onlycode + onlycode-stateful."
+    ),
 )
 @click.option(
     "--runs",
@@ -577,26 +600,33 @@ def run_command(
 
     # Determine arms to run
     arm_list: list[str] = []
-    if arms in ("baseline", "both"):
+    if arms in ("baseline", "both", "all"):
         arm_list.append("baseline")
-    if arms in ("onlycode", "both"):
+    if arms in ("onlycode", "both", "all"):
         arm_list.append("onlycode")
+    if arms == "onlycode-stateful" or arms == "all":
+        arm_list.append("onlycode-stateful")
 
     # --- Environment pre-flight checks ------------------------------------------
     env_errors: list[str] = []
-    if "onlycode" in arm_list:
-        # MCP config must exist
-        if not os.path.isfile(mcp_config_path):
-            env_errors.append(f"mcp-config.json not found at {mcp_config_path}")
-        else:
-            # Parse config and check each server's command binary exists
+    _onlycode_arms_present = any(a.startswith("onlycode") for a in arm_list)
+    if _onlycode_arms_present:
+        # Each onlycode variant has its own MCP config; validate every one in use.
+        _configs_to_check: list[str] = []
+        if "onlycode" in arm_list:
+            _configs_to_check.append(mcp_config_path)
+        if "onlycode-stateful" in arm_list:
+            _configs_to_check.append(str(root / "mcp-config-stateful.json"))
+        for _cfg in _configs_to_check:
+            if not os.path.isfile(_cfg):
+                env_errors.append(f"MCP config not found at {_cfg}")
+                continue
             try:
-                with open(mcp_config_path) as _f:
+                with open(_cfg) as _f:
                     _mcp = json.load(_f)
                 for _srv_name, _srv in _mcp.get("mcpServers", {}).items():
                     _cmd = _srv.get("command", "")
                     if _cmd and not (os.path.isfile(_cmd) and os.access(_cmd, os.X_OK)):
-                        # Also check PATH
                         if not shutil.which(_cmd):
                             env_errors.append(
                                 f"MCP server '{_srv_name}' command not found or not executable: {_cmd!r}"
@@ -608,7 +638,7 @@ def run_command(
                                 f"MCP server '{_srv_name}' script not found: {_arg!r}"
                             )
             except (json.JSONDecodeError, OSError) as _e:
-                env_errors.append(f"Failed to parse {mcp_config_path}: {_e}")
+                env_errors.append(f"Failed to parse {_cfg}: {_e}")
 
     if env_errors:
         click.echo("ERROR: Environment pre-flight failed:", err=True)

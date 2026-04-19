@@ -22734,6 +22734,27 @@ async function logSession(entry) {
   } catch {
   }
 }
+var _ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+var _TMP_RE = /\/tmp\/[A-Za-z0-9_.-]*onlycodes-[A-Za-z0-9]+/g;
+function canonicalizeOutput(text) {
+  if (typeof text !== "string" || text.length === 0) return text;
+  let out = text.replace(_ANSI_RE, "");
+  out = out.replace(_TMP_RE, "<tmpdir>");
+  out = out.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return out;
+}
+var _HELPER_MODULES = ["mcp_bridge.py", "codebox.py"];
+function _stageHelperModules(workDir) {
+  for (const fname of _HELPER_MODULES) {
+    const src = join2(__dirname2, fname);
+    const dst = join2(workDir, fname);
+    try {
+      copyFileSync(src, dst);
+    } catch (e) {
+      console.error(`Warning: could not copy ${fname} to cwd: ${e.message}`);
+    }
+  }
+}
 var DEFAULT_TIMEOUT_SECONDS = 30;
 var MAX_OUTPUT_BYTES = 1024 * 1024;
 var _pythonKernels = /* @__PURE__ */ new Map();
@@ -22760,13 +22781,7 @@ function _killKernel(handle, reason) {
 async function _spawnPythonKernel(workDir) {
   const strippedEnv = buildStrippedEnv();
   strippedEnv["ONLYCODES_BRIDGE_SOCK"] = getBridgeSocketPath();
-  const mcpBridgeSrc = join2(__dirname2, "mcp_bridge.py");
-  const mcpBridgeDst = join2(workDir, "mcp_bridge.py");
-  try {
-    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
-  } catch (e) {
-    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
-  }
+  _stageHelperModules(workDir);
   const kernelScript = join2(__dirname2, "python_kernel.py");
   const unshareAttempts = [
     {
@@ -22948,13 +22963,7 @@ async function executeCode(code, language, timeoutSeconds, cwd = null) {
   const workDir = cwd ?? await mkdtemp(join2(tmpdir(), "onlycodes-"));
   const strippedEnv = buildStrippedEnv();
   strippedEnv["ONLYCODES_BRIDGE_SOCK"] = getBridgeSocketPath();
-  const mcpBridgeSrc = join2(__dirname2, "mcp_bridge.py");
-  const mcpBridgeDst = join2(workDir, "mcp_bridge.py");
-  try {
-    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
-  } catch (e) {
-    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
-  }
+  _stageHelperModules(workDir);
   const interpreter = language === "python" ? "python3" : "bash";
   const unshareAttempts = [
     { check: ["unshare", ["--user", "--map-root-user", "--net", "true"]], cmdFn: () => ({ cmd: "unshare", args: ["--user", "--map-root-user", "--net", interpreter, "-c", code] }) },
@@ -23059,9 +23068,10 @@ function classifyResult(result) {
   return "non_retryable";
 }
 var fallbackCount = 0;
+var PERSISTENT_KERNEL_ENABLED = process.env.ONLYCODES_PERSISTENT_KERNEL === "1";
 async function executeWithRetry(code, language, timeoutSeconds, cwd = null) {
   const runOnce = async () => {
-    if (language === "python") {
+    if (language === "python" && PERSISTENT_KERNEL_ENABLED) {
       const effectiveCwd = cwd ?? await mkdtemp(join2(tmpdir(), "onlycodes-"));
       return executePythonStateful(code, timeoutSeconds, effectiveCwd);
     }
@@ -23103,7 +23113,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "execute_code",
-      description: 'Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash \u2014 when that happens, stderr will say "kernel reset" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call \u2014 no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.',
+      description: PERSISTENT_KERNEL_ENABLED ? "Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash \u2014 when that happens, stderr will say \"kernel reset\" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call \u2014 no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls \u2014 its output is byte-stable across identical reads, which keeps prompt-cache reuse high." : "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter \u2014 no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls \u2014 its output is byte-stable across identical reads, which keeps prompt-cache reuse high.",
       inputSchema: {
         type: "object",
         properties: {
@@ -23216,13 +23226,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     duration_ms: result.duration_ms,
     fallback_used
   });
+  const canonStdout = canonicalizeOutput(result.stdout);
+  const canonStderr = canonicalizeOutput(result.stderr);
   const content = [
     {
       type: "text",
       text: JSON.stringify(
         {
-          stdout: result.stdout,
-          stderr: result.stderr,
+          stdout: canonStdout,
+          stderr: canonStderr,
           exit_code: result.exit_code
         },
         null,
