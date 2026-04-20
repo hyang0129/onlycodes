@@ -1,0 +1,16 @@
+instance_id: stateful_reasoning__upgrade_impact
+category: stateful_reasoning
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/conflicts.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - stateful_reasoning
+  - semver
+  - dependency_resolution
+  - package_management

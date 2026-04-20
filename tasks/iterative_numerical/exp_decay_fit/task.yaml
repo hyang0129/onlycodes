@@ -1,0 +1,16 @@
+instance_id: iterative_numerical__exp_decay_fit
+category: iterative_numerical
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/params.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - iterative_numerical
+  - curve_fitting
+  - optimization
+  - numerical

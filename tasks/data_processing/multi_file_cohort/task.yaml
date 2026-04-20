@@ -1,0 +1,17 @@
+instance_id: data_processing__multi_file_cohort
+category: data_processing
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/top_products.jsonl
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 30
+  max_wall_seconds: 300
+tags:
+  - data_processing
+  - multi_file
+  - aggregation
+  - csv

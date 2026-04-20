@@ -1,0 +1,21 @@
+# Curated artifact task set — seed-v1.
+# One instance_id per line. Blank lines and # comments are ignored.
+# Append-only: this file is populated by the seed-task slices (#95 onward).
+
+data_processing__p95_latency_easy
+data_processing__regression_detection
+algorithmic__makespan_scheduling
+algorithmic__min_cost_assignment
+verification_heavy__parse_iso_duration
+verification_heavy__lru_cache_impl
+enumeration__latin_squares_3
+enumeration__graphs_chromatic_3
+stateful_reasoning__unreachable_functions
+stateful_reasoning__upgrade_impact
+iterative_numerical__exp_decay_fit
+iterative_numerical__hparam_search
+
+# Arm-gate signal tasks (B/C stress)
+data_processing__multi_file_cohort
+stateful_reasoning__event_ledger
+iterative_numerical__bisection_calibration
