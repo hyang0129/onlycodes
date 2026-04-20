@@ -1,0 +1,57 @@
+{
+  "packages": {
+    "web-server": {
+      "version": "3.2.1",
+      "dependencies": {
+        "data-utils": "^1.0.0",
+        "logger": "^2.0.0"
+      }
+    },
+    "api-gateway": {
+      "version": "1.0.5",
+      "dependencies": {
+        "data-utils": "~1.4.0",
+        "cache": ">=1.0.0"
+      }
+    },
+    "background-worker": {
+      "version": "2.1.0",
+      "dependencies": {
+        "data-utils": ">=1.0.0",
+        "scheduler": "^1.2.0"
+      }
+    },
+    "metrics-collector": {
+      "version": "0.9.3",
+      "dependencies": {
+        "data-utils": "^2.0.0"
+      }
+    },
+    "auth-service": {
+      "version": "5.0.0",
+      "dependencies": {
+        "data-utils": "1.4.2",
+        "jwt": "^9.0.0"
+      }
+    },
+    "report-generator": {
+      "version": "1.1.0",
+      "dependencies": {
+        "data-utils": ">=2.0.0",
+        "pdf-lib": "^3.0.0"
+      }
+    },
+    "notification-hub": {
+      "version": "2.3.0",
+      "dependencies": {
+        "logger": "^2.0.0",
+        "cache": ">=1.0.0"
+      }
+    }
+  },
+  "upgrade": {
+    "package": "data-utils",
+    "from": "1.4.2",
+    "to": "2.0.0"
+  }
+}
