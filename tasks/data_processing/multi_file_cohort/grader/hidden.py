@@ -1,4 +1,6 @@
 """Hidden grader for data_processing__multi_file_cohort."""
+
+# GRADER-SENTINEL: 8bd7db4f-42e8-476d-a9ea-56c596390d77
 from __future__ import annotations
 import csv, json
 from dataclasses import dataclass

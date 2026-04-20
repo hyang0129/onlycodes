@@ -14,6 +14,7 @@ Correctness criterion:
 
 Determinism: pure function of scratch_dir contents. No clock, no network.
 """
+# GRADER-SENTINEL: 4cc6e89d-cc81-47d0-9e34-96d6ced97589
 
 from __future__ import annotations
 

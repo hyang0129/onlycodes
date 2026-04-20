@@ -135,5 +135,63 @@ def test_missing_results_dir_errors_out(tmp_path: Path):
     assert result.exit_code != 0
 
 
+# ---------------------------------------------------------------------------
+# Issue #108: artifact-mode layout detection and leak column.
+# ---------------------------------------------------------------------------
+
+
+def _write_artifact_result(
+    results_dir: Path,
+    iid: str,
+    arm: str,
+    run_idx: int,
+    verdict: str,
+    leak_detected: bool,
+) -> None:
+    import json as _json
+    run_dir = results_dir / iid / arm / f"run{run_idx}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "result.json").write_text(_json.dumps({
+        "instance_id": iid,
+        "arm": arm,
+        "run_idx": run_idx,
+        "verdict": verdict,
+        "leak_detected": leak_detected,
+        "cost_usd": 0.01,
+        "num_turns": 3,
+        "wall_secs": 12,
+        "grade_result": {"passed": verdict == "PASS", "score": 1.0, "detail": ""},
+        "budget": {"max_code_runs": 0, "max_wall_seconds": 0, "enforcement": "OFF"},
+        "claude_version": "claude-test",
+        "agent_jsonl_path": str(run_dir / "agent.jsonl"),
+    }))
+
+
+def test_artifact_layout_shows_leak_column(tmp_path: Path):
+    _write_artifact_result(tmp_path, "cat__slug_a", "code_only", 1, "PASS", False)
+    _write_artifact_result(tmp_path, "cat__slug_b", "code_only", 1, "PASS", True)
+    result = _run(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "leak" in result.output  # column header present
+    # Tainted row marker (Y) and clean row marker (.)
+    assert "Y" in result.output
+    # Tainted-run counter is surfaced.
+    assert "Tainted runs" in result.output
+    # Clean pass-rate excludes the tainted row: 1 clean, 1 pass -> 100.0%
+    assert "100.0%" in result.output
+
+
+def test_artifact_layout_csv_contains_leak_column(tmp_path: Path):
+    _write_artifact_result(tmp_path, "cat__slug_a", "code_only", 1, "PASS", False)
+    _write_artifact_result(tmp_path, "cat__slug_b", "tool_rich", 1, "FAIL", True)
+    out_csv = tmp_path / "out.csv"
+    result = _run(tmp_path, out_csv)
+    assert result.exit_code == 0, result.output
+    csv_text = out_csv.read_text()
+    assert "leak_detected" in csv_text.splitlines()[0]
+    assert "True" in csv_text
+    assert "False" in csv_text
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])

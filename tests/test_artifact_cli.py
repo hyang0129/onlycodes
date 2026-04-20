@@ -193,6 +193,52 @@ def test_artifact_run_no_tasks(tmp_path, stub_runtime):
     assert "No tasks found" in (r.output + r.stderr)
 
 
+def test_default_output_dir_is_outside_repo(monkeypatch):
+    """Issue #108: default --output-dir must NOT live under the onlycodes repo.
+
+    The agent's Python kernel runs with cwd=scratch_dir; if scratch_dir were
+    under the repo, the agent could traverse to tasks/<cat>/<slug>/grader/.
+    This test pins the default to an absolute path outside the repo tree.
+    """
+    import os
+    from swebench import artifact_cli as mod
+    from swebench import repo_root
+
+    default = Path(mod.DEFAULT_RESULTS_ROOT).resolve()
+    repo = repo_root().resolve()
+    # The default must not be inside the repo tree. commonpath is a safe check.
+    common = os.path.commonpath([str(default), str(repo)])
+    assert common != str(repo), (
+        f"DEFAULT_RESULTS_ROOT {default} is inside repo {repo}; "
+        "an agent rooted here can reach tasks/<cat>/<slug>/grader/."
+    )
+    # And the documented default is /tmp/onlycodes-artifact (path convention).
+    assert str(default).startswith("/tmp/"), default
+
+
+def test_result_json_records_leak_detected_field(tmp_path, stub_runtime):
+    """Every result.json written by ``artifact run`` must carry leak_detected."""
+    tasks_root = tmp_path / "tasks"
+    results_dir = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "run",
+        "--tasks-dir", str(tasks_root),
+        "--output-dir", str(results_dir),
+        "--filter", iid,
+        "--arms", "code_only",
+    ])
+    assert r.exit_code == 0, r.output
+    data = json.loads(
+        (results_dir / iid / "code_only" / "run1" / "result.json").read_text()
+    )
+    assert "leak_detected" in data
+    # The fixture grader has no sentinel and a very short reference file, so
+    # the audit yields no fingerprints -> leak_detected stays False.
+    assert data["leak_detected"] is False
+
+
 def test_swebench_run_unchanged_smoke():
     """Additive-only: ``python -m swebench run --help`` must still work and
     must not advertise any artifact-mode flag."""

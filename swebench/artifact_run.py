@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from swebench.artifact_audit import audit_leak
 from swebench.artifact_grade import GraderInvocationError, invoke_grader
 from swebench.artifact_materialize import materialize, scratch_dir_for
 from swebench.artifact_models import ArtifactArmResult, GradeResult, Task
@@ -224,6 +225,18 @@ def run_artifact_arm(
 
     cost, turns = _extract_cost_and_turns(agent_jsonl)
 
+    # Issue #108: per-run leak audit. Soft mitigation — the materialiser keeps
+    # grader files out of scratch, and the default scratch root lives outside
+    # the repo tree, but a motivated agent could still probe upward. Scanning
+    # the transcript for the task's sentinel + reference-output fingerprints
+    # flags any run where the agent saw the grader regardless of path.
+    leak_detected = audit_leak(task, agent_jsonl)
+    if leak_detected:
+        echo(
+            f"  [{task.instance_id} {arm} run{run_idx}] "
+            "WARNING: grader-leak fingerprint found in agent.jsonl — run tainted."
+        )
+
     result = ArtifactArmResult(
         instance_id=task.instance_id,
         arm=arm,
@@ -240,6 +253,7 @@ def run_artifact_arm(
         num_turns=turns,
         claude_version=claude_version,
         agent_jsonl_path=str(agent_jsonl),
+        leak_detected=leak_detected,
     )
     with open(result_json, "w") as f:
         json.dump(result.to_dict(), f, indent=2, sort_keys=True)

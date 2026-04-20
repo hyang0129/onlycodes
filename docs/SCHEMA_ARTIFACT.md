@@ -206,6 +206,13 @@ The harness (#2) is responsible for the copy step and for ensuring no grader pat
 
 The invariant "no golden solution or correctness signal is ever visible to the agent" is a hard epic invariant (see #92). Any task author who finds themselves needing to reference `grader/` or `reference_output` from inside `workspace/` has a bug — the task is miscategorized and needs re-shaping.
 
+**Issue #108 mitigation (defense in depth).** The materialiser alone is not sufficient — the agent's Python kernel could previously read `tasks/<category>/<slug>/grader/` by traversing up from a scratch dir that lived inside the repo tree. Two additional measures now apply:
+
+1. **Scratch root lives outside the repo.** The default `--output-dir` for `python -m swebench artifact run` is `/tmp/onlycodes-artifact/` rather than `<repo>/results_artifact/`. An agent starting at `scratch_dir` has no structural way to guess the onlycodes repo location.
+2. **Per-run leak audit.** After every run, the harness scans `agent.jsonl` for the task's grader fingerprints (a committed `# GRADER-SENTINEL: <uuid>` in `hidden.py`, plus the first distinctive lines of `reference_output.*`). The result is recorded on `result.json` as `leak_detected: bool`. Tainted runs are flagged by `analyze summary` and excluded from the headline pass-rate.
+
+Task authors creating a new grader MUST include a unique `# GRADER-SENTINEL: <uuid>` comment near the top of `hidden.py`. Generate a fresh UUID4 for each new task; never reuse sentinels across tasks.
+
 ### 5.4 Pre-merge sanity check
 
 Before a task PR lands, a harness utility runs the task's `reference_output` through its `grade()` function and asserts `passed=True, score=1.0`. This catches graders that reject their own known-good answer — the single most common silent-failure mode.

@@ -1,4 +1,6 @@
 """Hidden grader for iterative_numerical__bisection_calibration."""
+
+# GRADER-SENTINEL: a06f058d-701e-4e7b-bf73-f9493659e9d6
 from __future__ import annotations
 import json
 import importlib.util

@@ -16,6 +16,7 @@ Correctness criterion:
 
 Determinism: pure function of workspace/packages.json. No randomness.
 """
+# GRADER-SENTINEL: 8b6ce920-5826-455f-9e6b-e86cb7f60eee
 
 from __future__ import annotations
 

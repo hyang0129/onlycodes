@@ -14,6 +14,7 @@ Correctness criterion:
 
 Determinism: all test inputs are fixed constants or seeded from instance_id.
 """
+# GRADER-SENTINEL: d87f58f6-568d-4cf0-a8f3-ede482f190cd
 
 from __future__ import annotations
 

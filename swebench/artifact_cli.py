@@ -28,6 +28,13 @@ from swebench.artifact_run import (
 from swebench.harness import find_claude_binary
 
 
+# Issue #108: default results root. Chosen to live outside /workspaces/hub_1
+# (the repo mount) so an agent traversing up from its scratch dir cannot
+# reach tasks/<category>/<slug>/grader/. Override with --output-dir for
+# persistent per-experiment result storage.
+DEFAULT_RESULTS_ROOT = "/tmp/onlycodes-artifact"
+
+
 @click.group()
 def artifact_group() -> None:
     """Artifact-graded benchmark: run tasks, verify graders (future)."""
@@ -60,7 +67,12 @@ def artifact_group() -> None:
     "output_dir",
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
     default=None,
-    help="Directory for result files [default: <repo>/results_artifact/].",
+    help=(
+        "Directory for result files [default: /tmp/onlycodes-artifact/]. "
+        "Default lives outside the repo tree so an agent that traverses "
+        "from its scratch cwd cannot reach tasks/<cat>/<slug>/grader/ "
+        "(issue #108)."
+    ),
 )
 @click.option(
     "--resume/--no-resume",
@@ -102,7 +114,10 @@ def artifact_run_command(
 
     root = repo_root()
     tasks_root = Path(tasks_dir) if tasks_dir else (root / "tasks")
-    results_dir = Path(output_dir) if output_dir else (root / "results_artifact")
+    # Issue #108: default scratch root lives OUTSIDE the repo tree. The agent's
+    # Python kernel runs with cwd=scratch_dir; if scratch_dir were under the
+    # repo, the agent could read tasks/.../grader/hidden.py by traversing up.
+    results_dir = Path(output_dir) if output_dir else Path(DEFAULT_RESULTS_ROOT)
 
     filter_set: set[str] | None = None
     if filter_ids:

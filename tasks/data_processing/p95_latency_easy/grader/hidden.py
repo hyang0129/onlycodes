@@ -21,6 +21,7 @@ Determinism: pure function of scratch_dir contents. No clock, no network, no
 unseeded randomness. (No randomness is used at all; the identity comes from
 instance_id if ever needed — see SCHEMA §3.2.3.)
 """
+# GRADER-SENTINEL: 16de0e28-a93c-44fd-8c31-066cd36833d4
 
 from __future__ import annotations
 
