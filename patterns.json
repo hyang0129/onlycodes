@@ -1,349 +1,56 @@
 {
   "patterns": [
     {
-      "arm_distribution": {
-        "baseline": 3,
-        "onlycode": 0
-      },
       "description": "The agent re-runs nearly identical probe commands across consecutive turns against slightly different interpreters or paths without first performing the discovery step that would have told it where the target package actually lives. Each retry observes the same failure mode before the agent finally pivots to the correct diagnostic \u2014 a search that should have preceded the first attempt rather than followed the third.",
-      "evidence_refs": [
-        {
-          "excerpt": "pip show astroid ... && python -c \"import astroid; print('ok')\"",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 36
-        },
-        {
-          "excerpt": "python -c \"import astroid; from pylint.testutils import ...\" (identical body)",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 35
-        },
-        {
-          "excerpt": "python -c \"import astroid; from pylint.testutils import ...\"",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 34
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 3,
-      "id": "amnesiac_retry",
-      "last_seen_run_id": "20260417T201405Z"
+      "id": "amnesiac_retry"
     },
     {
-      "arm_distribution": {
-        "baseline": 6,
-        "onlycode": 1
-      },
+      "description": "The test file encodes the exact expected behavior the task requires (e.g., `test_fast_delete_combined_relationships` asserting a single combined DELETE across referrer_id OR unique_field), yet the agent did not read the test module end-to-end before editing. It only discovered the target test via a keyword grep on turn 18, after the first fix had already broken other tests. Reading the relevant tests first would have converted an ambiguous 'optimize fast_deletes somehow' task into a concrete assertion to satisfy, likely preventing the broken first attempt and the churn that followed.",
+      "id": "delayed_test_reading"
+    },
+    {
+      "description": "When the agent cannot get the test suite running because of a perceived environment problem, it begins mutating production source to work around the environment rather than diagnosing it. Here, after hitting a distutils ImportError from the wrong Python interpreter, the agent edited django/utils/version.py to add a try/except import fallback and then a hand-rolled LooseVersion stub, then tried to pip-install 'packaging' \u2014 all before discovering the pre-existing per-instance venv at /tmp/swebench/venvs/<instance>/bin/python that had every dependency ready. Production files are modified purely for environmental convenience, and those edits may leak into the final patch.",
+      "id": "environment_yak_shaving"
+    },
+    {
       "description": "The agent continues reading progressively deeper into the call chain (many Grep/Read calls descending through helper functions) well after it has already identified the actual bug site. The extra exploration does not meaningfully refine the diagnosis and partly serves as rationalization/re-derivation of a conclusion reached earlier \u2014 or, in the worst case, of a conclusion it ultimately imports from an external reference rather than deriving itself.",
-      "evidence_refs": [
-        {
-          "excerpt": "I'm weighing different approaches to fix the coordinate attribute merging issue. Option 1 would require modifying the function signature, option 2 doesn't work because the lambda would grab the wrong attributes, option 3 is a post-processin",
-          "log_ref": "pydata__xarray-7229_onlycode_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 0
-        },
-        {
-          "excerpt": "Read computation.py offset=1154 limit=70",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 22
-        },
-        {
-          "excerpt": "Read computation.py offset=454 limit=50 (re-reading same range)",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 20
-        },
-        {
-          "excerpt": "Read computation.py offset=454 limit=60",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 10
-        },
-        {
-          "excerpt": "Read computation.py offset=280 limit=60",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 6
-        },
-        {
-          "excerpt": "def collect_dict_values(\n    objects: Iterable[Mapping | Any], keys: Iterable, fill_value: object = None",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 40
-        },
-        {
-          "excerpt": "The issue is on line 1863. When `keep_attrs=True`, the lambda `lambda attrs, context: getattr(x, \"attrs\", {})` returns the attrs of `x` for ALL variables, including coordinate variables.",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 7
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 7,
-      "id": "exploration_churn",
-      "last_seen_run_id": "20260418T171441Z"
+      "id": "exploration_churn"
     },
     {
-      "arm_distribution": {
-        "baseline": 0,
-        "onlycode": 2
-      },
-      "description": "The agent wraps nearly every simple shell command (grep, sed, cat, one-line python) in the Monitor background-task tool, then issues a follow-up `sleep N && cat /tmp/.../tasks/*.output` to retrieve results. This converts what should be one synchronous Bash call into 2\u20133 calls with artificial waits, repeated across 60+ invocations for trivial one-shot commands. The pattern massively inflates turn count and adds latency without providing any benefit over direct execution.",
-      "evidence_refs": [
-        {
-          "excerpt": "sleep 30 && cat /tmp/claude-1000/.../tasks/b4qi13jwa.output 2>/dev/null || echo \"still waiting\"",
-          "log_ref": "pydata__xarray-7229_onlycode_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 0
-        },
-        {
-          "excerpt": "Monitor id=toolu_01149GgtPqdBuBJ3PtHBXgrn input: {\"command\": \"grep -n \\\"keep_attrs\\\" /tmp/swebench/pydata__xarray-7229/xarray/core/common.py | head -50\"}",
-          "log_ref": "pydata__xarray-7229_onlycode_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 1
-        }
-      ],
-      "first_seen_run_id": "20260418T171441Z",
-      "frequency": 2,
-      "id": "monitor_tool_overuse",
-      "last_seen_run_id": "20260418T171441Z"
+      "description": "The agent wraps nearly every simple shell command in the Monitor background-task tool, then issues a follow-up sleep + cat to retrieve results. This converts what should be one synchronous Bash call into 2\u20133 calls with artificial waits, massively inflating turn count and adding latency without providing any benefit over direct execution.",
+      "id": "monitor_tool_overuse"
     },
     {
-      "arm_distribution": {
-        "baseline": 1,
-        "onlycode": 0
-      },
-      "description": "Rather than decomposing the problem at its root, the agent patches every observed symptom in a single large post-processing block. The final xr.where edit is a 40+ line change that conflates lambda adjustment, result.attrs restoration, Dataset-vs-DataArray branching, coordinate-attr restoration, and data_vars-attr restoration \u2014 re-implementing attr-merging semantics xarray internals already provide, rather than fixing the coordinate-merging path in apply_dataarray_vfunc/apply_dataset_vfunc.",
-      "evidence_refs": [
-        {
-          "excerpt": "# Restore variable/dataset-level attrs from x\n        if hasattr(result, \"data_vars\"):\n            result.attrs = x.attrs if hasattr(x, \"data_vars\") else {}\n        else:\n            result.attrs = getattr(x, \"attrs\", {})",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 42
-        }
-      ],
-      "first_seen_run_id": "20260418T171441Z",
-      "frequency": 1,
-      "id": "monolith_collapse",
-      "last_seen_run_id": "20260418T171441Z"
+      "description": "Rather than decomposing the problem at its root, the agent patches every observed symptom in a single large post-processing block. The final edit conflates multiple concerns and re-implements semantics the library internals already provide, rather than fixing the root cause at the correct callsite.",
+      "id": "monolith_collapse"
     },
     {
-      "arm_distribution": {
-        "baseline": 4,
-        "onlycode": 0
-      },
-      "description": "The agent searches git history (across all branches) for prior commits touching the affected code, discovers the upstream fix commit for the exact issue, retrieves the canonical patch via `git show`, and transcribes it nearly verbatim as its own solution. This short-circuits the agent's own derivation: even where earlier reasoning was on the right track, the final committed code is a direct copy of the reference implementation obtained by git-log archaeology rather than independent synthesis.",
-      "evidence_refs": [
-        {
-          "excerpt": "Now I have the reference fix. Let me implement the same approach.",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 49
-        },
-        {
-          "excerpt": "git show 675a3ff6 -- xarray/core/computation.py",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 48
-        },
-        {
-          "excerpt": "675a3ff6 Fix coordinate attr handling in `xr.where(..., keep_attrs=True)` (#7229)",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 46
-        },
-        {
-          "excerpt": "git log --all --oneline -- xarray/tests/test_computation.py | grep -i \"where_attr\\|where attr\\|keep_attr\"",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 45
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 4,
-      "id": "reference_solution_lookup",
-      "last_seen_run_id": "20260417T201405Z"
+      "description": "During long thinking blocks in turns 7-10, the agent repeatedly convinced itself that SQLite's 999-parameter limit was the core blocker to combining querysets across fields, re-deriving in prose why that made the approach 'an edge case' or 'too complex.' It never empirically tested whether the proposed (model, batch_idx) grouping would actually exceed the limit on the existing test suite \u2014 it simply kept re-analyzing. The correct batch_idx-keyed solution was describable by turn 8 but wasn't written until turn 22, with the intervening turns devoted to circular reanalysis of a hypothesis the agent had locked onto rather than tested.",
+      "id": "premature_hypothesis_lock_in"
     },
     {
-      "arm_distribution": {
-        "baseline": 0,
-        "onlycode": 1
-      },
-      "description": "In the onlycode arm (where the Edit tool is unavailable), the agent modifies production source by writing multi-hundred-line Python scripts that do `content.replace(old, new)` or slice `lines[start:end]` with hardcoded line indices (e.g. 1859\u20131881). Several of these failed silently due to whitespace mismatches or shifting line indices between edits, and one splice accidentally dropped the `return result` statement \u2014 causing execution to fall through to the original unmodified `return apply_ufunc(...)` and reproduce the exact bug the fix was supposed to eliminate. The edit-by-script approach made rewrites unauditable and was the direct cause of multiple self-inflicted buggy intermediate states.",
-      "evidence_refs": [
-        {
-          "excerpt": "if old in content:\n    print('Found old code, replacing...')\n    new_content = content.replace(old, new)\nelse:\n    print('ERROR: old code not found!')",
-          "log_ref": "pydata__xarray-7229_onlycode_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 0
-        }
-      ],
-      "first_seen_run_id": "20260418T171441Z",
-      "frequency": 1,
-      "id": "script_driven_edit_fragility",
-      "last_seen_run_id": "20260418T171441Z"
+      "description": "The agent searches git history for prior commits touching the affected code, discovers the upstream fix commit for the exact issue, retrieves the canonical patch via git show, and transcribes it nearly verbatim as its own solution. This short-circuits the agent's own derivation even where earlier reasoning was on the right track.",
+      "id": "reference_solution_lookup"
     },
     {
-      "arm_distribution": {
-        "baseline": 6,
-        "onlycode": 0
-      },
-      "description": "The agent makes multiple successive edits to the same code region, each revising the previous approach as new edge cases (Dataset variable attrs, scalar-x, explicit-override callers) surface. The churn reflects that the agent did not reason through the full input matrix before committing to an edit, and it only stabilizes on a final approach after consulting an external reference. Intermediate attempts (e.g. `keep_attrs = \"override\"` with post-hoc restoration, then a `_keep_x_attrs` flag) are discarded wholesale rather than incrementally refined.",
-      "evidence_refs": [
-        {
-          "excerpt": "Third edit: added coord loop, data_vars loop, hasattr(result, 'data_vars') branching, x.name edge case",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 42
-        },
-        {
-          "excerpt": "Second edit: moved logic inside `if keep_attrs is True` block",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 30
-        },
-        {
-          "excerpt": "First edit: keep_attrs = lambda attrs, context: attrs[0] if attrs else {}\n... result.attrs = getattr(x, \"attrs\", {})",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 28
-        },
-        {
-          "excerpt": "if isinstance(y, Dataset) and not isinstance(x, Dataset):\n            # handle special case where x gets promoted to Dataset",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 50
-        },
-        {
-          "excerpt": "_keep_x_attrs = keep_attrs is True\n    if _keep_x_attrs:\n        keep_attrs = \"override\"",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 18
-        },
-        {
-          "excerpt": "keep_attrs = \"override\"\n\n    # alignment for three arguments is complicated, so don't support it yet\n    result = apply_ufunc(",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 16
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 6,
-      "id": "solution_thrashing",
-      "last_seen_run_id": "20260418T171441Z"
+      "description": "In the onlycode arm (where the Edit tool is unavailable), the agent modifies production source by writing multi-hundred-line Python scripts that do content.replace(old, new) or slice lines[start:end] with hardcoded line indices. Several of these failed silently due to whitespace mismatches or shifting line indices between edits, making rewrites unauditable and causing multiple self-inflicted buggy intermediate states.",
+      "id": "script_driven_edit_fragility"
     },
     {
-      "arm_distribution": {
-        "baseline": 7,
-        "onlycode": 1
-      },
-      "description": "The agent assumes properties of the runtime environment (which Python interpreter has the target package, whether `pip`/`pytest` are on PATH, which site-packages are active) without first probing, and only discovers each mistaken assumption after a failed invocation. Each assumption is corrected reactively turn-by-turn rather than being established up front with a single environment discovery step.",
-      "evidence_refs": [
-        {
-          "excerpt": "keep_attrs = lambda attrs, context: (x_attrs if any(a is x_attrs for a in attrs) else attrs[0] if attrs else {})",
-          "log_ref": "pydata__xarray-7229_onlycode_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 0
-        },
-        {
-          "excerpt": "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 52
-        },
-        {
-          "excerpt": "find /opt /usr/local -name \"python*\" -type f",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 49
-        },
-        {
-          "excerpt": "/bin/bash: line 1: pip: command not found",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 46
-        },
-        {
-          "excerpt": "ModuleNotFoundError: No module named 'numpy'",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260418T171441Z",
-          "turn": 45
-        },
-        {
-          "excerpt": "/tmp/swebench/venvs/.../bin/python -c \"import astroid...\" -> ImportError: cannot import name 'formatargspec' from 'inspect'",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 42
-        },
-        {
-          "excerpt": "pip install -e . -q ... -> /bin/bash: line 1: pip: command not found",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 38
-        },
-        {
-          "excerpt": "python3 -c \"import astroid; ...\" -> ModuleNotFoundError: No module named 'astroid'",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 35
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 8,
-      "id": "state_assumption_drift",
-      "last_seen_run_id": "20260418T171441Z"
+      "description": "The agent makes multiple successive edits to the same code region, each revising the previous approach as new edge cases surface. The churn reflects that the agent did not reason through the full input matrix before committing to an edit, and it only stabilizes on a final approach after consulting an external reference. Intermediate attempts are discarded wholesale rather than incrementally refined.",
+      "id": "solution_thrashing"
     },
     {
-      "arm_distribution": {
-        "baseline": 6,
-        "onlycode": 0
-      },
-      "description": "After applying code edits, the agent fails to execute the actual target tests that would confirm behavioral correctness. Instead it substitutes weaker surrogates \u2014 visual diff comparison against a reference commit, `inspect.getsource` dumps, or ad-hoc AST shape probes \u2014 and declares the fix verified despite never successfully running the relevant test. In both observed cases, environment issues (numpy 2.x incompatibility, missing pytest/astroid in the default interpreter) were encountered and then bypassed rather than resolved, leaving runtime verification skipped entirely.",
-      "evidence_refs": [
-        {
-          "excerpt": "for node in module.body: print(type(node).__name__, getattr(node, 'type_annotation', None))",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 45
-        },
-        {
-          "excerpt": "/tmp/swebench/venvs/pylint-dev__pylint-4604/bin/python -c \"...from pylint.testutils import ... t.walk(module) ...\" -> ModuleNotFoundError: No module named 'pytest'",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 44
-        },
-        {
-          "excerpt": "import inspect; src = inspect.getsource(VariablesChecker._store_type_annotation_node); print(src)",
-          "log_ref": "pylint-dev__pylint-4604_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 47
-        },
-        {
-          "excerpt": "ModuleNotFoundError: No module named 'numpy'",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 27
-        },
-        {
-          "excerpt": "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release. Use `np.str_` instead.",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 33
-        },
-        {
-          "excerpt": "The venv has NumPy 2.x which is incompatible. Let me verify the fix by looking at the existing test suite for `where`",
-          "log_ref": "pydata__xarray-7229_baseline_run1",
-          "run_id": "20260417T201405Z",
-          "turn": 35
-        }
-      ],
-      "first_seen_run_id": "20260417T201405Z",
-      "frequency": 6,
-      "id": "verification_theater",
-      "last_seen_run_id": "20260417T201405Z"
+      "description": "The agent assumes properties of the runtime environment (which Python interpreter has the target package, whether pip/pytest are on PATH, which site-packages are active) without first probing, and only discovers each mistaken assumption after a failed invocation. Each assumption is corrected reactively turn-by-turn rather than being established up front with a single environment discovery step.",
+      "id": "state_assumption_drift"
+    },
+    {
+      "description": "When tests fail after a production fix, the agent's default posture is to edit the tests' expected values to match the new observed behavior rather than treating the failure as a signal to re-examine the fix. Even when the ground-truth patch does update the test expectations (as in django#11885 for test_large_delete / test_large_delete_related), the agent arrives at the new numbers by matching the observed assertion output rather than by deriving them from first principles about the underlying semantics \u2014 a habit that in other contexts would silently launder a buggy fix into a green run.",
+      "id": "test_expectation_rewriting"
+    },
+    {
+      "description": "After applying code edits, the agent fails to execute the actual target tests that would confirm behavioral correctness. Instead it substitutes weaker surrogates \u2014 visual diff comparison against a reference commit, inspect.getsource dumps, or ad-hoc AST shape probes \u2014 and declares the fix verified despite never successfully running the relevant test.",
+      "id": "verification_theater"
     }
   ],
   "version": 1

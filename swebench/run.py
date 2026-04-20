@@ -45,6 +45,35 @@ from swebench.harness import (
 from swebench.models import Problem
 
 
+def _mcp_config_without_persistent_kernel(
+    base_path: str,
+    results_dir: str | os.PathLike,
+    instance_id: str,
+    run_idx: int,
+) -> str:
+    """Return a tempfile path to a copy of ``base_path`` with the
+    ``ONLYCODES_PERSISTENT_KERNEL`` env var removed from every server entry.
+
+    Written under ``results_dir`` so it shares the run's lifetime and is
+    easy to inspect after the fact. Same (instance, run) always maps to the
+    same filename, so re-runs overwrite cleanly.
+    """
+    with open(base_path) as f:
+        cfg = json.load(f)
+    for srv in cfg.get("mcpServers", {}).values():
+        env = srv.get("env")
+        if isinstance(env, dict):
+            env.pop("ONLYCODES_PERSISTENT_KERNEL", None)
+            if not env:
+                srv.pop("env", None)
+    out_path = os.path.join(
+        str(results_dir), f"_mcp-config_{instance_id}_run{run_idx}_nokernel.json"
+    )
+    with open(out_path, "w") as f:
+        json.dump(cfg, f, indent=2)
+    return out_path
+
+
 class _ArmTask(NamedTuple):
     """Describes one arm execution to schedule."""
 
@@ -114,6 +143,7 @@ def _run_arm(
     claude_binary: str,
     mcp_config_path: str,
     root: Path,
+    persistent_kernel: bool = True,
     log_buffer: io.StringIO | None = None,
     needs_editable_reinstall: bool = False,
 ) -> str:
@@ -162,17 +192,56 @@ def _run_arm(
             _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
-    prompt = (
-        f"You are working in the repository at: {repo_dir}\n\n"
+    venv_python = os.path.join(venv_dir, "bin", "python")
+    is_onlycode = arm == "onlycode"
+    prompt_parts = [
+        f"You are working in the repository at: {repo_dir}\n",
+        f"The project's Python interpreter and dependencies are pre-installed at: {venv_python}",
+        f"Use this interpreter to run tests (e.g. `{venv_python} tests/runtests.py ...`).\n",
+    ]
+    if is_onlycode:
+        prompt_parts.append(
+            "A `codebox` helper module is auto-imported into your cwd. Prefer it "
+            "over hand-rolled subprocess.run(['cat', ...]) — its output is "
+            "byte-stable across identical reads, which keeps prompt-cache reuse "
+            "high. API:\n"
+            "  import codebox\n"
+            "  src   = codebox.read(path)              # full file as string\n"
+            "  block = codebox.read_lines(path, 200, 250)  # inclusive 1-indexed\n"
+            "  hits  = codebox.grep('pattern', path)   # 'path:line:text', sorted\n"
+            "  paths = codebox.files(root, pattern=None)   # recursive, sorted\n"
+            "  codebox.edit_replace(path, old, new)    # exact-once literal string, raises if 0/many\n"
+            "  codebox.write(path, content)            # overwrite whole file, mkdir -p\n"
+            "\n"
+            "To modify a file, use `codebox.edit_replace(path, old, new)` (an "
+            "exact-literal string swap — think of it as the Write tool's sibling "
+            "for surgical edits) or `codebox.write(path, content)` to rewrite the "
+            "whole file. Do NOT build edits by hand with `re.sub`, regex "
+            "substitution, string-split-and-join, or writing a script that "
+            "reads/mutates/writes a file — those patterns silently corrupt files "
+            "on partial matches. `edit_replace` raises on 0 or >1 matches, which "
+            "is the safety you want.\n"
+        )
+        if persistent_kernel:
+            prompt_parts.append(
+                "The execute_code Python interpreter is a PERSISTENT REPL keyed by cwd: "
+                "variables, imports, and opened-file contents survive across calls. "
+                "After you read a file once with `src = codebox.read(path)`, reference "
+                "`src` on later turns instead of re-reading. Re-reading a file you "
+                "already loaded wastes tokens — before issuing any read, check what "
+                "you already have in memory.\n"
+            )
+    prompt_parts.append(
         f"Fix the following bug. Make the minimal change needed.\n\n"
         f"{problem.problem_statement}"
     )
+    prompt = "\n".join(prompt_parts)
 
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
     # Build tools flags based on arm
     tools_flags: list[str] = []
-    if arm == "onlycode":
+    if is_onlycode:
         # --tools whitelists MCP tools but does not reliably block built-ins
         # like Monitor (added v2.1.98). --disallowedTools explicitly removes
         # every built-in so the agent can only use the two codebox MCP tools.
@@ -185,8 +254,16 @@ def _run_arm(
             "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
             "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
         )
+        # The default mcp-config.json enables the persistent kernel via
+        # ONLYCODES_PERSISTENT_KERNEL=1. When --no-persistent-kernel is passed
+        # we emit a per-run temp config with that env scrubbed.
+        effective_mcp_config = mcp_config_path
+        if not persistent_kernel:
+            effective_mcp_config = _mcp_config_without_persistent_kernel(
+                mcp_config_path, results_dir, problem.instance_id, run_idx
+            )
         tools_flags = [
-            "--mcp-config", mcp_config_path,
+            "--mcp-config", effective_mcp_config,
             "--strict-mcp-config",
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
             "--disallowedTools", _BLOCKED_BUILTINS,
@@ -453,6 +530,17 @@ def _cleanup_stale_overlays(
     help="Which arms to run (default: both).",
 )
 @click.option(
+    "--persistent-kernel/--no-persistent-kernel",
+    "persistent_kernel",
+    default=True,
+    show_default=True,
+    help=(
+        "For the onlycode arm, run the execute_code Python interpreter as a "
+        "persistent REPL (variables/imports survive across calls). Default on. "
+        "Pass --no-persistent-kernel to run every call in a fresh subprocess."
+    ),
+)
+@click.option(
     "--runs",
     "num_runs",
     type=int,
@@ -514,6 +602,7 @@ def _cleanup_stale_overlays(
 def run_command(
     filter_ids: str | None,
     arms: str,
+    persistent_kernel: bool,
     num_runs: int,
     parallel: int,
     fail_fast: bool,
@@ -570,18 +659,17 @@ def run_command(
     # --- Environment pre-flight checks ------------------------------------------
     env_errors: list[str] = []
     if "onlycode" in arm_list:
-        # MCP config must exist
-        if not os.path.isfile(mcp_config_path):
-            env_errors.append(f"mcp-config.json not found at {mcp_config_path}")
-        else:
-            # Parse config and check each server's command binary exists
+        _configs_to_check = [mcp_config_path]
+        for _cfg in _configs_to_check:
+            if not os.path.isfile(_cfg):
+                env_errors.append(f"MCP config not found at {_cfg}")
+                continue
             try:
-                with open(mcp_config_path) as _f:
+                with open(_cfg) as _f:
                     _mcp = json.load(_f)
                 for _srv_name, _srv in _mcp.get("mcpServers", {}).items():
                     _cmd = _srv.get("command", "")
                     if _cmd and not (os.path.isfile(_cmd) and os.access(_cmd, os.X_OK)):
-                        # Also check PATH
                         if not shutil.which(_cmd):
                             env_errors.append(
                                 f"MCP server '{_srv_name}' command not found or not executable: {_cmd!r}"
@@ -593,7 +681,7 @@ def run_command(
                                 f"MCP server '{_srv_name}' script not found: {_arg!r}"
                             )
             except (json.JSONDecodeError, OSError) as _e:
-                env_errors.append(f"Failed to parse {mcp_config_path}: {_e}")
+                env_errors.append(f"Failed to parse {_cfg}: {_e}")
 
     if env_errors:
         click.echo("ERROR: Environment pre-flight failed:", err=True)
@@ -610,6 +698,8 @@ def run_command(
     click.echo(f"=== SWE-bench Evaluation ===")
     click.echo(f"Problems: {len(problems)}")
     click.echo(f"Arms: {', '.join(arm_list)}")
+    if "onlycode" in arm_list:
+        click.echo(f"Persistent kernel: {persistent_kernel}")
     click.echo(f"Runs per arm: {num_runs}")
     click.echo(f"Parallel: {parallel}")
     click.echo(f"Fail-fast: {fail_fast}")
@@ -781,6 +871,7 @@ def run_command(
                         claude_binary=claude_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
+                        persistent_kernel=persistent_kernel,
                         needs_editable_reinstall=task.needs_editable_reinstall,
                     )
                 except BaseException:
@@ -833,6 +924,7 @@ def run_command(
                         claude_binary=claude_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
+                        persistent_kernel=persistent_kernel,
                         log_buffer=buf,
                         needs_editable_reinstall=task.needs_editable_reinstall,
                     )
@@ -888,8 +980,10 @@ def run_command(
                         for instance_id, verdict in fut.result():
                             if verdict == "FAIL" and fail_fast:
                                 had_failure = True
-                    except Exception:
-                        had_failure = True
+                    except Exception as exc:
+                        click.echo(f"Thread raised an exception: {exc}", err=True)
+                        if fail_fast:
+                            had_failure = True
 
                     # Cancel remaining unstarted futures on failure
                     if had_failure and fail_fast:
@@ -900,7 +994,7 @@ def run_command(
             # a BaseException, so the outer except clause below will still run
             # _teardown_all_overlays() before the process exits.
             if had_failure:
-                click.echo("FAIL detected with --fail-fast; stopping early.")
+                click.echo("FAIL detected — stopping.")
                 raise SystemExit(1)
         except BaseException:
             _teardown_all_overlays()

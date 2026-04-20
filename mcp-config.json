@@ -4,7 +4,10 @@
       "type": "stdio",
       "command": "/usr/bin/node",
       "args": ["/workspaces/hub_1/onlycodes/exec-server.bundle.mjs"],
-      "cwd": "/workspaces/hub_1/onlycodes"
+      "cwd": "/workspaces/hub_1/onlycodes",
+      "env": {
+        "ONLYCODES_PERSISTENT_KERNEL": "1"
+      }
     }
   }
 }

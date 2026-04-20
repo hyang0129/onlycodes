@@ -22734,19 +22734,250 @@ async function logSession(entry) {
   } catch {
   }
 }
+var _ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+var _TMP_RE = /\/tmp\/[A-Za-z0-9_.-]*onlycodes-[A-Za-z0-9]+/g;
+function canonicalizeOutput(text) {
+  if (typeof text !== "string" || text.length === 0) return text;
+  let out = text.replace(_ANSI_RE, "");
+  out = out.replace(_TMP_RE, "<tmpdir>");
+  out = out.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return out;
+}
+var _HELPER_MODULES = ["mcp_bridge.py", "codebox.py"];
+function _stageHelperModules(workDir) {
+  for (const fname of _HELPER_MODULES) {
+    const src = join2(__dirname2, fname);
+    const dst = join2(workDir, fname);
+    try {
+      copyFileSync(src, dst);
+    } catch (e) {
+      console.error(`Warning: could not copy ${fname} to cwd: ${e.message}`);
+    }
+  }
+}
 var DEFAULT_TIMEOUT_SECONDS = 30;
 var MAX_OUTPUT_BYTES = 1024 * 1024;
+var _pythonKernels = /* @__PURE__ */ new Map();
+var _kernelResetPending = /* @__PURE__ */ new Set();
+function _killKernel(handle, reason) {
+  if (handle.dead) return;
+  handle.dead = true;
+  try {
+    handle.child.kill("SIGKILL");
+  } catch {
+  }
+  if (handle.pendingResolve) {
+    const resolve = handle.pendingResolve;
+    handle.pendingResolve = null;
+    resolve({
+      stdout: "",
+      stderr: `kernel reset: ${reason}`,
+      exit_code: 1,
+      duration_ms: 0,
+      timed_out: reason === "timeout"
+    });
+  }
+  if (_pythonKernels.get(handle.cwd) === handle) {
+    _pythonKernels.delete(handle.cwd);
+  }
+  _kernelResetPending.add(handle.cwd);
+}
+async function _spawnPythonKernel(workDir) {
+  const strippedEnv = buildStrippedEnv();
+  strippedEnv["ONLYCODES_BRIDGE_SOCK"] = getBridgeSocketPath();
+  _stageHelperModules(workDir);
+  const kernelScript = join2(__dirname2, "python_kernel.py");
+  const unshareAttempts = [
+    {
+      check: ["unshare", ["--user", "--map-root-user", "--net", "true"]],
+      cmd: "unshare",
+      args: ["--user", "--map-root-user", "--net", "python3", "-u", kernelScript]
+    },
+    {
+      check: ["unshare", ["-n", "true"]],
+      cmd: "unshare",
+      args: ["-n", "python3", "-u", kernelScript]
+    }
+  ];
+  let cmd, args;
+  let unshareAvailable = false;
+  for (const attempt of unshareAttempts) {
+    try {
+      await new Promise((resolve, reject) => {
+        const test = spawn2(attempt.check[0], attempt.check[1], { stdio: "ignore" });
+        test.on(
+          "close",
+          (exitCode) => exitCode === 0 ? resolve() : reject(new Error("unshare unavailable"))
+        );
+        test.on("error", reject);
+      });
+      cmd = attempt.cmd;
+      args = attempt.args;
+      unshareAvailable = true;
+      break;
+    } catch {
+    }
+  }
+  if (!unshareAvailable) {
+    throw new Error("network isolation (unshare -n) is required but not available on this system.");
+  }
+  const child = spawn2(cmd, args, {
+    cwd: workDir,
+    env: strippedEnv,
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: false
+  });
+  const handle = {
+    child,
+    stdoutBuf: Buffer.alloc(0),
+    pendingResolve: null,
+    dead: false,
+    cwd: workDir
+  };
+  let stderrAccum = "";
+  child.stdout.on("data", (chunk) => {
+    handle.stdoutBuf = Buffer.concat([handle.stdoutBuf, chunk]);
+    while (handle.pendingResolve) {
+      const newlineIdx = handle.stdoutBuf.indexOf(10);
+      if (newlineIdx === -1) return;
+      const headerStr = handle.stdoutBuf.slice(0, newlineIdx).toString("ascii").trim();
+      const n = parseInt(headerStr, 10);
+      if (!Number.isFinite(n) || n < 0) {
+        _killKernel(handle, "framing error");
+        return;
+      }
+      if (handle.stdoutBuf.length < newlineIdx + 1 + n) return;
+      const payload = handle.stdoutBuf.slice(newlineIdx + 1, newlineIdx + 1 + n).toString("utf-8");
+      handle.stdoutBuf = handle.stdoutBuf.slice(newlineIdx + 1 + n);
+      let parsed;
+      try {
+        parsed = JSON.parse(payload);
+      } catch (e) {
+        _killKernel(handle, `bad JSON from kernel: ${e.message}`);
+        return;
+      }
+      const resolve = handle.pendingResolve;
+      handle.pendingResolve = null;
+      resolve({
+        stdout: typeof parsed.stdout === "string" ? parsed.stdout : "",
+        stderr: typeof parsed.stderr === "string" ? parsed.stderr : "",
+        exit_code: typeof parsed.exit_code === "number" ? parsed.exit_code : 0,
+        duration_ms: 0,
+        // filled in by caller
+        timed_out: false
+      });
+    }
+  });
+  child.stderr.on("data", (chunk) => {
+    if (stderrAccum.length < MAX_OUTPUT_BYTES) {
+      stderrAccum += chunk.toString();
+    }
+  });
+  child.on("close", (exitCode) => {
+    handle.dead = true;
+    if (handle.pendingResolve) {
+      const resolve = handle.pendingResolve;
+      handle.pendingResolve = null;
+      resolve({
+        stdout: "",
+        stderr: `kernel died (exit ${exitCode}): ${stderrAccum.slice(-2e3)}`,
+        exit_code: 1,
+        duration_ms: 0,
+        timed_out: false
+      });
+    }
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
+  });
+  child.on("error", (err) => {
+    handle.dead = true;
+    if (handle.pendingResolve) {
+      const resolve = handle.pendingResolve;
+      handle.pendingResolve = null;
+      resolve({
+        stdout: "",
+        stderr: `kernel spawn error: ${err.message}`,
+        exit_code: 1,
+        duration_ms: 0,
+        timed_out: false
+      });
+    }
+    if (_pythonKernels.get(workDir) === handle) {
+      _pythonKernels.delete(workDir);
+    }
+  });
+  return handle;
+}
+async function _getOrSpawnKernel(workDir) {
+  let handle = _pythonKernels.get(workDir);
+  if (handle && !handle.dead) return handle;
+  handle = await _spawnPythonKernel(workDir);
+  _pythonKernels.set(workDir, handle);
+  return handle;
+}
+async function executePythonStateful(code, timeoutSeconds, cwd) {
+  const startTime = Date.now();
+  const handle = await _getOrSpawnKernel(cwd);
+  const hadResetPending = _kernelResetPending.has(cwd);
+  const result = await new Promise((resolve) => {
+    if (handle.dead) {
+      resolve({
+        stdout: "",
+        stderr: "kernel unavailable",
+        exit_code: 1,
+        duration_ms: Date.now() - startTime,
+        timed_out: false
+      });
+      return;
+    }
+    if (handle.pendingResolve) {
+      resolve({
+        stdout: "",
+        stderr: "kernel busy",
+        exit_code: 1,
+        duration_ms: Date.now() - startTime,
+        timed_out: false
+      });
+      return;
+    }
+    const timer = setTimeout(() => {
+      _killKernel(handle, "timeout");
+    }, timeoutSeconds * 1e3);
+    handle.pendingResolve = (result2) => {
+      clearTimeout(timer);
+      result2.duration_ms = Date.now() - startTime;
+      resolve(result2);
+    };
+    const payload = JSON.stringify({ code });
+    const buf = Buffer.from(payload, "utf-8");
+    try {
+      handle.child.stdin.write(`${buf.length}
+`);
+      handle.child.stdin.write(buf);
+    } catch (e) {
+      _killKernel(handle, `write error: ${e.message}`);
+    }
+  });
+  if (hadResetPending) {
+    _kernelResetPending.delete(cwd);
+    result.stderr = "[kernel was reset before this call \u2014 prior state lost]\n" + result.stderr;
+  }
+  return result;
+}
+process.on("exit", () => {
+  for (const handle of _pythonKernels.values()) {
+    try {
+      handle.child.kill("SIGKILL");
+    } catch {
+    }
+  }
+});
 async function executeCode(code, language, timeoutSeconds, cwd = null) {
   const workDir = cwd ?? await mkdtemp(join2(tmpdir(), "onlycodes-"));
   const strippedEnv = buildStrippedEnv();
   strippedEnv["ONLYCODES_BRIDGE_SOCK"] = getBridgeSocketPath();
-  const mcpBridgeSrc = join2(__dirname2, "mcp_bridge.py");
-  const mcpBridgeDst = join2(workDir, "mcp_bridge.py");
-  try {
-    copyFileSync(mcpBridgeSrc, mcpBridgeDst);
-  } catch (e) {
-    console.error(`Warning: could not copy mcp_bridge.py to cwd: ${e.message}`);
-  }
+  _stageHelperModules(workDir);
   const interpreter = language === "python" ? "python3" : "bash";
   const unshareAttempts = [
     { check: ["unshare", ["--user", "--map-root-user", "--net", "true"]], cmdFn: () => ({ cmd: "unshare", args: ["--user", "--map-root-user", "--net", interpreter, "-c", code] }) },
@@ -22851,14 +23082,22 @@ function classifyResult(result) {
   return "non_retryable";
 }
 var fallbackCount = 0;
+var PERSISTENT_KERNEL_ENABLED = process.env.ONLYCODES_PERSISTENT_KERNEL === "1";
 async function executeWithRetry(code, language, timeoutSeconds, cwd = null) {
-  const result1 = await executeCode(code, language, timeoutSeconds, cwd);
+  const runOnce = async () => {
+    if (language === "python" && PERSISTENT_KERNEL_ENABLED) {
+      const effectiveCwd = cwd ?? await mkdtemp(join2(tmpdir(), "onlycodes-"));
+      return executePythonStateful(code, timeoutSeconds, effectiveCwd);
+    }
+    return executeCode(code, language, timeoutSeconds, cwd);
+  };
+  const result1 = await runOnce();
   const classification1 = classifyResult(result1);
   if (classification1 === "success") {
     return { result: result1, fallback_used: false, warning: null };
   }
   if (classification1 === "retryable") {
-    const result2 = await executeCode(code, language, timeoutSeconds, cwd);
+    const result2 = await runOnce();
     const classification2 = classifyResult(result2);
     if (classification2 === "success") {
       return { result: result2, fallback_used: false, warning: null };
@@ -22888,7 +23127,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "execute_code",
-      description: "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter \u2014 no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.",
+      description: PERSISTENT_KERNEL_ENABLED ? "Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash \u2014 when that happens, stderr will say \"kernel reset\" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call \u2014 no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls \u2014 its output is byte-stable across identical reads, which keeps prompt-cache reuse high." : "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter \u2014 no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls \u2014 its output is byte-stable across identical reads, which keeps prompt-cache reuse high.",
       inputSchema: {
         type: "object",
         properties: {
@@ -23001,13 +23240,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     duration_ms: result.duration_ms,
     fallback_used
   });
+  const canonStdout = canonicalizeOutput(result.stdout);
+  const canonStderr = canonicalizeOutput(result.stderr);
   const content = [
     {
       type: "text",
       text: JSON.stringify(
         {
-          stdout: result.stdout,
-          stderr: result.stderr,
+          stdout: canonStdout,
+          stderr: canonStderr,
           exit_code: result.exit_code
         },
         null,
