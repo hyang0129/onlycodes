@@ -13,6 +13,7 @@ Correctness criterion:
 
 Determinism: pure AST analysis, no randomness.
 """
+# GRADER-SENTINEL: 2030e144-569e-4d45-a247-e8e6c0d1290c
 
 from __future__ import annotations
 

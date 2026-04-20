@@ -13,6 +13,7 @@ Correctness criterion:
 
 Determinism: the toy model is a deterministic pure-Python function.
 """
+# GRADER-SENTINEL: 5f2e1c62-a552-48e1-bf36-3a4f6522f888
 
 from __future__ import annotations
 

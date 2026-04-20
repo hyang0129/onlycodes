@@ -13,6 +13,7 @@ Correctness criterion:
 
 Determinism: pure function of scratch_dir/data.jsonl contents.
 """
+# GRADER-SENTINEL: 32ae948a-f0ed-496a-96c3-4c6d3f17fc56
 
 from __future__ import annotations
 

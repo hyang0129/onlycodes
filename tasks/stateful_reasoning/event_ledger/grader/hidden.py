@@ -1,4 +1,6 @@
 """Hidden grader for stateful_reasoning__event_ledger."""
+
+# GRADER-SENTINEL: 836b3259-1763-4529-bdc3-e1dfcd8ac5ec
 from __future__ import annotations
 import json
 from dataclasses import dataclass

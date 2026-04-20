@@ -235,6 +235,59 @@ def test_arm_list_constants():
     assert set(ARMS) == {"code_only", "tool_rich"}
 
 
+def test_run_artifact_arm_sets_leak_detected_true(tmp_path, stub_claude, monkeypatch):
+    """Issue #108: if the agent transcript contains the grader sentinel, the
+    per-run auditor must flag the run by setting result.leak_detected=True."""
+    sentinel = "feedface-1111-4222-8333-444455556666"
+    grader_src = textwrap.dedent(f"""
+        # GRADER-SENTINEL: {sentinel}
+    """) + _GRADER_CHECKS_42
+    task = _make_fixture(tmp_path / "task", grader_src)
+
+    def leaky_run(*, prompt, repo_dir, system_prompt, tools_flags,
+                  result_file, claude_binary):
+        # Simulate an agent that peeked at grader/hidden.py and echoed its
+        # contents back into its transcript — the fingerprint must be caught.
+        Path(repo_dir, "answer.txt").write_text("42\n")
+        with open(result_file, "a") as f:
+            f.write(json.dumps({
+                "type": "tool_result",
+                "content": f"read hidden.py: sentinel={sentinel}",
+            }) + "\n")
+    monkeypatch.setattr(artifact_run_mod, "run_claude", leaky_run)
+
+    results_dir = tmp_path / "results"
+    result = run_artifact_arm(
+        task, "code_only", 1,
+        results_dir=results_dir,
+        claude_binary="/bin/true",
+        echo=lambda _m: None,
+    )
+    assert result.leak_detected is True
+    data = json.loads(
+        (results_dir / task.instance_id / "code_only" / "run1" / "result.json").read_text()
+    )
+    assert data["leak_detected"] is True
+
+
+def test_run_artifact_arm_leak_detected_false_on_clean_run(tmp_path, stub_claude, monkeypatch):
+    """Paired negative: a clean transcript must produce leak_detected=False."""
+    sentinel = "abadcafe-2222-4333-8444-555566667777"
+    grader_src = textwrap.dedent(f"""
+        # GRADER-SENTINEL: {sentinel}
+    """) + _GRADER_CHECKS_42
+    task = _make_fixture(tmp_path / "task", grader_src)
+    monkeypatch.setattr(artifact_run_mod, "run_claude", _stub_claude_writes("42\n"))
+
+    result = run_artifact_arm(
+        task, "code_only", 1,
+        results_dir=tmp_path / "results",
+        claude_binary="/bin/true",
+        echo=lambda _m: None,
+    )
+    assert result.leak_detected is False
+
+
 def test_build_prompt_uses_absolute_paths(tmp_path):
     """Regression for #107: agent must receive absolute paths, not relative.
 

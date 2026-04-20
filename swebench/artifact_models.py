@@ -96,6 +96,10 @@ class ArtifactArmResult:
     num_turns: int | None
     claude_version: str | None
     agent_jsonl_path: str
+    # Issue #108: per-run leak audit. True if the agent transcript contained a
+    # grader sentinel or a reference-output fingerprint for this task. Defaults
+    # to False so pre-audit runs/data remain loadable.
+    leak_detected: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

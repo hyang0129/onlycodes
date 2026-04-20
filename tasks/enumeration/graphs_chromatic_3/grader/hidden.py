@@ -12,6 +12,7 @@ Correctness criterion:
 
 Determinism: deterministic enumeration, no randomness.
 """
+# GRADER-SENTINEL: 3c634b2d-56ba-4e3b-ba6f-96a74920240c
 
 from __future__ import annotations
 
