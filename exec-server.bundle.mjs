@@ -22888,7 +22888,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "execute_code",
-      description: "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory. Prefer writing one complete script over multiple calls.",
+      description: "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter \u2014 no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.",
       inputSchema: {
         type: "object",
         properties: {

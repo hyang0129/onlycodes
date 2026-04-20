@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import random
 import re
@@ -34,6 +35,7 @@ from swebench.harness import (
     apply_test_patch,
     clone_repo,
     find_claude_binary,
+    get_claude_version,
     git_reset,
     run_claude,
     run_tests,
@@ -171,13 +173,38 @@ def _run_arm(
     # Build tools flags based on arm
     tools_flags: list[str] = []
     if arm == "onlycode":
+        # --tools whitelists MCP tools but does not reliably block built-ins
+        # like Monitor (added v2.1.98). --disallowedTools explicitly removes
+        # every built-in so the agent can only use the two codebox MCP tools.
+        _BLOCKED_BUILTINS = (
+            "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
+            "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
+            "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
+            "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
+            "RemoteTrigger,SendMessage,Skill,"
+            "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
+            "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
+        )
         tools_flags = [
             "--mcp-config", mcp_config_path,
             "--strict-mcp-config",
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
+            "--disallowedTools", _BLOCKED_BUILTINS,
         ]
 
     start_time = time.time()
+
+    # Prepend a metadata record so every JSONL is self-describing.
+    claude_version = get_claude_version(claude_binary)
+    with open(result_file, "w") as _meta_f:
+        _meta_f.write(json.dumps({
+            "type": "meta",
+            "instance_id": problem.instance_id,
+            "arm": arm,
+            "run": run_idx,
+            "claude_binary": claude_binary,
+            "claude_version": claude_version,
+        }) + "\n")
 
     run_claude(
         prompt=prompt,
@@ -540,6 +567,46 @@ def run_command(
     if arms in ("onlycode", "both"):
         arm_list.append("onlycode")
 
+    # --- Environment pre-flight checks ------------------------------------------
+    env_errors: list[str] = []
+    if "onlycode" in arm_list:
+        # MCP config must exist
+        if not os.path.isfile(mcp_config_path):
+            env_errors.append(f"mcp-config.json not found at {mcp_config_path}")
+        else:
+            # Parse config and check each server's command binary exists
+            try:
+                with open(mcp_config_path) as _f:
+                    _mcp = json.load(_f)
+                for _srv_name, _srv in _mcp.get("mcpServers", {}).items():
+                    _cmd = _srv.get("command", "")
+                    if _cmd and not (os.path.isfile(_cmd) and os.access(_cmd, os.X_OK)):
+                        # Also check PATH
+                        if not shutil.which(_cmd):
+                            env_errors.append(
+                                f"MCP server '{_srv_name}' command not found or not executable: {_cmd!r}"
+                            )
+                    _args = _srv.get("args", [])
+                    for _arg in _args:
+                        if _arg.endswith((".mjs", ".js", ".cjs")) and not os.path.isfile(_arg):
+                            env_errors.append(
+                                f"MCP server '{_srv_name}' script not found: {_arg!r}"
+                            )
+            except (json.JSONDecodeError, OSError) as _e:
+                env_errors.append(f"Failed to parse {mcp_config_path}: {_e}")
+
+    if env_errors:
+        click.echo("ERROR: Environment pre-flight failed:", err=True)
+        for _err in env_errors:
+            click.echo(f"  • {_err}", err=True)
+        click.echo(
+            "\nFix the issues above before running the onlycode arm.\n"
+            "  - Node.js must be installed for exec-server.bundle.mjs\n"
+            "  - Install with: sudo apt-get install -y nodejs",
+            err=True,
+        )
+        raise SystemExit(1)
+
     click.echo(f"=== SWE-bench Evaluation ===")
     click.echo(f"Problems: {len(problems)}")
     click.echo(f"Arms: {', '.join(arm_list)}")
@@ -550,6 +617,8 @@ def run_command(
     click.echo(f"Resume: {resume}")
     click.echo(f"Output dir: {results_dir}")
     click.echo(f"Claude binary: {claude_binary}")
+    claude_version = get_claude_version(claude_binary)
+    click.echo(f"Claude version: {claude_version}")
     click.echo()
 
     # --- Cache backend selection (only relevant when --use-cache) ---------------
