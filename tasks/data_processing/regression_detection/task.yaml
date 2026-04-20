@@ -1,0 +1,16 @@
+instance_id: data_processing__regression_detection
+category: data_processing
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/regressions.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 600
+tags:
+  - data_processing
+  - aggregation
+  - p95
+  - regression

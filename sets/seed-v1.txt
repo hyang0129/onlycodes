@@ -3,3 +3,4 @@
 # Append-only: this file is populated by the seed-task slices (#95 onward).
 
 data_processing__p95_latency_easy
+data_processing__regression_detection
