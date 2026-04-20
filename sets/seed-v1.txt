@@ -1,0 +1,3 @@
+# Curated artifact task set — seed-v1.
+# One instance_id per line. Blank lines and # comments are ignored.
+# Append-only: this file is populated by the seed-task slices (#95 onward).

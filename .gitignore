@@ -5,6 +5,7 @@ results_mcp/
 results_requests/
 results_swebench/
 results_swebench/_analysis/
+results_artifact/
 __pycache__/
 *.pyc
 .pytest_cache/
