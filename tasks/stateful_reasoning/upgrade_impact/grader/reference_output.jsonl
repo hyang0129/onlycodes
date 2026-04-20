@@ -1,0 +1,3 @@
+{"package": "api-gateway", "constraint": "~1.4.0"}
+{"package": "auth-service", "constraint": "1.4.2"}
+{"package": "web-server", "constraint": "^1.0.0"}
