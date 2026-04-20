@@ -17,6 +17,7 @@ from swebench import artifact_run as artifact_run_mod
 from swebench.artifact_models import ExecutionBudget, Task
 from swebench.artifact_run import (
     ARMS,
+    _build_prompt,
     _build_tools_flags,
     is_run_complete,
     run_artifact_arm,
@@ -232,3 +233,28 @@ def test_is_run_complete_true_false(tmp_path):
 
 def test_arm_list_constants():
     assert set(ARMS) == {"code_only", "tool_rich"}
+
+
+def test_build_prompt_uses_absolute_paths(tmp_path):
+    """Regression for #107: agent must receive absolute paths, not relative.
+
+    The MCP ``execute_code`` tool defaults to a fresh tmpdir when the agent
+    omits ``cwd=`` on a call. Relative paths in the prompt would resolve
+    against that tmpdir, not scratch_dir — so the output artifact would land
+    outside where the grader looks. Absolute paths remove the ambiguity.
+    """
+    task_dir = tmp_path / "task"
+    task = _make_fixture(task_dir, _GRADER_CHECKS_42)
+    scratch = tmp_path / "results" / task.instance_id / "code_only" / "run1" / "scratch"
+    scratch.mkdir(parents=True)
+
+    prompt = _build_prompt(task, scratch, "code_only")
+
+    scratch_abs = str(scratch.resolve())
+    output_abs = str((scratch.resolve() / task.output_artifact))
+
+    # Must contain absolute scratch path and absolute output path.
+    assert scratch_abs in prompt
+    assert output_abs in prompt
+    # Must NOT contain the old "relative path" framing that caused #107.
+    assert "relative path" not in prompt

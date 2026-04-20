@@ -57,9 +57,16 @@ def _build_prompt(task: Task, scratch_dir: Path, arm: str) -> str:
         raise FileNotFoundError(f"problem_statement not found: {prompt_path}")
     prompt_body = prompt_path.read_text()
 
+    # Use absolute paths so the agent does not need to thread cwd through
+    # every code-execution call. The tool_rich arm's Bash inherits cwd from
+    # run_claude's subprocess, but code_only routes through MCP execute_code
+    # which defaults to a fresh tmpdir when the agent omits the cwd= param.
+    # Absolute paths remove the ambiguity for both arms.
+    scratch_abs = scratch_dir.resolve()
+    output_abs = scratch_abs / task.output_artifact
     parts = [
-        f"You are working in the directory: {scratch_dir}",
-        f"Write your output artifact to the relative path: {task.output_artifact}",
+        f"Your input files are under the absolute path: {scratch_abs}",
+        f"Write your output artifact to the absolute path: {output_abs}",
         "",
         prompt_body,
     ]
