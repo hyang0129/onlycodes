@@ -1,0 +1,16 @@
+instance_id: algorithmic__min_cost_assignment
+category: algorithmic
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/assignment.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 15
+  max_wall_seconds: 120
+tags:
+  - algorithmic
+  - optimization
+  - assignment
+  - combinatorial
