@@ -1,0 +1,12 @@
+{"endpoint": "/api/v1/auth/login", "p95_ms": 171.114, "count": 440}
+{"endpoint": "/api/v1/auth/refresh", "p95_ms": 56.713, "count": 369}
+{"endpoint": "/api/v1/catalog", "p95_ms": 308.5, "count": 545}
+{"endpoint": "/api/v1/checkout", "p95_ms": 808.95, "count": 378}
+{"endpoint": "/api/v1/orders", "p95_ms": 221.027, "count": 819}
+{"endpoint": "/api/v1/orders/:id", "p95_ms": 132.721, "count": 675}
+{"endpoint": "/api/v1/profile", "p95_ms": 92.225, "count": 499}
+{"endpoint": "/api/v1/users", "p95_ms": 110.248, "count": 1490}
+{"endpoint": "/api/v1/users/:id", "p95_ms": 67.753, "count": 1073}
+{"endpoint": "/api/v2/search", "p95_ms": 436.693, "count": 968}
+{"endpoint": "/api/v2/users", "p95_ms": 95.587, "count": 671}
+{"endpoint": "/metrics", "p95_ms": 27.065, "count": 221}
