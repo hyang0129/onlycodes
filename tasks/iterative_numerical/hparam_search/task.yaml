@@ -1,0 +1,16 @@
+instance_id: iterative_numerical__hparam_search
+category: iterative_numerical
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/result.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 50
+  max_wall_seconds: 300
+tags:
+  - iterative_numerical
+  - hyperparameter_search
+  - optimization
+  - numerical
