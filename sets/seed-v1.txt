@@ -14,3 +14,8 @@ stateful_reasoning__unreachable_functions
 stateful_reasoning__upgrade_impact
 iterative_numerical__exp_decay_fit
 iterative_numerical__hparam_search
+
+# Arm-gate signal tasks (B/C stress)
+data_processing__multi_file_cohort
+stateful_reasoning__event_ledger
+iterative_numerical__bisection_calibration

@@ -1,0 +1,17 @@
+instance_id: stateful_reasoning__event_ledger
+category: stateful_reasoning
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/result.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 30
+  max_wall_seconds: 300
+tags:
+  - stateful_reasoning
+  - sequential
+  - ledger
+  - jsonl
