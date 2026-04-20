@@ -8,3 +8,5 @@ algorithmic__makespan_scheduling
 algorithmic__min_cost_assignment
 verification_heavy__parse_iso_duration
 verification_heavy__lru_cache_impl
+enumeration__latin_squares_3
+enumeration__graphs_chromatic_3

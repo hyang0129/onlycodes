@@ -1,0 +1,15 @@
+instance_id: enumeration__latin_squares_3
+category: enumeration
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/latin_squares.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - enumeration
+  - latin_squares
+  - combinatorics

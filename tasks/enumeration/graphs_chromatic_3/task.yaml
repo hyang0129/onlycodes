@@ -1,0 +1,16 @@
+instance_id: enumeration__graphs_chromatic_3
+category: enumeration
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/graphs.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 300
+tags:
+  - enumeration
+  - graph_theory
+  - chromatic_number
+  - combinatorics
