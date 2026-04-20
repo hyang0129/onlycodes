@@ -1,0 +1,16 @@
+instance_id: verification_heavy__lru_cache_impl
+category: verification_heavy
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/lru_cache.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.py
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - verification_heavy
+  - data_structures
+  - lru_cache
+  - python

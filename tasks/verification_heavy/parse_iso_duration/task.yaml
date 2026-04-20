@@ -1,0 +1,16 @@
+instance_id: verification_heavy__parse_iso_duration
+category: verification_heavy
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/solution.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.py
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - verification_heavy
+  - parsing
+  - datetime
+  - python
