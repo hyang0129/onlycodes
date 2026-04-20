@@ -20,6 +20,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import click
 
@@ -161,7 +162,7 @@ def _detect_artifact_layout(results_dir: Path) -> bool:
     return False
 
 
-def _print_artifact_table(rows: list[ArtifactRow], echo) -> None:
+def _print_artifact_table(rows: list[ArtifactRow], echo: Callable[[str], None]) -> None:
     try:
         from tabulate import tabulate
 
@@ -195,9 +196,8 @@ def _print_artifact_table(rows: list[ArtifactRow], echo) -> None:
             )
 
     # Pass-rate with and without tainted runs.
-    total = len(rows)
     clean = [r for r in rows if not r.leak_detected]
-    tainted = total - len(clean)
+    tainted = len(rows) - len(clean)
     passes_clean = sum(1 for r in clean if r.verdict == "PASS")
     echo("")
     echo(

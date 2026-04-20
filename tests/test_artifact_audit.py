@@ -149,3 +149,30 @@ def test_audit_leak_no_fingerprints_is_noop(tmp_path: Path) -> None:
 def test_min_combined_len_constant_is_reasonable() -> None:
     # Guard against accidental regression to a trivially-small threshold.
     assert MIN_COMBINED_LEN >= 40
+
+
+def test_scan_matches_json_escaped_reference_line() -> None:
+    """F-2 regression: ``_normalise`` must let a reference line containing
+    double quotes match when those quotes are JSON-backslash-escaped inside
+    ``agent.jsonl``. Removing ``_normalise`` would make this test fail
+    without affecting any of the existing positive-path tests."""
+    line = '{"endpoint": "/api/v1/orders", "p95_ms": 221.027, "count": 819}'
+    fp = Fingerprints(sentinel=None, reference_lines=(line,))
+    # Simulate how the line appears inside a stream-json record where inner
+    # quotes are backslash-escaped (\" and \n). The raw substring does NOT
+    # contain the needle verbatim — it only matches after ``_normalise``.
+    haystack = (
+        r'prefix {\"endpoint\": \"/api/v1/orders\", \"p95_ms\": 221.027, '
+        r'\"count\": 819} suffix'
+    )
+    assert line not in haystack  # sanity: raw substring must differ
+    assert scan_text_for_fingerprints(haystack, fp)
+
+
+def test_scan_does_not_match_unrelated_escaped_content() -> None:
+    """Paired negative for F-2: escaped content that is NOT the reference line
+    must not match, even after normalisation."""
+    line = '{"endpoint": "/api/v1/orders", "p95_ms": 221.027, "count": 819}'
+    fp = Fingerprints(sentinel=None, reference_lines=(line,))
+    haystack = r'{"type":"assistant","content":"I said \"hello world\" and moved on."}'
+    assert not scan_text_for_fingerprints(haystack, fp)

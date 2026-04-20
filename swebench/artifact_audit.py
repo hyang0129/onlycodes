@@ -42,6 +42,11 @@ MIN_LINE_LEN = 8
 MIN_COMBINED_LEN = 80
 MAX_LINES = 3
 
+# The regex deliberately accepts any >=8-char alnum+hyphen token rather than a
+# strict UUID4 shape. Seed-v1 tasks use UUID4 per the PR-#119 / SCHEMA
+# convention, but a later task-generation pipeline may prefer slug-based
+# identifiers (e.g. `task-slug-v2-a1b2c3`). The laxity is intentional; any
+# unique high-entropy token committed into hidden.py will work as a sentinel.
 _SENTINEL_RE = re.compile(r"#\s*GRADER-SENTINEL:\s*([A-Za-z0-9][A-Za-z0-9\-]{7,})")
 
 
