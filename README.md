@@ -66,3 +66,7 @@ run_mcp_integration_test.sh  # Only-code (MCP) benchmark runner
 ```
 
 Results are written as JSONL streams to `results/` and `results_mcp/` respectively. Grade against the oracle files in `oracle/`.
+
+## Artifact-Graded Mode
+
+A second benchmark mode (purpose-built diagnostic tasks with hidden graders, landing under epic [#92](https://github.com/hyang0129/onlycodes/issues/92)) is specified in [`docs/SCHEMA_ARTIFACT.md`](docs/SCHEMA_ARTIFACT.md). That document is the normative task schema — task authors and harness implementers should read it before drafting tasks or loader code. Harness CLI wiring lands separately (see [`docs/adr-0001-artifact-mode.md`](docs/adr-0001-artifact-mode.md)).
