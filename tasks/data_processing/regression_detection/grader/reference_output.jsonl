@@ -1,0 +1,3 @@
+{"endpoint": "/api/reports/generate", "regression_score": 653.244}
+{"endpoint": "/api/payments", "regression_score": 240.99}
+{"endpoint": "/api/search", "regression_score": 225.482}
