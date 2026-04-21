@@ -8,6 +8,7 @@ import pytest
 
 from swebench.artifact_materialize import (
     MaterializationError,
+    _seed_for_instance,
     materialize,
     scratch_dir_for,
 )
@@ -200,3 +201,39 @@ def test_no_generator_task_behaves_as_before(tmp_path: Path) -> None:
     materialize(task, scratch)
     assert (scratch / "input.txt").read_text() == "hello\n"
     assert not (scratch / ".workspace_generator_done").exists()
+
+
+def test_ignore_is_path_based_not_name_based(tmp_path: Path) -> None:
+    """F-4: a helper file that happens to share the generator's filename but
+    lives at a different path inside workspace/ MUST still be copied into
+    scratch. The ignore callable must key on absolute path identity, never on
+    basename."""
+    task_dir = tmp_path / "task"
+    task = _make_gen_task(task_dir, _GEN_WRITES_DATA)
+    # Create a same-named helper at a different path in workspace/. The agent
+    # is entitled to see this file; only the declared generator must be dropped.
+    helper_dir = task_dir / "workspace" / "helpers"
+    helper_dir.mkdir(parents=True, exist_ok=True)
+    (helper_dir / "generator.py").write_text("# hand-curated helper\n")
+
+    scratch = tmp_path / "scratch"
+    materialize(task, scratch)
+
+    # The declared generator is NOT in scratch, anywhere.
+    assert not (scratch / "generator.py").exists()
+    # The same-named helper at a different path IS in scratch.
+    assert (scratch / "helpers" / "generator.py").read_text() == "# hand-curated helper\n"
+
+
+def test_seed_for_instance_is_stable(tmp_path: Path) -> None:
+    """F-5: pin the seed derivation to known values so any future refactor of
+    _seed_for_instance (prefix length, hash algorithm, encoding) is caught
+    immediately — otherwise every committed reference_output.* becomes silently
+    wrong and only the pre-merge grader sanity gate surfaces it."""
+    # Golden values computed from the canonical sha256(instance_id)[:8] algorithm.
+    assert _seed_for_instance("data_processing__p95_latency_easy") == 3478982464
+    assert _seed_for_instance("stateful_reasoning__event_ledger") == 361668686
+    # Determinism across repeat calls.
+    assert _seed_for_instance("x") == _seed_for_instance("x")
+    # Different ids give different seeds (with overwhelming probability for sha256).
+    assert _seed_for_instance("a") != _seed_for_instance("b")

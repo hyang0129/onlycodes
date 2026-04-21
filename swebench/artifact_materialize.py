@@ -209,11 +209,43 @@ def _seed_for_instance(instance_id: str) -> int:
 
 
 def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None = None) -> None:
-    """Fail loudly if any grader artifact or the generator script leaked into scratch."""
+    """Fail loudly if any grader artifact or the generator script leaked into scratch.
+
+    The generator check is keyed on the *relative path* the generator would
+    occupy under scratch (mirroring its path under ``workspace/``), not on
+    basename. This matches the ignore callable in :func:`_make_ignore_for_generator`,
+    so a hand-curated helper that happens to share the generator's basename but
+    lives at a different path inside ``workspace/`` is NOT flagged.
+    """
     # "hidden.py" is the grader's module filename; reference_output.* is the
     # golden artifact. Either appearing inside the scratch dir is a bug.
     leaks: list[Path] = []
-    generator_name = generator_abs.name if generator_abs is not None else None
+    # Compute the exact path inside scratch that the generator would occupy if
+    # it leaked. For ``workspace/generator.py`` this is ``scratch/generator.py``;
+    # for ``workspace/sub/g.py`` this is ``scratch/sub/g.py``.
+    generator_scratch_path: Path | None = None
+    if generator_abs is not None:
+        # generator_abs lives under workspace/; find its path relative to that
+        # workspace dir so we can project it onto scratch_dir.
+        try:
+            ws_root = generator_abs
+            # Walk up until we find the directory that was the root of the copy.
+            # We don't have the workspace_src here, so use the parent chain of
+            # the generator's resolved path until it stops being a descendant.
+            # Simpler: use just the basename-under-its-own-dir, anchored at
+            # scratch_dir. Since the copy preserves structure, the relative
+            # path from workspace/ to the generator equals the relative path
+            # from scratch_dir/ to where the generator would land.
+            workspace_src = generator_abs.parent
+            while workspace_src.name != "workspace" and workspace_src.parent != workspace_src:
+                workspace_src = workspace_src.parent
+            rel = generator_abs.relative_to(workspace_src)
+            generator_scratch_path = (scratch_dir / rel).resolve()
+        except ValueError:
+            # Fallback: if we cannot compute a relative path, fall back to
+            # basename matching anchored at scratch root only (NOT recursive).
+            generator_scratch_path = (scratch_dir / generator_abs.name).resolve()
+
     for path in scratch_dir.rglob("*"):
         if not path.is_file():
             continue
@@ -222,7 +254,10 @@ def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None = None) -> Non
             leaks.append(path)
         elif name.startswith("reference_output"):
             leaks.append(path)
-        elif generator_name is not None and name == generator_name:
+        elif (
+            generator_scratch_path is not None
+            and path.resolve() == generator_scratch_path
+        ):
             leaks.append(path)
     if leaks:
         rels = [str(p.relative_to(scratch_dir)) for p in leaks]
