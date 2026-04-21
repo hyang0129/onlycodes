@@ -201,11 +201,15 @@ def _reviewer_to_sidecar(
         ]
         if not evidence_refs and excerpts:
             evidence_refs = [{"excerpt": excerpts[0][:500]}]
+        # Severity mirrors the reviewer's confidence — the two enums align
+        # (low/medium/high) and this preserves the reviewer's strength signal
+        # for Stage 3. Hard-coding "medium" would flatten high-confidence
+        # flags into the same bucket as low-confidence ones.
         findings.append({
             "candidate_id": extractor.target_pattern_id,
             "description": reasoning or f"Flagged by {extractor.extractor_id}",
             "evidence_refs": evidence_refs,
-            "severity": "medium",
+            "severity": confidence,
             "confidence": confidence,
         })
 
@@ -330,14 +334,19 @@ def run_semi_mechanical(
         out_dir.mkdir(parents=True, exist_ok=True)
 
     # claude binary only needed if any extractor actually matches a log.
+    # In dry-run we tolerate its absence (nothing will be invoked). Outside
+    # dry-run we require it up-front: deferring the error until a worker
+    # thread hits `assert claude_binary is not None` would surface as an
+    # unhelpful AssertionError, after partial sidecars may already be on disk.
     claude_binary: str | None
     try:
         claude_binary = find_claude_binary()
     except FileNotFoundError:
         claude_binary = None
     if not dry_run and claude_binary is None:
-        # Defer the error: only raise if we actually need to invoke it.
-        pass
+        raise click.UsageError(
+            "claude binary not found on PATH; install it or re-run with --dry-run"
+        )
 
     flagged_refs: set[str] = set()
     matched_count = 0

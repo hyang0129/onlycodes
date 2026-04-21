@@ -8,7 +8,7 @@ of diagnosing or changing approach.
 Mechanical signal
 -----------------
 
-Two or more consecutive ``mcp__codebox__execute_code`` turns where:
+Two or more "consecutive" ``mcp__codebox__execute_code`` turns where:
 
 1. The ``input.code`` field hashes equal (or is near-identical — we use
    a normalised-whitespace hash for a slightly coarser match than the
@@ -16,6 +16,14 @@ Two or more consecutive ``mcp__codebox__execute_code`` turns where:
 2. The tool_result output contains an error/traceback indicator
    (``Error``, ``Traceback``, ``Exception``, ``raise``) on at least one
    of the consecutive turns.
+
+"Consecutive" here means **consecutive within the sequence of codebox
+turns** — i.e. non-codebox assistant blocks (e.g., a ``Read`` tool call
+between two codebox calls) are invisible to this check. This is
+deliberate: an agent that reruns the exact same failing code before and
+after an intermediate inspection is still stalling, even if the inspection
+broke strict adjacency in the raw transcript. Callers that need strict
+adjacency should tighten ``_iter_codebox_turns``.
 
 This primarily targets the artifact benchmark (which exposes the codebox
 tool) but is benchmark-agnostic at the filter level. SWE-bench baseline

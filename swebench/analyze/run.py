@@ -113,7 +113,9 @@ def _discover_logs(results_dir: Path) -> list[Path]:
                 if agent.is_file():
                     artifact.append(agent)
 
-    return sorted(set(flat + artifact))
+    # flat and artifact cannot overlap (flat yields *_run*.jsonl at depth 1;
+    # artifact yields agent.jsonl at depth 4), so no dedup set needed.
+    return sorted(flat + artifact)
 
 
 def _parse_log_ref(jsonl_path: Path) -> tuple[str, str, int] | None:
@@ -134,6 +136,11 @@ def _parse_log_ref(jsonl_path: Path) -> tuple[str, str, int] | None:
             run_name = parts[-2]
             arm = parts[-3]
             task = parts[-4]
+            # Skip paths rooted under an _analysis-style subtree — mirrors
+            # the exclusion rule in _discover_logs so that a manually-passed
+            # sidecar path does not accidentally parse as a real artifact log.
+            if task.startswith("_"):
+                return None
             run_m = _ARTIFACT_RUN_DIR_RE.match(run_name)
             if arm in _ARTIFACT_ARMS and run_m:
                 return task, arm, int(run_m.group("run"))
@@ -146,6 +153,15 @@ def _synthesize_log_ref(parsed: tuple[str, str, int] | None, jsonl_path: Path) -
     For artifact logs whose filename stem is always ``agent`` (non-unique),
     the synthesized form is ``<task>__<arm>__run<N>``. For SWE-bench logs
     the existing filename stem is already unique.
+
+    .. note::
+       The returned ``log_ref`` is treated as an **opaque identifier** by
+       downstream consumers. Do **not** re-parse it by splitting on ``__``:
+       artifact task IDs themselves contain ``__`` (per the
+       ``<category>__<slug>`` convention in ``docs/SCHEMA_ARTIFACT.md``), so
+       the final form has four ``__``-delimited fields, not three. To recover
+       ``(task, arm, run)`` from a log, call :func:`_parse_log_ref` on the
+       original JSONL path — never split the synthesized ``log_ref``.
     """
     if parsed is None:
         return jsonl_path.stem
