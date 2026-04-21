@@ -44,6 +44,7 @@ _REQUIRED_FIELDS = frozenset({
 
 _OPTIONAL_FIELDS = frozenset({
     "structural_verifier",
+    "workspace_generator",
     "tags",
 })
 
@@ -113,6 +114,10 @@ def _parse_task_yaml(path: Path) -> Task:
     if structural_verifier is not None and not isinstance(structural_verifier, str):
         raise ValueError(f"{path}: structural_verifier must be a string path")
 
+    workspace_generator = data.get("workspace_generator")
+    if workspace_generator is not None and not isinstance(workspace_generator, str):
+        raise ValueError(f"{path}: workspace_generator must be a string path")
+
     return Task(
         instance_id=instance_id,
         category=category,
@@ -124,6 +129,7 @@ def _parse_task_yaml(path: Path) -> Task:
         reference_output=str(data["reference_output"]),
         execution_budget=budget,
         structural_verifier=structural_verifier,
+        workspace_generator=workspace_generator,
         tags=list(tags_raw),
         task_dir=path.parent.resolve(),
     )

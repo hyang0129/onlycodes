@@ -169,3 +169,36 @@ def test_tasks_sorted_by_instance_id(tmp_path: Path) -> None:
         "algorithmic__zebra",
         "data_processing__alpha",
     ]
+
+
+def test_workspace_generator_accepted(tmp_path: Path) -> None:
+    """Issue #118: loader must accept the new optional workspace_generator field."""
+    tasks_dir = tmp_path / "tasks"
+    _write_task(
+        tasks_dir,
+        "data_processing",
+        "with_gen",
+        overrides={"workspace_generator": "workspace/generator.py"},
+    )
+    tasks = load_tasks(tasks_dir)
+    assert len(tasks) == 1
+    assert tasks[0].workspace_generator == "workspace/generator.py"
+
+
+def test_workspace_generator_omitted_defaults_none(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _write_task(tasks_dir, "data_processing", "no_gen")
+    tasks = load_tasks(tasks_dir)
+    assert tasks[0].workspace_generator is None
+
+
+def test_workspace_generator_wrong_type_rejected(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _write_task(
+        tasks_dir,
+        "data_processing",
+        "bad_gen",
+        overrides={"workspace_generator": 42},
+    )
+    with pytest.raises(ValueError, match="workspace_generator must be a string"):
+        load_tasks(tasks_dir)

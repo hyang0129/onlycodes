@@ -47,6 +47,9 @@ class Task:
     reference_output: str       # relative path under grader/
     execution_budget: ExecutionBudget
     structural_verifier: str | None = None  # optional
+    workspace_generator: str | None = None  # optional, relative path to a Python
+                                            # script that writes workspace data
+                                            # into scratch at materialize time
     tags: list[str] = field(default_factory=list)
     task_dir: Path | None = None  # populated by loader; absolute path
 
