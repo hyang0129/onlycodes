@@ -26,6 +26,10 @@ from swebench.artifact_models import Task
 
 _GENERATOR_MARKER = ".workspace_generator_done"
 _GENERATOR_TIMEOUT_S = 180
+# Cap on how much of the generator's stderr we embed into MaterializationError
+# messages. A runaway generator can produce hundreds of MB before the 180s
+# timeout fires; without a cap the exception message itself could OOM logs.
+_GENERATOR_STDERR_MAX_CHARS = 8 * 1024
 
 
 class MaterializationError(RuntimeError):
@@ -68,7 +72,10 @@ def materialize(task: Task, scratch_dir: Path) -> Path:
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
     generator_rel = _resolve_generator_rel(task)
-    generator_abs = task.task_dir / task.workspace_generator if generator_rel else None
+    # Use the stripped, normalised value from _resolve_generator_rel — NOT the
+    # raw attribute — so leading/trailing whitespace in the yaml does not leak
+    # into the constructed path (F-1).
+    generator_abs = (task.task_dir / generator_rel) if generator_rel else None
 
     if generator_abs is not None and not generator_abs.is_file():
         raise FileNotFoundError(
@@ -155,11 +162,14 @@ def _run_generator(task: Task, generator_abs: Path, scratch_dir: Path) -> None:
     ]
 
     try:
+        # stdout is discarded (generators should be quiet); stderr is captured
+        # but truncated before being embedded in any exception message.
         result = subprocess.run(
             cmd,
             cwd=str(scratch_dir),
             env=env,
-            capture_output=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=_GENERATOR_TIMEOUT_S,
             check=False,
@@ -171,13 +181,25 @@ def _run_generator(task: Task, generator_abs: Path, scratch_dir: Path) -> None:
         ) from None
 
     if result.returncode != 0:
+        stderr_tail = _truncate_for_error(result.stderr or "")
         raise MaterializationError(
             f"workspace_generator for {task.instance_id!r} failed with "
-            f"exit={result.returncode}\nstdout: {result.stdout}\n"
-            f"stderr: {result.stderr}"
+            f"exit={result.returncode}\nstderr (last "
+            f"{_GENERATOR_STDERR_MAX_CHARS} chars):\n{stderr_tail}"
         )
 
     marker.write_text("ok\n")
+
+
+def _truncate_for_error(text: str) -> str:
+    """Keep the last ``_GENERATOR_STDERR_MAX_CHARS`` chars of ``text``.
+
+    Generator failures almost always surface at the tail of stderr, so keep
+    the tail rather than the head.
+    """
+    if len(text) <= _GENERATOR_STDERR_MAX_CHARS:
+        return text
+    return "…(truncated)…\n" + text[-_GENERATOR_STDERR_MAX_CHARS:]
 
 
 def _seed_for_instance(instance_id: str) -> int:
@@ -186,7 +208,7 @@ def _seed_for_instance(instance_id: str) -> int:
     return int(digest[:8], 16)
 
 
-def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None) -> None:
+def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None = None) -> None:
     """Fail loudly if any grader artifact or the generator script leaked into scratch."""
     # "hidden.py" is the grader's module filename; reference_output.* is the
     # golden artifact. Either appearing inside the scratch dir is a bug.

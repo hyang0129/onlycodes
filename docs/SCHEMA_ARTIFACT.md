@@ -207,6 +207,20 @@ across Python versions and across hosts. A given `instance_id` always
 materializes to the same bytes, which is the contract the `reference_output.*`
 sanity check relies on.
 
+**Generator execution contract.** Generator scripts are invoked with a
+deliberately scrubbed environment — only `PATH` and `PYTHONDONTWRITEBYTECODE`
+are passed through. `VIRTUAL_ENV`, `PYTHONPATH`, and similar are NOT
+forwarded. Consequently, generators MUST use only the Python standard
+library (``random``, ``json``, ``hashlib``, ``pathlib``, …). Third-party
+dependencies are not available. If a future task genuinely needs a
+third-party package, widen this contract explicitly — do not add
+environment fallbacks case-by-case.
+
+**Sentinel file.** A hidden marker file ``.workspace_generator_done`` is
+written inside the scratch dir after a successful generator run to make
+repeated `materialize()` calls idempotent. It is benign and carries no
+task-relevant information; agents may safely ignore it.
+
 ### 5.2 NEVER materialized (never visible to the agent, in any arm)
 
 - The entire `grader/` directory, including `hidden.py` and `reference_output.*`.
