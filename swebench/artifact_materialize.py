@@ -96,7 +96,7 @@ def materialize(task: Task, scratch_dir: Path) -> Path:
     if generator_abs is not None:
         _run_generator(task, generator_abs, scratch_dir)
 
-    _assert_no_leak(scratch_dir, generator_abs)
+    _assert_no_leak(scratch_dir, generator_abs, workspace_src)
     return scratch_dir
 
 
@@ -208,14 +208,25 @@ def _seed_for_instance(instance_id: str) -> int:
     return int(digest[:8], 16)
 
 
-def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None = None) -> None:
+def _assert_no_leak(
+    scratch_dir: Path,
+    generator_abs: Path | None = None,
+    workspace_src: Path | None = None,
+) -> None:
     """Fail loudly if any grader artifact or the generator script leaked into scratch.
 
     The generator check is keyed on the *relative path* the generator would
-    occupy under scratch (mirroring its path under ``workspace/``), not on
-    basename. This matches the ignore callable in :func:`_make_ignore_for_generator`,
-    so a hand-curated helper that happens to share the generator's basename but
-    lives at a different path inside ``workspace/`` is NOT flagged.
+    occupy under scratch (mirroring its path under ``workspace_src``), not on
+    basename. This matches the ignore callable in
+    :func:`_make_ignore_for_generator`, so a hand-curated helper that happens
+    to share the generator's basename but lives at a different path inside
+    the workspace is NOT flagged.
+
+    ``workspace_src`` is optional only to preserve the one-arg backwards-compat
+    shape of the old ``_assert_no_grader_leak`` alias. When a generator is
+    supplied but ``workspace_src`` is not, we fall back to basename-anchored
+    matching at ``scratch_dir`` root (no recursion) — sufficient for the
+    convention case and matching pre-cycle-2 behaviour for that corner.
     """
     # "hidden.py" is the grader's module filename; reference_output.* is the
     # golden artifact. Either appearing inside the scratch dir is a bug.
@@ -225,25 +236,15 @@ def _assert_no_leak(scratch_dir: Path, generator_abs: Path | None = None) -> Non
     # for ``workspace/sub/g.py`` this is ``scratch/sub/g.py``.
     generator_scratch_path: Path | None = None
     if generator_abs is not None:
-        # generator_abs lives under workspace/; find its path relative to that
-        # workspace dir so we can project it onto scratch_dir.
-        try:
-            ws_root = generator_abs
-            # Walk up until we find the directory that was the root of the copy.
-            # We don't have the workspace_src here, so use the parent chain of
-            # the generator's resolved path until it stops being a descendant.
-            # Simpler: use just the basename-under-its-own-dir, anchored at
-            # scratch_dir. Since the copy preserves structure, the relative
-            # path from workspace/ to the generator equals the relative path
-            # from scratch_dir/ to where the generator would land.
-            workspace_src = generator_abs.parent
-            while workspace_src.name != "workspace" and workspace_src.parent != workspace_src:
-                workspace_src = workspace_src.parent
-            rel = generator_abs.relative_to(workspace_src)
-            generator_scratch_path = (scratch_dir / rel).resolve()
-        except ValueError:
-            # Fallback: if we cannot compute a relative path, fall back to
-            # basename matching anchored at scratch root only (NOT recursive).
+        if workspace_src is not None:
+            try:
+                rel = generator_abs.resolve().relative_to(workspace_src.resolve())
+                generator_scratch_path = (scratch_dir / rel).resolve()
+            except ValueError:
+                # generator_abs isn't under workspace_src — should not happen
+                # in practice, but fall through to basename-anchored match.
+                generator_scratch_path = (scratch_dir / generator_abs.name).resolve()
+        else:
             generator_scratch_path = (scratch_dir / generator_abs.name).resolve()
 
     for path in scratch_dir.rglob("*"):
