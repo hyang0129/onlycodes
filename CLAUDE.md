@@ -2,148 +2,166 @@
 
 Benchmark testing whether Claude Code performs better when restricted to writing/executing code vs. using native file-system tools.
 
-## SWE-bench CLI
+## Architecture Overview
 
-The evaluation harness is a Python CLI (`swebench/`) invoked via `python -m swebench`. Three subcommands:
+Two independent evaluation modes sharing a common subprocess harness:
 
-```bash
-# Add a problem instance (fetches from HuggingFace SWE-bench datasets)
-python -m swebench add <instance_id>                                     # default set: swe/adhoc/
-python -m swebench add <instance_id> --set swe/swebench-verified-mini    # into a named set
+```
+swebench.cli (python -m swebench)
+  ├── add          → fetch HuggingFace instances → problems/swe/<set>/<id>.yaml
+  ├── run          → SWE-bench: baseline vs onlycode arms on real repos
+  ├── analyze      → pathology pipeline (3 stages) + summary table
+  ├── cache        → OverlayFS instance cache lifecycle
+  └── artifact run → artifact-graded: code_only vs tool_rich on YAML tasks
 
-# Batch-add from a file of instance IDs (one per line, # comments ok; parallel HF fetch)
-python -m swebench add --from-file ids.txt --set swe/swebench-verified-mini --concurrency 8
-
-# Run evaluation arms
-python -m swebench run                          # both arms, all problems (recurses into sets)
-python -m swebench run --arms onlycode          # onlycode arm only
-python -m swebench run --arms baseline          # baseline arm only
-python -m swebench run --filter django__django-16379  # specific instance
-python -m swebench run --runs 3                 # multiple runs per arm
-
-# Analyze results — summary table
-python -m swebench analyze summary
-python -m swebench analyze summary --out results.csv   # write to CSV
-
-# Analyze results — pathology pipeline (stages 1 → 2 → 3)
-python -m swebench analyze pathology                   # all three stages, concurrency 8
-python -m swebench analyze pathology --dry-run         # print composed commands/prompts, no claude invocations
-python -m swebench analyze pathology --stage mechanical  # stage 1 only
-python -m swebench analyze pathology --stage subagents   # stage 2 only
-python -m swebench analyze pathology --stage synthesize  # stage 3 only
-python -m swebench analyze pathology --force           # re-run even if sidecar JSON already exists
-python -m swebench analyze pathology --run-id my-run   # use custom run identifier (default: UTC timestamp)
-python -m swebench analyze pathology --concurrency 4   # limit parallel subagent invocations
-
-# Cache (OverlayFS-backed environment reuse — see "SWE-bench Cache" below)
-python -m swebench cache setup                         # warm every instance
-python -m swebench cache setup --filter django__django-16379
-python -m swebench cache clean --filter django__django-16379
-python -m swebench run                                 # uses cache by default
-python -m swebench run --no-cache                      # opt out of cached setup
+Shared infrastructure:
+  harness.py   — git ops, venv setup, claude invocation, test running
+  cache.py     — OverlayFS backend, lockfile, scrub
 ```
 
-Problem definitions live under `problems/swe/<set>/*.yaml` — curated sets are separated from
-ad-hoc additions. Current sets:
+**Full CLI reference:** see README.md. **Task schema:** see docs/SCHEMA_ARTIFACT.md.
 
-- `problems/swe/swebench-verified-mini/` — the 50-problem [SWE-bench Verified Mini](https://hal.cs.princeton.edu/swebench_verified_mini) subset (25 django + 25 sphinx).
-- `problems/swe/adhoc/` — one-offs added without specifying a set (the `add` default).
+---
 
-The runner recurses into every subfolder of `problems/swe/`, so additional curated sets can be
-introduced simply by passing a new `--set swe/<name>` to `add`. Artifact-graded tasks live
-separately under `problems/artifact/<category>/<slug>/task.yaml` and are loaded only by
-`python -m swebench artifact run`. Results go to `results_swebench/` keyed by `instance_id`
-(flat, regardless of set).
+## Module Map
 
-## patterns.json
+| Module | Owns |
+|---|---|
+| `cli.py` | Click group wiring only; no logic |
+| `models.py` | `Problem`, `ArmResult` — SWE-bench data classes |
+| `add.py` | HuggingFace fetch, repo validation, YAML write |
+| `run.py` | SWE-bench arm orchestration, overlay refresh, parallel scheduling |
+| `harness.py` | `clone_repo`, `setup_venv`, `strip_git_history`, `run_claude`, `run_tests`, `apply_test_patch` |
+| `cache.py` | OverlayFS mount/unmount, lockfile verify, scrub |
+| `cache_cli.py` | `cache setup` / `cache clean` CLI |
+| `artifact_models.py` | `Task`, `ExecutionBudget`, `GradeResult`, `ArtifactArmResult` — disjoint from SWE-bench models |
+| `artifact_loader.py` | Walk `problems/artifact/`, parse task.yaml, validate schema |
+| `artifact_materialize.py` | Copy workspace → scratch, run generator, enforce no-leak |
+| `artifact_grade.py` | Invoke `grader/hidden.py:grade()` in subprocess, parse JSON |
+| `_artifact_grade_runner.py` | Subprocess entry point for grader; do not call directly |
+| `artifact_run.py` | Artifact arm orchestration (materialize → run_claude → grade) |
+| `artifact_cli.py` | `artifact run` / `artifact verify` CLI |
+| `analyze/run.py` | 3-stage pathology pipeline; writes sidecar JSON + patterns.json |
+| `analyze/compress.py` | Compress JSONL for subagent input |
+| `analyze/extractor.py` | Mechanical pattern detection (loops, OOM, timeout, syntax errors) |
+| `analyze/registry.py` | Load/merge/write patterns.json |
+| `analyze/summary.py` | Flat results table (pass rate, cost, turns) |
 
-`patterns.json` (repo root) is the canonical pathology vocabulary written by `analyze pathology`
-(Stage 3 synthesize). It accumulates every distinct failure pattern observed across analysis runs.
+**Arm naming:** SWE-bench uses `baseline` / `onlycode`; artifact uses `tool_rich` / `code_only`.
 
-**Location:** `/workspaces/hub_1/onlycodes/patterns.json`
+---
 
-**Schema** (version 1):
+## Key Invariants
 
-```jsonc
-{
-  "version": 1,      // integer — incremented only on breaking schema change
-  "patterns": [      // list of pattern entries (may be empty)
-    {
-      "id": "tool-call-loop",           // slug: lowercase alnum + hyphen/underscore, 2–64 chars
-      "description": "Agent enters..."  // human-readable string
-    }
-  ]
-}
+Violating any of these breaks benchmark integrity or sandbox isolation.
+
+### Git history stripping is mandatory
+
+`strip_git_history()` collapses the repo to a single orphan commit, then deletes all refs, packed-refs, reflogs, and runs `git gc --prune=now`. The agent must not recover the reference fix via `git log`.
+
+- **`git_reset()` resets to `"HEAD"` (the orphan), not `base_commit`** — `base_commit` is unreachable after stripping.
+- Called in every non-cached setup path and in `_refresh_overlay()` between arms.
+- Uses fixed author date so re-stripping produces the same orphan SHA (idempotent).
+
+### Overlay refresh, not git reset, between arms
+
+fuse-overlayfs copy-up semantics prevent `git clean -fd` from un-creating files added during a run (EEXIST). Between arms, `_refresh_overlay()` unmounts → deletes upper+work dirs → recreates → remounts → re-strips history. The merged path stays the same.
+
+- Venv lives **outside** the overlay (sibling dir). After each mount, `pip install -e .` is re-run to regenerate `.egg-info` (which was scrubbed from the cached lowerdir).
+- Lockfile drift (agent leaked a pip install) triggers full cache entry rebuild, not a skip.
+
+### Artifact no-leak invariant
+
+`grader/hidden.py` and `reference_output.*` must never appear in the agent's scratch dir. `materialize()` enforces this via a post-copy scan and raises `MaterializationError` on violation. This is a pre-flight check — catch it before the run, not after.
+
+### Grader subprocess isolation
+
+`_artifact_grade_runner.py` is the grader entry point. It runs in a fresh subprocess so grader-side exceptions don't kill the harness. Grade results are serialized as JSON on stdout; do not add logging to stdout in grader code.
+
+### Execution budget is declared, not enforced
+
+`max_code_runs` and `max_wall_seconds` in task.yaml are reserved fields. Enforcement is always OFF in seed-v1; the harness logs "enforcement OFF (0 = unlimited)".
+
+### Claude invocation is always isolated
+
+`run_claude()` creates a temp config dir containing only `.credentials.json` + `.claude.json` and sets `CLAUDE_CONFIG_DIR` to it. Always uses `--dangerously-skip-permissions --no-session-persistence`. Never shares state between arms or runs.
+
+### Tool restriction for onlycode / code_only
+
+The onlycode arm passes `--tools mcp__codebox__execute_code,mcp__codebox__execute_code_and_wait` and `--disallowedTools` covering all built-in tools. This is implemented in `run.py`; check there before modifying tool lists.
+
+### patterns.json is append-only during runs
+
+`analyze/registry.py` merges new pattern IDs into `patterns.json` (append), never overwrites existing entries. Tests are guarded by an autouse fixture (`tests/conftest.py:_patterns_json_is_immutable`) that fails if patterns.json is modified. Edit by hand only to remove stale entries.
+
+---
+
+## Test Conventions
+
+```
+tests/
+  conftest.py              — autouse: snapshot patterns.json before/after each test
+  test_cache.py            — unit: overlay, lockfile, scrub
+  test_cache_integration.py — @integration: real clone + real overlay mount
+  test_harness_strip.py    — git history stripping (single orphan, no reflog)
+  test_artifact_loader.py  — schema parse + validation
+  test_artifact_materialize.py — copytree + no-leak invariant
+  test_artifact_run.py     — end-to-end arm execution (stubbed run_claude)
+  test_artifact_grade.py   — grader subprocess pass/fail/exception
+  test_artifact_cli.py     — CLI integration
+  test_verify_graders.py   — reference output matches grader
+  test_analyze_*.py        — pathology pipeline stages
+  test_run.py              — SWE-bench run integration
 ```
 
-Tracking metadata (frequency, arm distribution, evidence refs) lives in the per-run
-analysis sidecar under `results_swebench/_analysis/<run_id>/synthesizer.json`, not here.
+- Mark slow/network tests with `@pytest.mark.integration`.
+- Skip integration tests: `pytest -m "not integration"`.
+- Monkeypatch `SWEBENCH_CACHE_ROOT` in fixtures — never touch the real cache in tests.
+- Use `--runs 1 --parallel 1` in test invocations to keep logs deterministic.
 
-> **Mutable.** `patterns.json` is updated in-place by `analyze pathology --stage synthesize`
-> (merge semantics: new pattern ids are appended; existing entries are never overwritten).
-> Edit it by hand only to remove stale entries or fix descriptions —
-> any manual edits must preserve the schema above or the next pipeline run will reject the file.
+---
 
-Analysis sidecar output lives under:
+## Config Files
+
+**`mcp-config.json`** — MCP server config for the codebox (execute_code) tool. Sets `ONLYCODES_PERSISTENT_KERNEL=1` to enable a persistent Python REPL across calls. The harness strips this env var for `--no-persistent-kernel` runs by writing a modified config to a temp file.
+
+**`passthrough-config.json`** — Interception rules for the MCP bridge (sub-MCP-manager). Defines content and dispatch deny-lists without code changes. Add rules here to block tool calls or patterns in execute_code output.
+
+---
+
+## Artifact Task Authoring
+
+Tasks live under `problems/artifact/<category>/<slug>/`. Required layout:
+
+```
+task.yaml               # fields: instance_id, category, difficulty, problem_statement,
+                        #   workspace_dir, output_artifact, hidden_grader,
+                        #   reference_output, execution_budget
+workspace/              # public files copied into agent scratch dir
+grader/
+  hidden.py             # grade(scratch_dir) → GradeResult; must be deterministic + offline
+  reference_output.*    # reference artifact for grader validation
+```
+
+Grader invariants: deterministic, offline, seeded-random only. `grade()` must not write to `scratch_dir`. Score is a float in [0.0, 1.0]. See `docs/SCHEMA_ARTIFACT.md` for the full contract.
+
+Instance ID format: `<category>__<slug>` (two underscores). Category must match the directory name.
+
+---
+
+## Analysis Sidecar Layout
 
 ```
 results_swebench/_analysis/<run_id>/
-├── mechanical/          # Stage 1: one JSON per JSONL log (mechanical flags + metrics)
-├── subagents/           # Stage 2: one JSON per flagged log (subagent pathology findings)
-└── synthesizer.json     # Stage 3: full synthesizer output before merge into patterns.json
+  mechanical/          # Stage 1: JSON per JSONL log (mechanical flags + metrics)
+  subagents/           # Stage 2: JSON per flagged log (Claude-classified findings)
+  synthesizer.json     # Stage 3: full synthesizer output before merge into patterns.json
 ```
 
-## SWE-bench Cache
-
-For large-scale runs (e.g. 500 instances, or the same instance re-run many times) the harness
-supports an OverlayFS-backed instance cache so repeat runs skip clone + venv setup.
-
-```
-/workspaces/.swebench-cache/
-├── repos/                                  # bare clones, shared across instances
-└── instances/<instance_id>/
-    ├── repo/                               # checkout at base_commit, scrubbed
-    ├── venv/                               # python3.11 + editable install
-    └── lockfile.txt                        # pip freeze at cache time
-```
-
-Warm the cache once (overnight):
-
-```bash
-python -m swebench cache setup                   # all problems
-python -m swebench cache setup --concurrency 8   # parallelise setup
-python -m swebench cache setup --force           # rebuild existing entries
-```
-
-Then run (cache is on by default):
-
-```bash
-python -m swebench run --filter django__django-16379
-python -m swebench run --no-cache --filter django__django-16379   # opt out
-```
-
-Each evaluation mounts the cached `repo/` as the lowerdir of an OverlayFS, hands the
-merged path to Claude, and on teardown unmounts + `rm -rf`s the upperdir — no git reset
-needed. The venv sits outside the overlay as a sibling directory.
-
-**Backends.** The harness prefers kernel overlayfs (requires `CAP_SYS_ADMIN` on the
-container) and falls back to `fuse-overlayfs` if available. If neither works,
-`--use-cache` logs a warning and falls back to the default clone+venv path. The hub-level
-devcontainer already grants `--cap-add=SYS_ADMIN`.
-
-**Integrity check.** Before mounting, the harness diffs the venv's current `pip freeze`
-against the cached lockfile. If they drift (e.g. a prior run leaked a pip install), the
-cache entry is rebuilt automatically.
-
-**Scrub list.** Before caching, the harness removes `__pycache__/`, `*.pyc`/`*.pyo`, `*.swp`,
-`.claude/`, `*.egg-info/`, and stale `.git/COMMIT_EDITMSG`/`MERGE_MSG`/`FETCH_HEAD`
-to prevent context leakage into later runs. `.egg-info` is regenerated post-mount by
-re-running `pip install -e .` (no network).
-
-## MCP Server
-
-`exec-server.bundle.mjs` — the MCP server exposing `execute_code`. Config in `mcp-config.json`.
+---
 
 ## Legacy Scripts
 
-`run_prevalidation.sh`, `run_mcp_integration_test.sh` — original fixture-based benchmarks (not SWE-bench). Still valid for the 5-task fixture suite in `fixtures/`.
+`run_prevalidation.sh`, `run_mcp_integration_test.sh` — original fixture-based benchmarks (5-task suite in `fixtures/`). Still valid as a fast smoke test.
+
+`run_swebench.sh` — earlier shell-based SWE-bench runner (single instance, hardcoded problem text). Superseded by `python -m swebench run` but retained as a reference.
