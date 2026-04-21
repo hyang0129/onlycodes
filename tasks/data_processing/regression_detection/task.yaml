@@ -3,6 +3,7 @@ category: data_processing
 difficulty: medium
 problem_statement: prompt.md
 workspace_dir: workspace/
+workspace_generator: workspace/generator.py
 output_artifact: output/regressions.jsonl
 hidden_grader: grader/hidden.py
 reference_output: grader/reference_output.jsonl

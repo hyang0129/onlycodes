@@ -72,6 +72,7 @@ tags: [aggregation, jsonl]
 | `workspace_dir` | **required** | string (relative path) | Directory copied into the agent's scratch dir at run time. Convention: `workspace/`. May be empty (rare — e.g. pure-enumeration tasks that need no input files) but the field must still be declared. |
 | `output_artifact` | **required** | string (relative path) | Path, **relative to the scratch dir**, that the agent MUST write. The grader reads from `scratch_dir / output_artifact`. Parent directories are created by the agent, not pre-created by the harness. |
 | `structural_verifier` | optional | string (relative path) | Path to a PUBLIC Python module the agent MAY import. Convention: `workspace/verify.py`. Omit the field entirely when the task ships no verifier. See §4. |
+| `workspace_generator` | optional | string (relative path) | Path to a Python script that writes bulk workspace data into the agent's scratch dir at materialize time, instead of committing the data to git. Convention: `workspace/generator.py`. When set, the script itself is EXCLUDED from the scratch copy (the agent never sees it) and is invoked as a subprocess with `--seed <derived>`, `--output-dir <scratch>`, `--instance-id <id>`. A marker file (`.workspace_generator_done`) makes `materialize()` idempotent across repeated calls on the same scratch. See §5.1. |
 | `hidden_grader` | **required** | string (relative path) | Path to the grader module. Convention: `grader/hidden.py`. The module MUST define `grade(scratch_dir: Path) -> GradeResult`. See §3. |
 | `reference_output` | **required** | string (relative path) | Path to a known-good artifact used by the pre-merge sanity check (see §5). Extension matches the artifact's natural format (`.jsonl`, `.json`, `.txt`, …). |
 | `execution_budget.max_code_runs` | **required** | integer ≥ 0 | Max number of `execute_code` invocations the agent may make. `0 = unlimited`. See §2.3. |
@@ -188,10 +189,23 @@ This section is the authoritative answer to the reviewer question *"which files 
 
 ### 5.1 Materialized into the agent's scratch dir (visible to the agent)
 
-- Every file under `workspace/`, copied recursively, preserving structure.
+- Every file under `workspace/`, copied recursively, preserving structure,
+  **except** the file declared in `workspace_generator` (when set).
+- When `workspace_generator` is set, that script is invoked as a subprocess
+  after the copy, with `cwd=scratch_dir` and a derived `--seed`. It writes
+  the bulk data files (e.g. `access.jsonl`, 48× `metrics_*.jsonl`) directly
+  into the scratch dir. The generator script itself never lands in scratch;
+  the agent sees only the generated data plus the small hand-curated files
+  that were copied. A `.workspace_generator_done` marker is written on
+  success so repeat calls on the same scratch dir are no-ops.
 - The task's `prompt.md` contents are embedded in the agent's initial problem prompt; the file itself is NOT copied into the scratch dir (but a curious agent reading its own prompt sees the same text).
 
 Nothing else.
+
+**Determinism.** The seed is `int(sha256(instance_id)[:8], 16)` — stable
+across Python versions and across hosts. A given `instance_id` always
+materializes to the same bytes, which is the contract the `reference_output.*`
+sanity check relies on.
 
 ### 5.2 NEVER materialized (never visible to the agent, in any arm)
 

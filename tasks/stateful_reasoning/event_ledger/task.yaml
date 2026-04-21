@@ -3,6 +3,7 @@ category: stateful_reasoning
 difficulty: medium
 problem_statement: prompt.md
 workspace_dir: workspace/
+workspace_generator: workspace/generator.py
 output_artifact: output/result.json
 structural_verifier: workspace/verify.py
 hidden_grader: grader/hidden.py
