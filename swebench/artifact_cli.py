@@ -38,7 +38,7 @@ def artifact_group() -> None:
     "--filter",
     "filter_ids",
     default=None,
-    help="Comma-separated instance IDs to run (default: all in tasks/).",
+    help="Comma-separated instance IDs to run (default: all in problems/artifact/).",
 )
 @click.option(
     "--arms",
@@ -77,7 +77,7 @@ def artifact_group() -> None:
     "tasks_dir",
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
     default=None,
-    help="Directory containing <category>/<slug>/task.yaml [default: <repo>/tasks/].",
+    help="Directory containing <category>/<slug>/task.yaml [default: <repo>/problems/artifact/].",
 )
 @click.option(
     "--mcp-config",
@@ -101,7 +101,7 @@ def artifact_run_command(
         raise SystemExit(1)
 
     root = repo_root()
-    tasks_root = Path(tasks_dir) if tasks_dir else (root / "tasks")
+    tasks_root = Path(tasks_dir) if tasks_dir else (root / "problems" / "artifact")
     results_dir = Path(output_dir) if output_dir else (root / "results_artifact")
 
     filter_set: set[str] | None = None
@@ -117,7 +117,7 @@ def artifact_run_command(
     if not tasks:
         click.echo(
             f"ERROR: No tasks found under {tasks_root}. "
-            "Add a task at tasks/<category>/<slug>/task.yaml.",
+            "Add a task at problems/artifact/<category>/<slug>/task.yaml.",
             err=True,
         )
         raise SystemExit(1)

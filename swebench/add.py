@@ -180,7 +180,7 @@ def _write_problem(
             err=True,
         )
 
-    # Build Problem and write YAML into problems/<set>/<instance_id>.yaml
+    # Build Problem and write YAML into problems/swe/<set>/<instance_id>.yaml
     problem = Problem(
         instance_id=instance_id,
         repo_slug=repo_slug,
@@ -206,9 +206,11 @@ def _process_one(
 ) -> tuple[str, bool, str]:
     """Fetch + write one instance. Returns (instance_id, ok, message)."""
     try:
-        # Warn if the YAML already exists anywhere under problems/ — not just in
-        # the target set. Matches the previous UX for single adds.
-        existing = list(problems_dir.rglob(f"{instance_id}.yaml"))
+        # Warn if the YAML already exists anywhere under problems/swe/ — not just
+        # in the target set. Matches the previous UX for single adds. Restricted
+        # to problems/swe/ so artifact-graded tasks under problems/artifact/ are
+        # never scanned by SWE-bench `add`.
+        existing = list((problems_dir / "swe").rglob(f"{instance_id}.yaml"))
         if existing:
             _echo(
                 f"Problem file already exists for {instance_id}: {existing[0]}\n"
@@ -229,11 +231,11 @@ def _process_one(
 @click.option(
     "--set",
     "set_name",
-    default="adhoc",
+    default="swe/adhoc",
     show_default=True,
     help=(
-        "Subfolder under problems/ to write the YAML into "
-        "(e.g. 'swebench-verified-mini', 'adhoc')."
+        "Subfolder under problems/swe/ to write the YAML into. Must be of the form "
+        "'swe/<leaf>' (e.g. 'swe/swebench-verified-mini', 'swe/adhoc')."
     ),
 )
 @click.option(
@@ -256,10 +258,10 @@ def add_command(
     from_file: Path | None,
     concurrency: int,
 ) -> None:
-    """Fetch one or many instances from SWE-bench_Verified and write them to problems/<set>/.
+    """Fetch one or many instances from SWE-bench_Verified and write them to problems/swe/<set>/.
 
-    Single-instance form:  python -m swebench add <instance_id> [--set NAME]
-    Batch form:            python -m swebench add --from-file IDS.txt --set NAME [--concurrency N]
+    Single-instance form:  python -m swebench add <instance_id> [--set swe/NAME]
+    Batch form:            python -m swebench add --from-file IDS.txt --set swe/NAME [--concurrency N]
     """
     # Mutual-exclusion check — exactly one of instance_id / --from-file must be given.
     if instance_id and from_file:
@@ -269,9 +271,19 @@ def add_command(
     if not instance_id and not from_file:
         raise click.UsageError("Must pass an instance_id argument or --from-file.")
 
-    if not set_name or "/" in set_name or set_name in ("", ".", ".."):
+    # --set must be exactly of the form 'swe/<leaf>': literal 'swe' prefix, single
+    # slash, and a single non-empty, non-dotted leaf directory name. Bare names
+    # (e.g. 'adhoc') and multi-level paths (e.g. 'swe/a/b') are rejected.
+    _set_parts = set_name.split("/") if set_name else []
+    if (
+        not set_name
+        or len(_set_parts) != 2
+        or _set_parts[0] != "swe"
+        or _set_parts[1] in ("", ".", "..")
+    ):
         raise click.UsageError(
-            f"Invalid --set value: {set_name!r}. Must be a single directory name."
+            f"Invalid --set value: {set_name!r}. Must be of the form 'swe/<name>' "
+            f"(e.g. 'swe/adhoc', 'swe/swebench-verified-mini')."
         )
 
     if concurrency < 1:

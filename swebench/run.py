@@ -521,7 +521,7 @@ def _cleanup_stale_overlays(
     "--filter",
     "filter_ids",
     default=None,
-    help="Comma-separated instance IDs to run (default: all in problems/).",
+    help="Comma-separated instance IDs to run (default: all in problems/swe/).",
 )
 @click.option(
     "--arms",
@@ -617,7 +617,7 @@ def run_command(
         raise SystemExit(1)
 
     root = repo_root()
-    problems_dir = root / "problems"
+    problems_dir = root / "problems" / "swe"
     results_dir = Path(output_dir) if output_dir else root / "results_swebench"
     mcp_config_path = str(root / "mcp-config.json")
     clone_base = "/tmp/swebench"
@@ -633,10 +633,10 @@ def run_command(
         raise SystemExit(1)
 
     # Load problems (recurse into subfolders so curated sets in e.g.
-    # problems/swebench-verified-mini/ and problems/adhoc/ are all picked up).
+    # problems/swe/swebench-verified-mini/ and problems/swe/adhoc/ are all picked up).
     yaml_files = sorted(problems_dir.rglob("*.yaml"))
     if not yaml_files:
-        click.echo("ERROR: No problem files found in problems/. Run 'python -m swebench add' first.", err=True)
+        click.echo("ERROR: No problem files found in problems/swe/. Run 'python -m swebench add' first.", err=True)
         raise SystemExit(1)
 
     problems = [Problem.from_yaml(f) for f in yaml_files]

@@ -2,7 +2,7 @@
 
 **Status:** Frozen for epic #92 (Artifact-Graded Diagnostic Benchmark). Load-bearing: the harness (#2) and all seed-task slices (#3, #5–#10) derive from this document.
 
-**Audience:** Task authors drafting a new `tasks/<category>/<slug>/` directory; harness implementers writing the loader; reviewers checking a task PR.
+**Audience:** Task authors drafting a new `problems/artifact/<category>/<slug>/` directory; harness implementers writing the loader; reviewers checking a task PR.
 
 **Scope:** This document is normative for the on-disk layout of a task, the `task.yaml` manifest, the `grade()` contract, and the materialization/leakage rules. It does NOT specify the CLI surface for running the benchmark — that is tracked as Open Question #1 in the epic and will land via the harness slice (#2) plus ADR `docs/adr-0001-artifact-mode.md`.
 
@@ -10,10 +10,10 @@
 
 ## 1. Directory Layout
 
-Every task lives under `tasks/<category>/<slug>/` in the `onlycodes` repo. The directory is self-contained: no external clones, no HuggingFace fetches, no network access at task-run time.
+Every task lives under `problems/artifact/<category>/<slug>/` in the `onlycodes` repo. The directory is self-contained: no external clones, no HuggingFace fetches, no network access at task-run time.
 
 ```
-tasks/<category>/<slug>/
+problems/artifact/<category>/<slug>/
     task.yaml                 # manifest — REQUIRED, parsed by the harness
     prompt.md                 # natural-language spec shown to the agent — REQUIRED
     workspace/                # starter inputs — REQUIRED (may be empty)
@@ -276,7 +276,7 @@ If this decision is revisited, update this section in-place and flag the change 
 
 ## 7. Curated Sets
 
-Sets live at `sets/<name>.txt`. Each file is a plain-text list of `instance_id`s, one per line. Blank lines and `#`-prefixed comments are ignored. The harness resolves each line to its task directory by grepping `tasks/**/task.yaml` for the matching `instance_id`.
+Sets live at `sets/<name>.txt`. Each file is a plain-text list of `instance_id`s, one per line. Blank lines and `#`-prefixed comments are ignored. The harness resolves each line to its task directory by grepping `problems/artifact/**/task.yaml` for the matching `instance_id`.
 
 Seed-v1 ships a single set: `sets/seed-v1.txt` containing the 12 seed `instance_id`s.
 
@@ -288,7 +288,7 @@ Adding a new set is a file-creation operation — no harness change needed.
 
 A new task is ready to merge when all of the following are true:
 
-- [ ] Directory exists at `tasks/<category>/<slug>/`.
+- [ ] Directory exists at `problems/artifact/<category>/<slug>/`.
 - [ ] `task.yaml` parses, every required field is present, no unknown fields.
 - [ ] `instance_id` matches `^[a-z][a-z0-9_]*__[a-z0-9_]+$` and its category prefix matches the `category` field.
 - [ ] `prompt.md` exists and describes the task without leaking the answer.
