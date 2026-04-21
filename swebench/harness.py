@@ -372,7 +372,7 @@ def make_isolated_claude_config() -> str:
     Returns the path to the temp directory. Caller must clean up.
     """
     cfg_dir = tempfile.mkdtemp(prefix="claude-eval-")
-    for fname in (".credentials.json", ".claude.json"):
+    for fname in (".credentials.json", ".claude.json", "settings.json"):
         src = os.path.expanduser(f"~/.claude/{fname}")
         if os.path.isfile(src):
             shutil.copy2(src, cfg_dir)
@@ -414,6 +414,7 @@ def run_claude(
     tools_flags: list[str],
     result_file: str,
     claude_binary: str,
+    max_turns: int | None = None,
 ) -> None:
     """Run the claude binary with isolated config. Non-zero exit does not raise."""
     cfg_dir = make_isolated_claude_config()
@@ -429,6 +430,8 @@ def run_claude(
             "--output-format", "stream-json",
             "--verbose",
         ]
+        if max_turns is not None:
+            cmd.extend(["--max-turns", str(max_turns)])
 
         env = os.environ.copy()
         env["CLAUDE_CONFIG_DIR"] = cfg_dir

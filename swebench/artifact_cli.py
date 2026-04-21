@@ -86,6 +86,14 @@ def artifact_group() -> None:
     default=None,
     help="MCP config path for the code_only arm [default: <repo>/mcp-config.json if present].",
 )
+@click.option(
+    "--max-turns",
+    "max_turns",
+    type=int,
+    default=100,
+    show_default=True,
+    help="Maximum agent turns per run.",
+)
 def artifact_run_command(
     filter_ids: str | None,
     arms: str,
@@ -94,6 +102,7 @@ def artifact_run_command(
     resume: bool,
     tasks_dir: str | None,
     mcp_config: str | None,
+    max_turns: int,
 ) -> None:
     """Run artifact-graded benchmark arms on one or more tasks."""
     if num_runs < 1:
@@ -165,6 +174,7 @@ def artifact_run_command(
                     results_dir=results_dir,
                     claude_binary=claude_binary,
                     mcp_config_path=mcp_path,
+                    max_turns=max_turns,
                     echo=click.echo,
                 )
 
