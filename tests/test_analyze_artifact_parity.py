@@ -117,7 +117,15 @@ def test_parse_log_ref_returns_none_for_unparseable(tmp_path: Path) -> None:
     assert _parse_log_ref(p) is None
 
 
-def test_synthesize_log_ref_artifact_uses_triple_form(tmp_path: Path) -> None:
+def test_synthesize_log_ref_artifact_uses_task_arm_run_form(tmp_path: Path) -> None:
+    """Synthesized log_ref embeds task, arm, and run with `__` separators.
+
+    Note: artifact task IDs themselves contain `__` (per the
+    `<category>__<slug>` convention in docs/SCHEMA_ARTIFACT.md), so the
+    resulting log_ref has four `__`-delimited fields, not three. Downstream
+    consumers must treat it as an opaque identifier and call
+    ``_parse_log_ref`` on the original JSONL path to recover structure.
+    """
     p = tmp_path / "algorithmic__makespan" / "code_only" / "run5" / "agent.jsonl"
     p.parent.mkdir(parents=True)
     p.write_text("")

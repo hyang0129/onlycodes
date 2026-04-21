@@ -21,6 +21,7 @@ from click.testing import CliRunner
 from swebench.analyze import analyze_command, registry, semi_mechanical
 from swebench.analyze.semi_mechanical import (
     Extractor,
+    _reset_bundled_for_testing,
     _reset_registry_for_testing,
     _reviewer_to_sidecar,
     iter_extractors,
@@ -39,18 +40,12 @@ from swebench.analyze.semi_mechanical import (
 def _clean_registry():
     """Each test starts with an empty extractor registry.
 
-    Because the bundled-extractor modules register at import time, we
-    need to both clear the registry dict AND reset the load flag, and
-    drop the cached modules so re-import actually runs the register()
-    calls again on the next ``load_bundled_extractors()``.
+    Delegates to the module-owned reset helpers so the test file does not
+    reach into semi_mechanical's private globals.
     """
-    import sys as _sys
     def _scrub():
         _reset_registry_for_testing()
-        semi_mechanical._BUNDLED_LOADED = False
-        for modname in list(_sys.modules):
-            if modname.startswith("swebench.analyze.extractors"):
-                del _sys.modules[modname]
+        _reset_bundled_for_testing()
     _scrub()
     yield
     _scrub()
@@ -107,6 +102,32 @@ def test_reviewer_to_sidecar_validates_flagged() -> None:
     assert errs == [], errs
     assert sc["findings"][0]["candidate_id"] == "some_pathology"
     assert sc["findings"][0]["confidence"] == "high"
+    # Severity must mirror reviewer confidence — preserves strength signal
+    # for Stage 3 synthesis.
+    assert sc["findings"][0]["severity"] == "high"
+
+
+@pytest.mark.parametrize("confidence,expected_severity", [
+    ("high", "high"),
+    ("medium", "medium"),
+    ("low", "low"),
+])
+def test_reviewer_to_sidecar_severity_mirrors_confidence(
+    confidence: str, expected_severity: str,
+) -> None:
+    """Each flagged finding's severity must equal the reviewer's confidence."""
+    ex = Extractor("fake", "some_pathology", lambda p: [], "sys")
+    sc = _reviewer_to_sidecar(
+        log_ref="x", arm="baseline", extractor=ex,
+        reviewer={"flagged": True, "confidence": confidence,
+                  "reasoning": "r", "key_evidence": ["e"]},
+        excerpts=["raw"],
+    )
+    assert sc["findings"][0]["severity"] == expected_severity
+    # Invariant: severity MUST NOT be silently defaulted to "medium" when
+    # the reviewer expressed a different confidence level.
+    if confidence != "medium":
+        assert sc["findings"][0]["severity"] != "medium"
 
 
 def test_reviewer_to_sidecar_validates_unflagged() -> None:

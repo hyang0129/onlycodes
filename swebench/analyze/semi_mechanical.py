@@ -411,6 +411,22 @@ def load_bundled_extractors() -> None:
         _BUNDLED_LOADED = True
 
 
+def _reset_bundled_for_testing() -> None:
+    """Clear the bundled-loader latch and purge cached extractor modules.
+
+    Tests only — production code never calls this. Pair with
+    :func:`_reset_registry_for_testing` when a test needs to exercise the
+    bundled-extractor registration path more than once within a process.
+    """
+    import sys as _sys
+    global _BUNDLED_LOADED
+    with _BUNDLED_LOAD_LOCK:
+        _BUNDLED_LOADED = False
+        for modname in list(_sys.modules):
+            if modname.startswith("swebench.analyze.extractors"):
+                del _sys.modules[modname]
+
+
 __all__ = [
     "Extractor",
     "FilterFn",
@@ -418,4 +434,6 @@ __all__ = [
     "iter_extractors",
     "load_bundled_extractors",
     "run_semi_mechanical",
+    "_reset_bundled_for_testing",
+    "_reset_registry_for_testing",
 ]
