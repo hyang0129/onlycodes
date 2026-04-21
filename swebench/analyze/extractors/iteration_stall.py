@@ -145,12 +145,13 @@ def _filter(path: Path) -> list[str]:
                 code_preview = code[:_CODE_TRUNCATE_CHARS]
                 first_out = (first_output or "")[:_OUTPUT_TRUNCATE_CHARS]
                 last_out = (last_output or "")[:_OUTPUT_TRUNCATE_CHARS]
+                last_turn_idx = turns[run_end - 1][0]
                 excerpt = (
                     f"Codebox run: {run_len} consecutive near-duplicate turns "
                     f"starting at turn {first_turn_idx}\n"
                     f"code (truncated {_CODE_TRUNCATE_CHARS} chars):\n{code_preview}\n\n"
                     f"output of turn {first_turn_idx}:\n{first_out}\n\n"
-                    f"output of turn {run_end - 1 + turns[0][0]}:\n{last_out}"
+                    f"output of turn {last_turn_idx}:\n{last_out}"
                 )
                 excerpts.append(excerpt)
         run_start = run_end
