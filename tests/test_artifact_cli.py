@@ -193,6 +193,188 @@ def test_artifact_run_no_tasks(tmp_path, stub_runtime):
     assert "No tasks found" in (r.output + r.stderr)
 
 
+def _write_result_json(
+    results_root: Path,
+    instance_id: str,
+    arm: str,
+    run_idx: int,
+    *,
+    verdict: str = "PASS",
+    cost_usd: float | None = 0.05,
+    num_turns: int | None = 3,
+    wall_secs: int = 12,
+) -> Path:
+    run_dir = results_root / instance_id / arm / f"run{run_idx}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "instance_id": instance_id,
+        "arm": arm,
+        "run_idx": run_idx,
+        "verdict": verdict,
+        "cost_usd": cost_usd,
+        "num_turns": num_turns,
+        "wall_secs": wall_secs,
+        "claude_version": "test",
+        "agent_jsonl_path": str(run_dir / "agent.jsonl"),
+    }
+    (run_dir / "result.json").write_text(json.dumps(payload))
+    return run_dir
+
+
+def test_artifact_analyze_help():
+    runner = CliRunner()
+    r = runner.invoke(cli, ["artifact", "analyze", "--help"])
+    assert r.exit_code == 0
+    assert "--results-dir" in r.output
+    assert "--out" in r.output
+
+
+def test_artifact_analyze_populated(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    _write_result_json(results_root, iid, "code_only", 1, verdict="PASS")
+    _write_result_json(results_root, iid, "tool_rich", 1, verdict="PASS")
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+    ])
+    assert r.exit_code == 0, r.output
+    assert iid in r.output
+    assert "code_only" in r.output
+    assert "tool_rich" in r.output
+    assert "category" in r.output
+    assert "difficulty" in r.output
+    assert "cost ratio" in r.output
+    assert "test_fixture" in r.output
+
+
+def test_artifact_analyze_out_csv(tmp_path):
+    import csv as _csv
+
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    out_csv = tmp_path / "out.csv"
+    iid = _write_fixture_task(tasks_root)
+    _write_result_json(results_root, iid, "code_only", 1, verdict="PASS")
+    _write_result_json(results_root, iid, "tool_rich", 1, verdict="FAIL")
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+        "--out", str(out_csv),
+    ])
+    assert r.exit_code == 0, r.output
+    assert out_csv.is_file()
+    with open(out_csv, newline="") as f:
+        reader = _csv.DictReader(f)
+        fieldnames = reader.fieldnames or []
+        rows = list(reader)
+    for col in ("task", "category", "difficulty", "arm", "run",
+                "verdict", "turns", "cost_usd", "wall_secs"):
+        assert col in fieldnames, f"missing column {col}: {fieldnames}"
+    assert len(rows) == 2
+    assert all(row["task"] == iid for row in rows)
+
+
+def test_artifact_analyze_missing_result(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    # Create the run dir without a result.json
+    (results_root / iid / "code_only" / "run1").mkdir(parents=True)
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+    ])
+    assert r.exit_code == 0, r.output
+    assert "MISSING" in r.output
+    # Per-arm pass rate for code_only must treat MISSING as non-pass: 0/1.
+    assert "code_only: 0/1 PASS" in r.output
+
+
+def test_artifact_analyze_cost_ratio_fallback(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    _write_result_json(results_root, iid, "code_only", 1,
+                       verdict="PASS", cost_usd=0.10)
+    _write_result_json(results_root, iid, "tool_rich", 1,
+                       verdict="ERROR", cost_usd=0.0)
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+    ])
+    assert r.exit_code == 0, r.output
+    # No ZeroDivisionError in stderr
+    assert "ZeroDivisionError" not in (r.output + (r.stderr or ""))
+    assert "cost ratio: N/A" in r.output
+
+
+def test_artifact_analyze_skips_scratch_result(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    # Place a stray result.json under scratch/ but nothing at the canonical
+    # location — the walker must treat this triple as MISSING.
+    run_dir = results_root / iid / "code_only" / "run1"
+    scratch_dir = run_dir / "scratch"
+    scratch_dir.mkdir(parents=True)
+    (scratch_dir / "result.json").write_text(
+        json.dumps({"verdict": "PASS", "cost_usd": 0.5, "num_turns": 10, "wall_secs": 99})
+    )
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+    ])
+    assert r.exit_code == 0, r.output
+    # The canonical row must be MISSING, NOT PASS from the scratch file.
+    assert "MISSING" in r.output
+    # The scratch PASS cost must not leak into the aggregate
+    # (pass rate must be 0/1 for code_only).
+    assert "code_only: 0/1 PASS" in r.output
+
+
+def test_artifact_analyze_empty_results(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    results_root = tmp_path / "results"
+    results_root.mkdir()
+    _write_fixture_task(tasks_root)
+
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(results_root),
+        "--tasks-dir", str(tasks_root),
+    ])
+    assert r.exit_code == 0, r.output
+    assert "No artifact run results found" in r.output
+
+
+def test_artifact_analyze_missing_results_dir(tmp_path):
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "analyze",
+        "--results-dir", str(tmp_path / "does_not_exist"),
+    ])
+    assert r.exit_code == 1
+    assert "Results directory not found" in (r.output + (r.stderr or ""))
+
+
 def test_swebench_run_unchanged_smoke():
     """Additive-only: ``python -m swebench run --help`` must still work and
     must not advertise any artifact-mode flag."""
