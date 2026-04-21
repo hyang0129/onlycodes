@@ -1,6 +1,6 @@
 """Task loader for artifact-graded benchmark mode.
 
-Walks ``tasks/<category>/<slug>/task.yaml`` and parses each manifest per the
+Walks ``problems/artifact/<category>/<slug>/task.yaml`` and parses each manifest per the
 frozen SCHEMA in docs/SCHEMA_ARTIFACT.md.
 """
 
@@ -139,7 +139,7 @@ def discover_task_manifests(tasks_dir: Path) -> list[Path]:
     """Return sorted list of task.yaml paths under tasks_dir. Empty if none."""
     if not tasks_dir.is_dir():
         return []
-    # Glob at depth 2: tasks/<category>/<slug>/task.yaml
+    # Glob at depth 2: problems/artifact/<category>/<slug>/task.yaml
     return sorted(tasks_dir.glob("*/*/task.yaml"))
 
 

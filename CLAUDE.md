@@ -8,11 +8,11 @@ The evaluation harness is a Python CLI (`swebench/`) invoked via `python -m sweb
 
 ```bash
 # Add a problem instance (fetches from HuggingFace SWE-bench datasets)
-python -m swebench add <instance_id>                                 # default set: adhoc/
-python -m swebench add <instance_id> --set swebench-verified-mini    # into a named set
+python -m swebench add <instance_id>                                     # default set: swe/adhoc/
+python -m swebench add <instance_id> --set swe/swebench-verified-mini    # into a named set
 
 # Batch-add from a file of instance IDs (one per line, # comments ok; parallel HF fetch)
-python -m swebench add --from-file ids.txt --set swebench-verified-mini --concurrency 8
+python -m swebench add --from-file ids.txt --set swe/swebench-verified-mini --concurrency 8
 
 # Run evaluation arms
 python -m swebench run                          # both arms, all problems (recurses into sets)
@@ -43,15 +43,17 @@ python -m swebench run                                 # uses cache by default
 python -m swebench run --no-cache                      # opt out of cached setup
 ```
 
-Problem definitions live under `problems/<set>/*.yaml` — curated sets are separated from
+Problem definitions live under `problems/swe/<set>/*.yaml` — curated sets are separated from
 ad-hoc additions. Current sets:
 
-- `problems/swebench-verified-mini/` — the 50-problem [SWE-bench Verified Mini](https://hal.cs.princeton.edu/swebench_verified_mini) subset (25 django + 25 sphinx).
-- `problems/adhoc/` — one-offs added without specifying a set (the `add` default).
+- `problems/swe/swebench-verified-mini/` — the 50-problem [SWE-bench Verified Mini](https://hal.cs.princeton.edu/swebench_verified_mini) subset (25 django + 25 sphinx).
+- `problems/swe/adhoc/` — one-offs added without specifying a set (the `add` default).
 
-The runner recurses into every subfolder of `problems/`, so additional curated sets can be
-introduced simply by passing a new `--set <name>` to `add`. Results go to `results_swebench/`
-keyed by `instance_id` (flat, regardless of set).
+The runner recurses into every subfolder of `problems/swe/`, so additional curated sets can be
+introduced simply by passing a new `--set swe/<name>` to `add`. Artifact-graded tasks live
+separately under `problems/artifact/<category>/<slug>/task.yaml` and are loaded only by
+`python -m swebench artifact run`. Results go to `results_swebench/` keyed by `instance_id`
+(flat, regardless of set).
 
 ## patterns.json
 

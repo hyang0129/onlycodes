@@ -38,14 +38,14 @@ WORK_DIR = Path("/workspaces/hub_1/onlycodes-issue-11")
 
 
 def _instance_yaml_exists() -> bool:
-    return bool(glob.glob(f"problems/**/{INSTANCE_ID}.yaml", recursive=True))
+    return bool(glob.glob(f"problems/swe/**/{INSTANCE_ID}.yaml", recursive=True))
 
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
         not _instance_yaml_exists(),
-        reason=f"Problem YAML for {INSTANCE_ID} not found in problems/",
+        reason=f"Problem YAML for {INSTANCE_ID} not found in problems/swe/",
     ),
 ]
 

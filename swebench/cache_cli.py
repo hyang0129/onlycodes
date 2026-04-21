@@ -54,11 +54,11 @@ def _echo(msg: str, *, err: bool = False) -> None:
 
 def _load_problems(filter_ids: str | None) -> list[Problem]:
     root = repo_root()
-    problems_dir = root / "problems"
+    problems_dir = root / "problems" / "swe"
     yaml_files = sorted(problems_dir.rglob("*.yaml"))
     if not yaml_files:
         click.echo(
-            "ERROR: No problem files found in problems/. "
+            "ERROR: No problem files found in problems/swe/. "
             "Run 'python -m swebench add' first.",
             err=True,
         )
@@ -134,7 +134,7 @@ def cache_group() -> None:
     "--filter",
     "filter_ids",
     default=None,
-    help="Comma-separated instance IDs to warm up (default: every problem in problems/).",
+    help="Comma-separated instance IDs to warm up (default: every problem in problems/swe/).",
 )
 @click.option(
     "--concurrency",

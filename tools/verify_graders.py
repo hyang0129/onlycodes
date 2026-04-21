@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-merge grader sanity gate.
 
-Walks ``tasks/<category>/<slug>/task.yaml``, copies each task's
+Walks ``problems/artifact/<category>/<slug>/task.yaml``, copies each task's
 ``reference_output`` into a temp scratch dir as the expected output artifact,
 invokes the harness grader, and reports PASS/FAIL per task.
 
@@ -70,8 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tasks-dir",
         type=Path,
-        default=_REPO_ROOT / "tasks",
-        help="Root tasks directory (default: <repo>/tasks/)",
+        default=_REPO_ROOT / "problems" / "artifact",
+        help="Root tasks directory (default: <repo>/problems/artifact/)",
     )
     args = parser.parse_args(argv)
     tasks_dir: Path = args.tasks_dir
