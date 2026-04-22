@@ -1,0 +1,16 @@
+instance_id: enumeration__permutations_fixed_points
+category: enumeration
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/perms.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - enumeration
+  - permutations
+  - combinatorics
+  - realism_checklist_v1

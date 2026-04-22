@@ -1,0 +1,16 @@
+instance_id: enumeration__subset_sum_count
+category: enumeration
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/subsets.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 15
+  max_wall_seconds: 180
+tags:
+  - enumeration
+  - subset_sum
+  - combinatorics
+  - realism_checklist_v1
