@@ -10,7 +10,7 @@
 #   algorithmic:         2 easy / 3 medium / 3 hard  (target met, #130)
 #   data_processing:     2 easy / 3 medium / 3 hard  (target met, #131)
 #   enumeration:         2 easy / 3 medium / 3 hard  (target met, #132)
-#   iterative_numerical: 1 easy / 1 medium / 1 hard  (target 2/3/3)
+#   iterative_numerical: 2 easy / 3 medium / 3 hard  (target met, #133)
 #   stateful_reasoning:  0 easy / 2 medium / 1 hard  (target 2/3/3)
 #   verification_heavy:  1 easy / 1 medium / 0 hard  (target 2/3/3)
 
@@ -48,6 +48,11 @@ enumeration__binary_strings_no_run
 iterative_numerical__exp_decay_fit
 iterative_numerical__hparam_search
 iterative_numerical__bisection_calibration
+iterative_numerical__newton_sqrt
+iterative_numerical__logistic_fit
+iterative_numerical__secant_root_budgeted
+iterative_numerical__gradient_descent_rosenbrock
+iterative_numerical__gauss_newton_circle_fit
 
 # stateful_reasoning
 stateful_reasoning__unreachable_functions

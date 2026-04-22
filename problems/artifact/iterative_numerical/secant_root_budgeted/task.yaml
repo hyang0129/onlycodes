@@ -1,0 +1,18 @@
+instance_id: iterative_numerical__secant_root_budgeted
+category: iterative_numerical
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/roots.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 30
+  max_wall_seconds: 180
+tags:
+  - iterative_numerical
+  - root_finding
+  - secant_method
+  - numerical
+  - realism_checklist_v1
