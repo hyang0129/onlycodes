@@ -36,8 +36,11 @@ from typing import Any
 #: Current registry schema version. Incremented only on breaking change.
 SCHEMA_VERSION = 1
 
-#: Valid arm names for subagent output.
-VALID_ARMS = ("baseline", "onlycode")
+#: Valid arm names for subagent output. Includes both SWE-bench arm names
+#: (``baseline``, ``onlycode``) and artifact arm names
+#: (``tool_rich``, ``code_only``) so the same validator accepts sidecars
+#: from either benchmark.
+VALID_ARMS = ("baseline", "onlycode", "tool_rich", "code_only")
 
 #: Valid severity / confidence enum values for subagent findings.
 VALID_SEVERITY = ("low", "medium", "high")

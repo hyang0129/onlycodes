@@ -66,7 +66,14 @@ def _echo(msg: str, *, err: bool = False) -> None:
 
 
 #: Regex to split a run filename stem into (instance_id, arm, run_idx).
+#: SWE-bench layout: ``results_swebench/<instance>_<arm>_run<N>.jsonl``.
 _RUN_STEM_RE = re.compile(r"^(?P<instance>.+)_(?P<arm>baseline|onlycode)_run(?P<run>\d+)$")
+
+#: Valid artifact-arm directory names (matches ``VALID_ARMS`` in registry.py).
+_ARTIFACT_ARMS = ("tool_rich", "code_only")
+
+#: Regex for the artifact run-directory name (``run<N>``).
+_ARTIFACT_RUN_DIR_RE = re.compile(r"^run(?P<run>\d+)$")
 
 
 def _default_run_id() -> str:
@@ -75,16 +82,95 @@ def _default_run_id() -> str:
 
 
 def _discover_logs(results_dir: Path) -> list[Path]:
-    """Return sorted ``*_run*.jsonl`` files under ``results_dir`` (non-recursive)."""
-    return sorted(results_dir.glob("*_run*.jsonl"))
+    """Return sorted run-JSONL files under ``results_dir``.
+
+    Supports two layouts:
+
+    - **SWE-bench** (flat): ``<results_dir>/*_<arm>_run<N>.jsonl``.
+    - **Artifact** (nested, depth-3): ``<results_dir>/<task>/<arm>/run<N>/agent.jsonl``
+      where ``arm`` is ``tool_rich`` or ``code_only``.
+
+    Both layouts may coexist under the same ``results_dir`` — returned list
+    is the union, sorted by path. Any subtree under ``_analysis/`` is
+    excluded (that's where sidecars live).
+    """
+    flat = sorted(results_dir.glob("*_run*.jsonl"))
+
+    artifact: list[Path] = []
+    for task_dir in sorted(results_dir.iterdir()) if results_dir.is_dir() else []:
+        if not task_dir.is_dir() or task_dir.name.startswith("_"):
+            continue
+        for arm in _ARTIFACT_ARMS:
+            arm_dir = task_dir / arm
+            if not arm_dir.is_dir():
+                continue
+            for run_dir in sorted(arm_dir.iterdir()):
+                if not run_dir.is_dir():
+                    continue
+                if not _ARTIFACT_RUN_DIR_RE.match(run_dir.name):
+                    continue
+                agent = run_dir / "agent.jsonl"
+                if agent.is_file():
+                    artifact.append(agent)
+
+    # flat and artifact cannot overlap (flat yields *_run*.jsonl at depth 1;
+    # artifact yields agent.jsonl at depth 4), so no dedup set needed.
+    return sorted(flat + artifact)
 
 
 def _parse_log_ref(jsonl_path: Path) -> tuple[str, str, int] | None:
-    """Return ``(instance_id, arm, run_idx)`` for a run JSONL, or None if unparseable."""
+    """Return ``(instance_id, arm, run_idx)`` for a run JSONL, or None if unparseable.
+
+    Handles both SWE-bench flat filenames and nested artifact layout
+    (``<task>/<arm>/run<N>/agent.jsonl``).
+    """
+    # SWE-bench flat filename first.
     m = _RUN_STEM_RE.match(jsonl_path.stem)
-    if not m:
-        return None
-    return m.group("instance"), m.group("arm"), int(m.group("run"))
+    if m:
+        return m.group("instance"), m.group("arm"), int(m.group("run"))
+
+    # Artifact nested layout: <task>/<arm>/run<N>/agent.jsonl
+    if jsonl_path.name == "agent.jsonl":
+        parts = jsonl_path.parts
+        if len(parts) >= 4:
+            run_name = parts[-2]
+            arm = parts[-3]
+            task = parts[-4]
+            # Skip paths rooted under an _analysis-style subtree — mirrors
+            # the exclusion rule in _discover_logs so that a manually-passed
+            # sidecar path does not accidentally parse as a real artifact log.
+            if task.startswith("_"):
+                return None
+            run_m = _ARTIFACT_RUN_DIR_RE.match(run_name)
+            if arm in _ARTIFACT_ARMS and run_m:
+                return task, arm, int(run_m.group("run"))
+    return None
+
+
+def _synthesize_log_ref(parsed: tuple[str, str, int] | None, jsonl_path: Path) -> str:
+    """Return a stable, unique ``log_ref`` string for a JSONL path.
+
+    For artifact logs whose filename stem is always ``agent`` (non-unique),
+    the synthesized form is ``<task>__<arm>__run<N>``. For SWE-bench logs
+    the existing filename stem is already unique.
+
+    .. note::
+       The returned ``log_ref`` is treated as an **opaque identifier** by
+       downstream consumers. Do **not** re-parse it by splitting on ``__``:
+       artifact task IDs themselves contain ``__`` (per the
+       ``<category>__<slug>`` convention in ``docs/SCHEMA_ARTIFACT.md``), so
+       the final form has four ``__``-delimited fields, not three. To recover
+       ``(task, arm, run)`` from a log, call :func:`_parse_log_ref` on the
+       original JSONL path — never split the synthesized ``log_ref``.
+    """
+    if parsed is None:
+        return jsonl_path.stem
+    instance, arm, run = parsed
+    # SWE-bench: the stem is already unique and historically used as log_ref.
+    if jsonl_path.stem != "agent":
+        return jsonl_path.stem
+    # Artifact: synthesize.
+    return f"{instance}__{arm}__run{run}"
 
 
 def _analysis_root(results_dir: Path, run_id: str) -> Path:
@@ -117,8 +203,9 @@ def _stage_mechanical(
 
     metrics: list[dict] = []
     for jsonl in logs:
-        sidecar = mech_dir / f"{jsonl.stem}.json"
         parsed = _parse_log_ref(jsonl)
+        log_ref = _synthesize_log_ref(parsed, jsonl)
+        sidecar = mech_dir / f"{log_ref}.json"
 
         if sidecar.exists() and not force and not dry_run:
             try:
@@ -141,7 +228,7 @@ def _stage_mechanical(
             data["task_id"] = instance
             data["arm"] = arm
             data["run"] = run
-            data["log_ref"] = jsonl.stem
+        data["log_ref"] = log_ref
         data["jsonl_path"] = str(jsonl)
         metrics.append(data)
     return metrics
@@ -316,8 +403,24 @@ def _stage_subagents(
     concurrency: int,
     force: bool,
     dry_run: bool,
+    skip_log_refs: set[str] | None = None,
 ) -> tuple[int, int]:
-    """Fan out subagents. Returns ``(succeeded, failed)`` counts."""
+    """Fan out subagents. Returns ``(succeeded, failed)`` counts.
+
+    ``skip_log_refs``: if provided, any flagged log whose ``log_ref`` is in
+    this set is skipped — the semi-mechanical stage already produced a
+    sidecar for it, so running the full-transcript subagent would be
+    redundant and expensive.
+    """
+    if skip_log_refs:
+        before = len(flagged)
+        flagged = [m for m in flagged if m.get("log_ref") not in skip_log_refs]
+        skipped = before - len(flagged)
+        if skipped:
+            _echo(
+                f"[stage2] skipping {skipped} log(s) already covered by "
+                f"semi-mechanical extractors"
+            )
     if not flagged:
         _echo("[stage2] no flagged runs; nothing to do.")
         return (0, 0)
@@ -387,24 +490,29 @@ def _collect_subagent_outputs(analysis_root: Path) -> list[dict]:
     Invalid or unparseable sidecars are logged via :func:`_echo` and skipped
     — one bad subagent reply must not block synthesis of the rest.
     """
-    sub_dir = analysis_root / "subagents"
-    if not sub_dir.is_dir():
-        return []
     outputs: list[dict] = []
-    for sc in sorted(sub_dir.glob("*.json")):
-        try:
-            data = json.loads(sc.read_text())
-        except (OSError, json.JSONDecodeError) as exc:
-            _echo(f"[stage3] skip unreadable sidecar {sc.name}: {exc}", err=True)
+    # Load from both subagents/ (Stage 2 full-transcript) and
+    # semi_mechanical/ (Stage 1.5 focused-excerpt) sidecar dirs. Both
+    # produce subagent-shaped JSON and both validate via the same schema.
+    for sub_dir_name in ("subagents", "semi_mechanical"):
+        sub_dir = analysis_root / sub_dir_name
+        if not sub_dir.is_dir():
             continue
-        errs = registry.validate_subagent_output(data)
-        if errs:
-            _echo(
-                f"[stage3] skip invalid sidecar {sc.name}: {'; '.join(errs[:3])}",
-                err=True,
-            )
-            continue
-        outputs.append(data)
+        for sc in sorted(sub_dir.glob("*.json")):
+            try:
+                data = json.loads(sc.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                _echo(f"[stage3] skip unreadable sidecar {sc.name}: {exc}", err=True)
+                continue
+            errs = registry.validate_subagent_output(data)
+            if errs:
+                _echo(
+                    f"[stage3] skip invalid sidecar {sub_dir_name}/{sc.name}: "
+                    f"{'; '.join(errs[:3])}",
+                    err=True,
+                )
+                continue
+            outputs.append(data)
     return outputs
 
 
@@ -552,7 +660,7 @@ def _stage_synthesize(
 # ---------------------------------------------------------------------------
 
 
-STAGE_CHOICES = ("mechanical", "subagents", "synthesize", "all")
+STAGE_CHOICES = ("mechanical", "semi-mechanical", "subagents", "synthesize", "all")
 
 
 def register_pathology_command(analyze_command: click.Group) -> None:
@@ -563,7 +671,12 @@ def register_pathology_command(analyze_command: click.Group) -> None:
         "--results-dir",
         type=click.Path(exists=True, file_okay=False, path_type=Path),
         default=None,
-        help="Path to results directory (default: auto-detect results_swebench/).",
+        help=(
+            "Path to results directory (default: results_swebench/). "
+            "Pass results_artifact/ for the artifact benchmark; layouts "
+            "(flat SWE-bench, nested <task>/<arm>/run<N>/agent.jsonl) are "
+            "auto-detected."
+        ),
     )
     @click.option(
         "--concurrency",
@@ -627,17 +740,23 @@ def register_pathology_command(analyze_command: click.Group) -> None:
 
         logs = _discover_logs(rdir)
         if not logs:
-            _echo(f"[pathology] no *_run*.jsonl files found under {rdir}")
+            _echo(
+                f"[pathology] no run JSONL files found under {rdir} "
+                f"(looked for flat *_run*.jsonl and nested "
+                f"<task>/<arm>/run<N>/agent.jsonl)"
+            )
             return
 
         want_stage1 = stage in ("mechanical", "all")
+        want_semi = stage in ("semi-mechanical", "all")
         want_stage2 = stage in ("subagents", "all")
         want_stage3 = stage in ("synthesize", "all")
 
         metrics: list[dict] = []
         flagged: list[dict] = []
 
-        if want_stage1 or want_stage2:
+        # Stage 1 metrics are needed by Stages 1.5 and 2.
+        if want_stage1 or want_semi or want_stage2:
             metrics = _stage_mechanical(
                 logs=logs,
                 analysis_root=aroot,
@@ -650,6 +769,22 @@ def register_pathology_command(analyze_command: click.Group) -> None:
                 dry_run=dry_run,
             )
 
+        semi_matched: set[str] = set()
+        if want_semi:
+            # Late import to avoid pulling extractors into --help.
+            from swebench.analyze.semi_mechanical import (
+                load_bundled_extractors,
+                run_semi_mechanical,
+            )
+            load_bundled_extractors()
+            semi_matched = run_semi_mechanical(
+                metrics=metrics,
+                analysis_root=aroot,
+                concurrency=concurrency,
+                force=force,
+                dry_run=dry_run,
+            )
+
         if want_stage2:
             succ, fail = _stage_subagents(
                 flagged=flagged,
@@ -657,6 +792,7 @@ def register_pathology_command(analyze_command: click.Group) -> None:
                 concurrency=concurrency,
                 force=force,
                 dry_run=dry_run,
+                skip_log_refs=semi_matched,
             )
             _echo(f"[stage2] summary: ok={succ} fail={fail}")
             if fail:
