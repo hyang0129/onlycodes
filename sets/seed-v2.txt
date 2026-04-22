@@ -12,7 +12,7 @@
 #   enumeration:         2 easy / 3 medium / 3 hard  (target met, #132)
 #   iterative_numerical: 2 easy / 3 medium / 3 hard  (target met, #133)
 #   stateful_reasoning:  2 easy / 3 medium / 3 hard  (target met, #134)
-#   verification_heavy:  1 easy / 1 medium / 0 hard  (target 2/3/3)
+#   verification_heavy:  2 easy / 3 medium / 3 hard  (target met, #135)
 
 # algorithmic
 algorithmic__makespan_scheduling
@@ -66,4 +66,10 @@ stateful_reasoning__rate_limiter_replay
 
 # verification_heavy
 verification_heavy__parse_iso_duration
+verification_heavy__csv_dialect_parser
 verification_heavy__lru_cache_impl
+verification_heavy__semver_compare
+verification_heavy__expression_evaluator
+verification_heavy__cron_next_fire
+verification_heavy__json_pointer_rfc6901
+verification_heavy__iban_validator
