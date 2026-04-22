@@ -1,0 +1,18 @@
+instance_id: verification_heavy__cron_next_fire
+category: verification_heavy
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/solution.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.py
+execution_budget:
+  max_code_runs: 15
+  max_wall_seconds: 180
+tags:
+  - verification_heavy
+  - cron
+  - scheduling
+  - datetime
+  - python
+  - realism_checklist_v1
