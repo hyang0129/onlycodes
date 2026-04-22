@@ -1,0 +1,18 @@
+instance_id: stateful_reasoning__rate_limiter_replay
+category: stateful_reasoning
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/decisions.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 300
+tags:
+  - stateful_reasoning
+  - event_replay
+  - rate_limiter
+  - sliding_window
+  - realism_checklist_v1

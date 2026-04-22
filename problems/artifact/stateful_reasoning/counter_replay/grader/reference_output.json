@@ -1,0 +1,12 @@
+{
+  "cache.hits": 0,
+  "cache.misses": 1,
+  "errors.5xx": -4,
+  "queue.depth": 32,
+  "requests.2xx": 0,
+  "requests.4xx": 74,
+  "requests.5xx": 63,
+  "requests.total": 2,
+  "retries.total": 1,
+  "sessions.active": 0
+}

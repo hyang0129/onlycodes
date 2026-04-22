@@ -1,0 +1,42 @@
+{
+  "api.gzip": {
+    "enabled": true,
+    "toggle_count": 21
+  },
+  "auth.mfa_required": {
+    "enabled": true,
+    "toggle_count": 15
+  },
+  "billing.usage_meter": {
+    "enabled": true,
+    "toggle_count": 15
+  },
+  "checkout.v2": {
+    "enabled": false,
+    "toggle_count": 10
+  },
+  "dashboard.beta": {
+    "enabled": true,
+    "toggle_count": 19
+  },
+  "inbox.priority": {
+    "enabled": true,
+    "toggle_count": 9
+  },
+  "notifications.digest": {
+    "enabled": false,
+    "toggle_count": 18
+  },
+  "onboarding.tour": {
+    "enabled": true,
+    "toggle_count": 17
+  },
+  "ranking.ml": {
+    "enabled": false,
+    "toggle_count": 12
+  },
+  "search.fuzzy": {
+    "enabled": false,
+    "toggle_count": 10
+  }
+}
