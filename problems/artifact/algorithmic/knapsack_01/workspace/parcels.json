@@ -1,0 +1,155 @@
+{
+  "capacity": 160,
+  "items": [
+    {
+      "id": 0,
+      "weight": 58,
+      "value": 71
+    },
+    {
+      "id": 1,
+      "weight": 12,
+      "value": 83
+    },
+    {
+      "id": 2,
+      "weight": 37,
+      "value": 67
+    },
+    {
+      "id": 3,
+      "weight": 34,
+      "value": 76
+    },
+    {
+      "id": 4,
+      "weight": 39,
+      "value": 39
+    },
+    {
+      "id": 5,
+      "weight": 47,
+      "value": 23
+    },
+    {
+      "id": 6,
+      "weight": 41,
+      "value": 70
+    },
+    {
+      "id": 7,
+      "weight": 50,
+      "value": 23
+    },
+    {
+      "id": 8,
+      "weight": 55,
+      "value": 77
+    },
+    {
+      "id": 9,
+      "weight": 18,
+      "value": 54
+    },
+    {
+      "id": 10,
+      "weight": 32,
+      "value": 21
+    },
+    {
+      "id": 11,
+      "weight": 30,
+      "value": 28
+    },
+    {
+      "id": 12,
+      "weight": 43,
+      "value": 13
+    },
+    {
+      "id": 13,
+      "weight": 60,
+      "value": 71
+    },
+    {
+      "id": 14,
+      "weight": 12,
+      "value": 51
+    },
+    {
+      "id": 15,
+      "weight": 20,
+      "value": 38
+    },
+    {
+      "id": 16,
+      "weight": 55,
+      "value": 84
+    },
+    {
+      "id": 17,
+      "weight": 18,
+      "value": 97
+    },
+    {
+      "id": 18,
+      "weight": 42,
+      "value": 49
+    },
+    {
+      "id": 19,
+      "weight": 11,
+      "value": 70
+    },
+    {
+      "id": 20,
+      "weight": 8,
+      "value": 22
+    },
+    {
+      "id": 21,
+      "weight": 49,
+      "value": 87
+    },
+    {
+      "id": 22,
+      "weight": 26,
+      "value": 34
+    },
+    {
+      "id": 23,
+      "weight": 45,
+      "value": 68
+    },
+    {
+      "id": 24,
+      "weight": 11,
+      "value": 36
+    },
+    {
+      "id": 25,
+      "weight": 45,
+      "value": 81
+    },
+    {
+      "id": 26,
+      "weight": 17,
+      "value": 40
+    },
+    {
+      "id": 27,
+      "weight": 32,
+      "value": 59
+    },
+    {
+      "id": 28,
+      "weight": 28,
+      "value": 27
+    },
+    {
+      "id": 29,
+      "weight": 34,
+      "value": 40
+    }
+  ]
+}
