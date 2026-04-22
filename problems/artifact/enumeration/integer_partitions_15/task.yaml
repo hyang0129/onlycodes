@@ -1,0 +1,17 @@
+instance_id: enumeration__integer_partitions_15
+category: enumeration
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/partitions.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 300
+tags:
+  - enumeration
+  - partitions
+  - number_theory
+  - combinatorics
+  - realism_checklist_v1
