@@ -1,0 +1,30 @@
+{
+  "total_signups": 1937,
+  "steps": [
+    {
+      "step": "signup",
+      "reached": 1937,
+      "rate_from_prev": 1.0
+    },
+    {
+      "step": "verify_email",
+      "reached": 1399,
+      "rate_from_prev": 0.7223
+    },
+    {
+      "step": "onboarding_complete",
+      "reached": 803,
+      "rate_from_prev": 0.574
+    },
+    {
+      "step": "first_action",
+      "reached": 483,
+      "rate_from_prev": 0.6015
+    },
+    {
+      "step": "subscribe",
+      "reached": 158,
+      "rate_from_prev": 0.3271
+    }
+  ]
+}
