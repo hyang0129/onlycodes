@@ -136,13 +136,28 @@ def test_unknown_category_rejected(tmp_path: Path) -> None:
         load_tasks(tasks_dir)
 
 
-def test_invalid_difficulty_rejected(tmp_path: Path) -> None:
+def test_hard_difficulty_accepted(tmp_path: Path) -> None:
+    """Issue #128: `hard` is admitted to the difficulty whitelist."""
     tasks_dir = tmp_path / "tasks"
     _write_task(
         tasks_dir,
         "data_processing",
-        "hard_forbidden",
+        "hard_task",
         overrides={"difficulty": "hard"},
+    )
+    tasks = load_tasks(tasks_dir)
+    assert len(tasks) == 1
+    assert tasks[0].difficulty == "hard"
+
+
+def test_invalid_difficulty_rejected(tmp_path: Path) -> None:
+    """Any value outside {easy, medium, hard} is still rejected."""
+    tasks_dir = tmp_path / "tasks"
+    _write_task(
+        tasks_dir,
+        "data_processing",
+        "impossible_difficulty",
+        overrides={"difficulty": "impossible"},
     )
     with pytest.raises(ValueError, match="difficulty must be"):
         load_tasks(tasks_dir)

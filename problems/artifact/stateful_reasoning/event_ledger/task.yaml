@@ -1,6 +1,6 @@
 instance_id: stateful_reasoning__event_ledger
 category: stateful_reasoning
-difficulty: medium
+difficulty: hard
 problem_statement: prompt.md
 workspace_dir: workspace/
 workspace_generator: workspace/generator.py

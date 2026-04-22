@@ -67,7 +67,7 @@ tags: [aggregation, jsonl]
 |---|---|---|---|
 | `instance_id` | **required** | string | Globally unique, stable. Format: `<category>__<slug>` (two underscores). Must match `^[a-z][a-z0-9_]*__[a-z0-9_]+$`. Stable across re-grades — do not rename. If a task is replaced with a different problem shape, allocate a new `instance_id` instead of reusing. |
 | `category` | **required** | string | One of the six canonical categories: `data_processing`, `algorithmic`, `verification_heavy`, `enumeration`, `stateful_reasoning`, `iterative_numerical`. Must equal the `<category>` segment of `instance_id`. |
-| `difficulty` | **required** | string | One of: `easy`, `medium`. (`hard` is reserved for a future epic and MUST NOT be used in seed-v1.) |
+| `difficulty` | **required** | string | One of: `easy`, `medium`, `hard`. Author's self-assessment against `docs/TASK_REALISM_CHECKLIST.md`; the seed-v2 ladder targets 2 easy / 3 medium / 3 hard per category. |
 | `problem_statement` | **required** | string (relative path) | Path to the natural-language prompt shown to the agent. Convention: `prompt.md`. Resolved relative to the task directory. The file's entire contents are placed verbatim into the agent's problem prompt. |
 | `workspace_dir` | **required** | string (relative path) | Directory copied into the agent's scratch dir at run time. Convention: `workspace/`. May be empty (rare — e.g. pure-enumeration tasks that need no input files) but the field must still be declared. |
 | `output_artifact` | **required** | string (relative path) | Path, **relative to the scratch dir**, that the agent MUST write. The grader reads from `scratch_dir / output_artifact`. Parent directories are created by the agent, not pre-created by the harness. |

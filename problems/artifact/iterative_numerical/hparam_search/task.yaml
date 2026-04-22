@@ -1,6 +1,6 @@
 instance_id: iterative_numerical__hparam_search
 category: iterative_numerical
-difficulty: medium
+difficulty: hard
 problem_statement: prompt.md
 workspace_dir: workspace/
 output_artifact: output/result.json
