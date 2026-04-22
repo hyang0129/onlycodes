@@ -1,0 +1,18 @@
+instance_id: stateful_reasoning__counter_replay
+category: stateful_reasoning
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/counters.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 10
+  max_wall_seconds: 120
+tags:
+  - stateful_reasoning
+  - event_replay
+  - counters
+  - jsonl
+  - realism_checklist_v1

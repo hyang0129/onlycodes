@@ -1,0 +1,678 @@
+{
+  "stock": {
+    "WH1": {
+      "SKU-A": 87,
+      "SKU-B": 148,
+      "SKU-C": 191,
+      "SKU-D": 255,
+      "SKU-E": 31,
+      "SKU-F": 53,
+      "SKU-G": 25,
+      "SKU-H": 117
+    },
+    "WH2": {
+      "SKU-A": 96,
+      "SKU-B": 12,
+      "SKU-C": 26,
+      "SKU-D": 114,
+      "SKU-E": 59,
+      "SKU-F": 42,
+      "SKU-G": 210,
+      "SKU-H": 0
+    },
+    "WH3": {
+      "SKU-A": 199,
+      "SKU-B": 100,
+      "SKU-C": 82,
+      "SKU-D": 10,
+      "SKU-E": 213,
+      "SKU-F": 22,
+      "SKU-G": 61,
+      "SKU-H": 58
+    },
+    "WH4": {
+      "SKU-A": 178,
+      "SKU-B": 13,
+      "SKU-C": 19,
+      "SKU-D": 128,
+      "SKU-E": 6,
+      "SKU-F": 158,
+      "SKU-G": 125,
+      "SKU-H": 131
+    }
+  },
+  "rejected": [
+    {
+      "id": "T00001",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00002",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00003",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00004",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00005",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00006",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00007",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00008",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00009",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00010",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00011",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00012",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00016",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00017",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00022",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00023",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00025",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00026",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00028",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00029",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00031",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00036",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00038",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00041",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00045",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00046",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00048",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00051",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00053",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00054",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00056",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00057",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00058",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00060",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00061",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00062",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00063",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00071",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00072",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00074",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00075",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00077",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00081",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00086",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00090",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00092",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00094",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00098",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00099",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00102",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00104",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00105",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00110",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00111",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00117",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00119",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00120",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00122",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00130",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00137",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00138",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00139",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00141",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00145",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00151",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00159",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00165",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00167",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00175",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00177",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00188",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00190",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00195",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00199",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00203",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00210",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00214",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00219",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00221",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00224",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00231",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00234",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00235",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00240",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00242",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00245",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00247",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00251",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00252",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00255",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00267",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00269",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00277",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00281",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00287",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00289",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00306",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00317",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00320",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00322",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00325",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00341",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00346",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00360",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00364",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00366",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00380",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00395",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00411",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00423",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00427",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00431",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00440",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00450",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00458",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00460",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00475",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00476",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00496",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00498",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00513",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00516",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00528",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00532",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00537",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00577",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00592",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00593",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00600",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00605",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00610",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00620",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00624",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00643",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00647",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00661",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00662",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00673",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00677",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00684",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00695",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00699",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00702",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00703",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00704",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00707",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00708",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00717",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00720",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00723",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00726",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00742",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00760",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00779",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00783",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00792",
+      "reason": "insufficient_stock"
+    },
+    {
+      "id": "T00797",
+      "reason": "insufficient_stock"
+    }
+  ],
+  "totals": {
+    "accepted": 643,
+    "rejected": 157
+  }
+}

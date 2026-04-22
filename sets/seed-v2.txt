@@ -11,7 +11,7 @@
 #   data_processing:     2 easy / 3 medium / 3 hard  (target met, #131)
 #   enumeration:         2 easy / 3 medium / 3 hard  (target met, #132)
 #   iterative_numerical: 2 easy / 3 medium / 3 hard  (target met, #133)
-#   stateful_reasoning:  0 easy / 2 medium / 1 hard  (target 2/3/3)
+#   stateful_reasoning:  2 easy / 3 medium / 3 hard  (target met, #134)
 #   verification_heavy:  1 easy / 1 medium / 0 hard  (target 2/3/3)
 
 # algorithmic
@@ -58,6 +58,11 @@ iterative_numerical__gauss_newton_circle_fit
 stateful_reasoning__unreachable_functions
 stateful_reasoning__upgrade_impact
 stateful_reasoning__event_ledger
+stateful_reasoning__counter_replay
+stateful_reasoning__feature_flag_timeline
+stateful_reasoning__session_fsm
+stateful_reasoning__inventory_reconciliation
+stateful_reasoning__rate_limiter_replay
 
 # verification_heavy
 verification_heavy__parse_iso_duration

@@ -1,0 +1,18 @@
+instance_id: stateful_reasoning__session_fsm
+category: stateful_reasoning
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/sessions.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 15
+  max_wall_seconds: 180
+tags:
+  - stateful_reasoning
+  - event_replay
+  - fsm
+  - sessions
+  - realism_checklist_v1

@@ -1,0 +1,242 @@
+{
+  "sess_000": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 2622
+  },
+  "sess_001": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 6,
+    "duration_s": 3386
+  },
+  "sess_002": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 6,
+    "duration_s": 2202
+  },
+  "sess_003": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 2167
+  },
+  "sess_004": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 0,
+    "duration_s": 425
+  },
+  "sess_005": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 7,
+    "duration_s": 3245
+  },
+  "sess_006": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 2901
+  },
+  "sess_007": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 0,
+    "duration_s": 260
+  },
+  "sess_008": {
+    "final_state": "closed",
+    "login_count": 2,
+    "activity_count": 5,
+    "duration_s": 7351
+  },
+  "sess_009": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 907
+  },
+  "sess_010": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 253
+  },
+  "sess_011": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 2980
+  },
+  "sess_012": {
+    "final_state": "closed",
+    "login_count": 2,
+    "activity_count": 3,
+    "duration_s": 3613
+  },
+  "sess_013": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 0,
+    "duration_s": 275
+  },
+  "sess_014": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 3771
+  },
+  "sess_015": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 7,
+    "duration_s": 5326
+  },
+  "sess_016": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 2927
+  },
+  "sess_017": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 377
+  },
+  "sess_018": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 434
+  },
+  "sess_019": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 4,
+    "duration_s": 1824
+  },
+  "sess_020": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 8,
+    "duration_s": 3836
+  },
+  "sess_021": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 615
+  },
+  "sess_022": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 4,
+    "duration_s": 1295
+  },
+  "sess_023": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 0,
+    "duration_s": 330
+  },
+  "sess_024": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 764
+  },
+  "sess_025": {
+    "final_state": "closed",
+    "login_count": 2,
+    "activity_count": 5,
+    "duration_s": 6309
+  },
+  "sess_026": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 0,
+    "duration_s": 147
+  },
+  "sess_027": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 5,
+    "duration_s": 3292
+  },
+  "sess_028": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 7,
+    "duration_s": 3421
+  },
+  "sess_029": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 729
+  },
+  "sess_030": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 232
+  },
+  "sess_031": {
+    "final_state": "corrupted",
+    "login_count": 1,
+    "activity_count": 1,
+    "duration_s": 552
+  },
+  "sess_032": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 8,
+    "duration_s": 3083
+  },
+  "sess_033": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 4,
+    "duration_s": 1419
+  },
+  "sess_034": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 2,
+    "duration_s": 1464
+  },
+  "sess_035": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 2219
+  },
+  "sess_036": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 4,
+    "duration_s": 2212
+  },
+  "sess_037": {
+    "final_state": "expired",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 3429
+  },
+  "sess_038": {
+    "final_state": "active",
+    "login_count": 2,
+    "activity_count": 2,
+    "duration_s": 4534
+  },
+  "sess_039": {
+    "final_state": "closed",
+    "login_count": 1,
+    "activity_count": 3,
+    "duration_s": 2374
+  }
+}
