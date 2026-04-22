@@ -1,18 +1,18 @@
-instance_id: data_processing__regression_detection
+instance_id: data_processing__duplicate_orders
 category: data_processing
-difficulty: medium
+difficulty: easy
 problem_statement: prompt.md
 workspace_dir: workspace/
 workspace_generator: workspace/generator.py
-output_artifact: output/regressions.jsonl
+output_artifact: output/duplicates.jsonl
+structural_verifier: workspace/verify.py
 hidden_grader: grader/hidden.py
 reference_output: grader/reference_output.jsonl
 execution_budget:
-  max_code_runs: 20
-  max_wall_seconds: 600
+  max_code_runs: 0
+  max_wall_seconds: 0
 tags:
   - data_processing
-  - aggregation
-  - p95
-  - regression
+  - deduplication
+  - window
   - realism_checklist_v1

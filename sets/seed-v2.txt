@@ -8,7 +8,7 @@
 #
 # Per-category counts as of seed-v2 bootstrap:
 #   algorithmic:         2 easy / 3 medium / 3 hard  (target met, #130)
-#   data_processing:     1 easy / 1 medium / 1 hard  (target 2/3/3)
+#   data_processing:     2 easy / 3 medium / 3 hard  (target met, #131)
 #   enumeration:         1 easy / 1 medium / 0 hard  (target 2/3/3)
 #   iterative_numerical: 1 easy / 1 medium / 1 hard  (target 2/3/3)
 #   stateful_reasoning:  0 easy / 2 medium / 1 hard  (target 2/3/3)
@@ -26,8 +26,13 @@ algorithmic__graph_min_vertex_cover
 
 # data_processing
 data_processing__p95_latency_easy
+data_processing__duplicate_orders
 data_processing__regression_detection
+data_processing__funnel_conversion
+data_processing__session_window
 data_processing__multi_file_cohort
+data_processing__cohort_retention
+data_processing__outlier_days
 
 # enumeration
 enumeration__latin_squares_3
