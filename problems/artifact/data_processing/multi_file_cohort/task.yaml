@@ -1,6 +1,6 @@
 instance_id: data_processing__multi_file_cohort
 category: data_processing
-difficulty: medium
+difficulty: hard
 problem_statement: prompt.md
 workspace_dir: workspace/
 workspace_generator: workspace/generator.py

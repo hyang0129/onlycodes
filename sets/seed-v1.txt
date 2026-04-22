@@ -1,9 +1,13 @@
-# Curated artifact task set — seed-v1.
+# Curated artifact task set — seed-v1 (frozen at 15 tasks).
 # One instance_id per line. Blank lines and # comments are ignored.
-# Append-only: this file is populated by the seed-task slices (#95 onward).
+#
+# This set is the historical 15-task reference used by epics #95-#127. It is
+# frozen — do not add or remove tasks. For the expanded 48-task ladder, see
+# sets/seed-v2.txt (issue #128 onward).
 
 data_processing__p95_latency_easy
 data_processing__regression_detection
+data_processing__multi_file_cohort
 algorithmic__makespan_scheduling
 algorithmic__min_cost_assignment
 verification_heavy__parse_iso_duration
@@ -12,10 +16,7 @@ enumeration__latin_squares_3
 enumeration__graphs_chromatic_3
 stateful_reasoning__unreachable_functions
 stateful_reasoning__upgrade_impact
+stateful_reasoning__event_ledger
 iterative_numerical__exp_decay_fit
 iterative_numerical__hparam_search
-
-# Arm-gate signal tasks (B/C stress)
-data_processing__multi_file_cohort
-stateful_reasoning__event_ledger
 iterative_numerical__bisection_calibration

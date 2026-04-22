@@ -28,7 +28,7 @@ _CATEGORIES = frozenset({
     "test_fixture",
 })
 
-_DIFFICULTIES = frozenset({"easy", "medium"})
+_DIFFICULTIES = frozenset({"easy", "medium", "hard"})
 
 _REQUIRED_FIELDS = frozenset({
     "instance_id",

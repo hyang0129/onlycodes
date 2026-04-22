@@ -1,6 +1,6 @@
 instance_id: stateful_reasoning__unreachable_functions
 category: stateful_reasoning
-difficulty: easy
+difficulty: medium
 problem_statement: prompt.md
 workspace_dir: workspace/
 output_artifact: output/unreachable.jsonl

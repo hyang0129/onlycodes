@@ -1,6 +1,6 @@
 instance_id: iterative_numerical__bisection_calibration
 category: iterative_numerical
-difficulty: easy
+difficulty: medium
 problem_statement: prompt.md
 workspace_dir: workspace/
 output_artifact: output/result.json
