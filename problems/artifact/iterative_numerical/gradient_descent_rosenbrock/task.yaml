@@ -1,0 +1,18 @@
+instance_id: iterative_numerical__gradient_descent_rosenbrock
+category: iterative_numerical
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/minimum.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 40
+  max_wall_seconds: 240
+tags:
+  - iterative_numerical
+  - optimization
+  - gradient_descent
+  - numerical
+  - realism_checklist_v1
