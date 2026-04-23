@@ -2,6 +2,22 @@
 
 A benchmark testing whether Claude Code performs better when restricted to writing and executing code directly, rather than using its native file-system tools (Read, Grep, Glob, Edit, etc.).
 
+## Headline Results (artifact seed-v1, 12 tasks × 1 run)
+
+Both arms pass every task; `code_only` wins on efficiency across the board. Full per-task breakdown in [Artifact-Graded Benchmark → Results](#results-seed-v1-12-tasks--1-run).
+
+| Metric | code_only | baseline | code_only vs baseline |
+|---|---:|---:|---:|
+| Pass rate | 12/12 | 12/12 | — |
+| Total turns | 44 | 63 | **−30.2%** |
+| Total cost (USD) | 0.5660 | 0.9152 | **−38.2%** |
+| Total wall time (s) | 250 | 287 | **−12.9%** |
+| Mean turns / task | 3.67 | 5.25 | −30.2% |
+| Mean cost / task | $0.0472 | $0.0763 | −38.2% |
+| Mean wall / task | 20.8s | 23.9s | −12.9% |
+
+`baseline` = stock Claude Code harness with all native tools (Read, Grep, Glob, Edit, Bash, etc.). `code_only` = same harness restricted to a single `execute_code` MCP tool.
+
 ## Hypothesis
 
 Forcing the model to solve tasks by writing a single script — rather than making multiple fine-grained tool calls — should reduce turns, lower token costs, and complete tasks faster. The "only code" approach is implemented via an MCP server (`execute_code`) that provides a sandboxed Python/Bash execution environment.
@@ -137,6 +153,31 @@ python -m swebench artifact run --no-resume
 ```
 
 Results go to `runs/artifact/`. Task schema is documented in [`docs/SCHEMA_ARTIFACT.md`](docs/SCHEMA_ARTIFACT.md). Architecture decisions in [`docs/adr-0001-artifact-mode.md`](docs/adr-0001-artifact-mode.md).
+
+### Results (seed-v1, 12 tasks × 1 run)
+
+Both arms pass every task, so the comparison is on efficiency. `code_only` wins on cost, turns, and wall time. Per-task breakdown from [`runs/artifact/summary.csv`](runs/artifact/summary.csv):
+
+Columns: `co` = `code_only`, `bl` = `baseline` (stock Claude Code harness; the arm is named `tool_rich` in the CLI).
+
+| Task | Verdict | Turns (co / bl) | Cost USD (co / bl) | Wall s (co / bl) |
+|---|---|---|---|---|
+| algorithmic__makespan_scheduling | PASS / PASS | 3 / 5 | 0.0413 / 0.1265 | 17 / 40 |
+| algorithmic__min_cost_assignment | PASS / PASS | 2 / 4 | 0.0294 / 0.0596 | 14 / 21 |
+| data_processing__multi_file_cohort | PASS / PASS | 2 / 5 | 0.0346 / 0.0780 | 10 / 23 |
+| data_processing__p95_latency_easy | PASS / PASS | 4 / 8 | 0.0492 / 0.0899 | 20 / 32 |
+| data_processing__regression_detection | PASS / PASS | 4 / 6 | 0.0509 / 0.0745 | 20 / 22 |
+| enumeration__graphs_chromatic_3 | PASS / PASS | 5 / 5 | 0.0844 / 0.0795 | 60 / 33 |
+| enumeration__latin_squares_3 | PASS / PASS | 3 / 3 | 0.0354 / 0.0446 | 14 / 12 |
+| iterative_numerical__bisection_calibration | PASS / PASS | 2 / 4 | 0.0348 / 0.0708 | 14 / 21 |
+| iterative_numerical__exp_decay_fit | PASS / PASS | 5 / 5 | 0.0542 / 0.0652 | 24 / 25 |
+| iterative_numerical__hparam_search | PASS / PASS | 5 / 5 | 0.0510 / 0.0642 | 20 / 17 |
+| stateful_reasoning__event_ledger | PASS / PASS | 2 / 4 | 0.0345 / 0.0812 | 10 / 19 |
+| stateful_reasoning__unreachable_functions | PASS / PASS | 7 / 9 | 0.0662 / 0.0812 | 27 / 22 |
+
+Aggregates appear in [Headline Results](#headline-results-artifact-seed-v1-12-tasks--1-run) at the top of this README.
+
+`code_only` is cheaper and more turn-efficient on 11/12 tasks (ties on enumeration; `graphs_chromatic_3` is the one task where the baseline edges out on both cost and wall time). Wall-clock gains are the smallest margin because execution is dominated by subprocess and grader time that both arms share.
 
 ---
 
