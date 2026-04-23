@@ -7,9 +7,10 @@ set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FIXTURE_DIR="$SCRIPT_DIR/fixtures"
-RESULTS_DIR="$SCRIPT_DIR/results_mcp"
-MCP_CONFIG="$SCRIPT_DIR/mcp-config.json"  # points to exec-server.bundle.mjs (bundled for fast startup)
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+FIXTURE_DIR="$REPO_ROOT/fixtures"
+RESULTS_DIR="$REPO_ROOT/results_mcp"
+MCP_CONFIG="$REPO_ROOT/mcp-config.json"  # points to exec-server.bundle.mjs (bundled for fast startup)
 mkdir -p "$RESULTS_DIR"
 
 # Common flags for clean, reproducible runs:

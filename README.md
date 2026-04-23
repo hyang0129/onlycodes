@@ -23,7 +23,7 @@ Three benchmark modes, each targeting a different evaluation surface:
 |---|---|---|---|
 | **SWE-bench** | `python -m swebench run` | `problems/swe/` YAML files | Test suite pass/fail |
 | **Artifact-graded** | `python -m swebench artifact run` | `problems/artifact/` YAML files | Hidden Python grader |
-| **Fixture (legacy)** | `./run_prevalidation.sh` | `fixtures/myapp/` | Oracle files in `oracle/` |
+| **Fixture (legacy)** | `./scripts/run_prevalidation.sh` | `fixtures/myapp/` | Oracle files in `oracle/` |
 
 ---
 
@@ -166,8 +166,8 @@ The "only code" approach was **2× faster and 32% cheaper** overall.
 
 **Running:**
 ```bash
-./run_prevalidation.sh          # baseline vs constrained
-./run_mcp_integration_test.sh   # only-code (MCP) arm
+./scripts/run_prevalidation.sh          # baseline vs constrained
+./scripts/run_mcp_integration_test.sh   # only-code (MCP) arm
 ```
 
 Results are written as JSONL to `results/` and `results_mcp/`. Grade against `oracle/`.
@@ -194,6 +194,5 @@ results/                   # Legacy baseline run logs (JSONL)
 results_mcp/               # Legacy only-code run logs (JSONL)
 exec-server.bundle.mjs     # MCP server exposing execute_code (fast startup ~130ms)
 mcp-config.json            # MCP server config for --mcp-config CLI flag
-run_prevalidation.sh       # Legacy baseline benchmark runner
-run_mcp_integration_test.sh  # Legacy only-code benchmark runner
+scripts/                   # Shell runners + summarize_results.py
 ```

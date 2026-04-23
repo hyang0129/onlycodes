@@ -17,7 +17,7 @@ tool calls. Measure whether this reduces round-trips and improves output quality
 
 Simulated Code Mode using `claude -p --tools Bash,Write` against two fixtures: a synthetic myapp
 codebase and the real psf/requests library. 5 tasks, two arms each (baseline all-tools vs.
-constrained). Full methodology in `run_prevalidation.sh` and `run_prevalidation_requests.sh`.
+constrained). Full methodology in `scripts/run_prevalidation.sh` and `scripts/run_prevalidation_requests.sh`.
 
 ### Methodology
 
