@@ -585,7 +585,7 @@ def _cleanup_stale_overlays(
     "output_dir",
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
     default=None,
-    help="Directory for result files [default: <repo>/results_swebench/]. Created if it does not exist.",
+    help="Directory for result files [default: <repo>/runs/swebench/]. Created if it does not exist.",
 )
 @click.option(
     "--resume/--no-resume",
@@ -618,7 +618,7 @@ def run_command(
 
     root = repo_root()
     problems_dir = root / "problems" / "swe"
-    results_dir = Path(output_dir) if output_dir else root / "results_swebench"
+    results_dir = Path(output_dir) if output_dir else root / "runs" / "swebench"
     mcp_config_path = str(root / "mcp-config.json")
     clone_base = "/tmp/swebench"
 

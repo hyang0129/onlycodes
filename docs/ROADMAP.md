@@ -17,14 +17,14 @@ tool calls. Measure whether this reduces round-trips and improves output quality
 
 Simulated Code Mode using `claude -p --tools Bash,Write` against two fixtures: a synthetic myapp
 codebase and the real psf/requests library. 5 tasks, two arms each (baseline all-tools vs.
-constrained). Full methodology in `run_prevalidation.sh` and `run_prevalidation_requests.sh`.
+constrained). Full methodology in `scripts/run_prevalidation.sh` and `scripts/run_prevalidation_requests.sh`.
 
 ### Methodology
 
 - Both arms: identical `--system-prompt "You are a helpful assistant."` (eliminates CLAUDE.md
   injection as a confound), `--dangerously-skip-permissions` (no approval gates), `--no-session-persistence`
 - Constrained arm: `--tools Bash,Write` only, CONSTRAINT prefix asking for one script per task
-- Scored against pre-computed oracle files in `oracle/` and `oracle_requests/`
+- Scored against pre-computed oracle files in `data/oracle/` and `data/oracle_requests/`
 - Metrics captured per run: `total_cost_usd`, `num_turns`, `permission_denials` from stream-json
 
 ### Results

@@ -15,11 +15,11 @@ import {
   checkContent,
   checkDispatch,
   _resetRulesCache,
-} from "../interceptor.js";
+} from "../exec_server/interceptor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-const SHIPPED_CONFIG = join(REPO_ROOT, "passthrough-config.json");
+const SHIPPED_CONFIG = join(REPO_ROOT, "exec_server", "passthrough-config.json");
 
 // Reset cached rules before each test so config-path overrides work cleanly.
 beforeEach(() => {

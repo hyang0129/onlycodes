@@ -2,7 +2,7 @@
 /**
  * build.mjs — esbuild script for exec-server.bundle.mjs
  *
- * Usage: node build.mjs
+ * Usage: node exec_server/build.mjs
  * Or via: npm run build
  *
  * ADR Decision 3: pinned esbuild as devDep; bundle is reproducible via this script.
@@ -11,17 +11,21 @@
  */
 
 import * as esbuild from "esbuild";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 await esbuild.build({
-  entryPoints: ["exec-server.js"],
+  entryPoints: [join(__dirname, "exec-server.js")],
   bundle: true,
   platform: "node",
   format: "esm",
   target: "node20",
-  outfile: "exec-server.bundle.mjs",
+  outfile: join(__dirname, "dist", "exec-server.bundle.mjs"),
   banner: {
     js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
   },
 });
 
-console.log("Build complete: exec-server.bundle.mjs");
+console.log("Build complete: exec_server/dist/exec-server.bundle.mjs");

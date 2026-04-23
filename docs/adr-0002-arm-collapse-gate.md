@@ -28,8 +28,8 @@ The **arm-collapse smoke gate** is a three-signal check run after a single
 `artifact run --filter data_processing__p95_latency_easy --arms both` completes.
 The run must produce two agent JSONL logs, one per arm:
 
-- `results_artifact/<instance_id>/code_only/run0/agent.jsonl`
-- `results_artifact/<instance_id>/tool_rich/run0/agent.jsonl`
+- `runs/artifact/<instance_id>/code_only/run0/agent.jsonl`
+- `runs/artifact/<instance_id>/tool_rich/run0/agent.jsonl`
 
 A small script at `tools/arm_collapse_check.py` (slice #95 ships a stub; full
 implementation may land in #96 alongside `verify_graders.py`) computes the

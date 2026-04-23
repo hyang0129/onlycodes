@@ -3,7 +3,7 @@
 Before this change, ``_discover_logs`` only globbed flat ``*_run*.jsonl``
 files and ``_parse_log_ref`` only recognised the SWE-bench filename
 shape. Artifact logs live at
-``results_artifact/<task>/<arm>/run<N>/agent.jsonl`` and were silently
+``runs/artifact/<task>/<arm>/run<N>/agent.jsonl`` and were silently
 dropped.
 
 These tests exercise:

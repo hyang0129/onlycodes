@@ -16,15 +16,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROBLEMS_FILE="${1:-${SCRIPT_DIR}/swebench_problems.txt}"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROBLEMS_FILE="${1:-${REPO_ROOT}/swebench_problems.txt}"
 RUNS_PER_ARM="${2:-1}"
 if [[ ! "$RUNS_PER_ARM" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: runs_per_arm must be a positive integer, got: '$RUNS_PER_ARM'" >&2
   exit 1
 fi
-RESULTS_DIR="${SCRIPT_DIR}/results_swebench"
+RESULTS_DIR="${REPO_ROOT}/runs/swebench"
 CLONE_BASE="/tmp/swebench"
-MCP_CONFIG="${SCRIPT_DIR}/mcp-config.json"
+MCP_CONFIG="${REPO_ROOT}/mcp-config.json"
 
 mkdir -p "$RESULTS_DIR" "$CLONE_BASE"
 
@@ -74,7 +75,7 @@ run_arm() {
   git -C "$REPO_DIR" clean -fd --quiet 2>/dev/null
 
   # Apply test-only patch (SWE-bench style: agent sees failing tests, must fix implementation)
-  local TEST_PATCH="${SCRIPT_DIR}/patches/${INSTANCE}_tests.patch"
+  local TEST_PATCH="${REPO_ROOT}/patches/${INSTANCE}_tests.patch"
   if [[ -f "$TEST_PATCH" ]]; then
     git -C "$REPO_DIR" apply "$TEST_PATCH" 2>/dev/null \
       && echo "  [${ARM} run ${RUN_IDX}] Applied test patch." | tee -a "$RESULTS_DIR/run.log" \

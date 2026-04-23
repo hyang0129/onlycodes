@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
-# MCP Integration Test
-# Runs 5 tasks using only the execute_code MCP tool (codebox).
-# Results written to results_mcp/
+# Pre-M1 hypothesis validation
+# Runs 5 tasks in two arms: baseline (all tools) vs constrained (Bash only)
+# Results written to runs/default/
 
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FIXTURE_DIR="$SCRIPT_DIR/fixtures"
-RESULTS_DIR="$SCRIPT_DIR/results_mcp"
-MCP_CONFIG="$SCRIPT_DIR/mcp-config.json"  # points to exec-server.bundle.mjs (bundled for fast startup)
+FIXTURE_DIR="$(cd "$(dirname "$0")/../data/fixtures" && pwd)"
+RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/runs/default"
 mkdir -p "$RESULTS_DIR"
 
-# Common flags for clean, reproducible runs:
-#   --no-session-persistence       : no session saved to disk between runs
+# Common flags for clean, reproducible benchmark runs:
+#   --no-session-persistence  : no session saved to disk between runs
 #   --dangerously-skip-permissions : no approval prompts blocking tool calls
-#   --system-prompt                : override CLAUDE.md injection with neutral prompt
-#   --tools                        : restrict to the execute_code MCP tool only
-COMMON_FLAGS="--output-format stream-json --verbose --no-session-persistence --dangerously-skip-permissions --mcp-config $MCP_CONFIG --strict-mcp-config --system-prompt You are a helpful assistant. --tools mcp__codebox__execute_code"
+#   --system-prompt           : override CLAUDE.md injection with neutral prompt
+COMMON_FLAGS="--output-format stream-json --verbose --no-session-persistence --dangerously-skip-permissions --system-prompt You are a helpful assistant."
 
 TASKS=(
   "You are working in the directory: $FIXTURE_DIR
@@ -41,9 +38,9 @@ Task 4: Find every file in myapp/ that contains the variable name 'server_url'. 
 Task 5: Add a --dry-run flag to the CLI in myapp/cli.py. When --dry-run is set, the program should print what it would do and exit without calling start(). Modify the file."
 )
 
-CONSTRAINT="IMPORTANT: You must accomplish this task using only the execute_code MCP tool. Write a single Python or bash script and run it with one execute_code call. Do not use any other tool."
+CONSTRAINT="IMPORTANT: You must accomplish this task by writing a single Python or bash script and running it with one Bash tool call. Do not call Read, Edit, Glob, Grep, or any other tool. Put everything into one script."
 
-echo "=== MCP Integration Test: $(date) ===" | tee "$RESULTS_DIR/run.log"
+echo "=== Pre-M1 Validation: $(date) ===" | tee "$RESULTS_DIR/run.log"
 echo "Fixture: $FIXTURE_DIR" | tee -a "$RESULTS_DIR/run.log"
 echo "" | tee -a "$RESULTS_DIR/run.log"
 
@@ -51,22 +48,29 @@ for i in "${!TASKS[@]}"; do
   TASK_NUM=$((i + 1))
   echo "--- Task $TASK_NUM ---" | tee -a "$RESULTS_DIR/run.log"
 
-  echo "Running Task $TASK_NUM -- MCP..."
+  echo "Running Task $TASK_NUM -- BASELINE..."
+  $CLAUDE -p "${TASKS[$i]}" \
+    $COMMON_FLAGS \
+    > "$RESULTS_DIR/task${TASK_NUM}_baseline.jsonl" 2>&1
+  echo "  Baseline done."
+
+  echo "Running Task $TASK_NUM -- CONSTRAINED..."
   $CLAUDE -p "${CONSTRAINT}
 
 ${TASKS[$i]}" \
+    --tools Bash,Write \
     $COMMON_FLAGS \
-    > "$RESULTS_DIR/task${TASK_NUM}_mcp.jsonl" 2>&1
-  echo "  Done." | tee -a "$RESULTS_DIR/run.log"
+    > "$RESULTS_DIR/task${TASK_NUM}_constrained.jsonl" 2>&1
+  echo "  Constrained done."
 
   echo "" | tee -a "$RESULTS_DIR/run.log"
 done
 
 echo "=== Done. Results in $RESULTS_DIR ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
-echo "Grade each task against oracle/ files:"
-echo "  oracle/task1.txt       -- imports"
-echo "  oracle/task2.txt       -- missing env vars"
-echo "  oracle/task3.txt       -- test failures"
-echo "  oracle/task4.txt       -- server_url files"
-echo "  oracle/task5_cli.py    -- reference --dry-run implementation"
+echo "Grade each task against data/oracle/ files:"
+echo "  data/oracle/task1.txt  -- imports"
+echo "  data/oracle/task2.txt  -- missing env vars"
+echo "  data/oracle/task3.txt  -- test failures"
+echo "  data/oracle/task4.txt  -- server_url files"
+echo "  data/oracle/task5_cli.py -- reference --dry-run implementation"

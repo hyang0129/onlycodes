@@ -4,7 +4,7 @@
     "codebox": {
       "type": "stdio",
       "command": "node",
-      "args": ["/workspaces/hub_1/onlycodes/exec-server.js"]
+      "args": ["/workspaces/hub_1/onlycodes/exec_server/exec-server.js"]
     }
   }
 }

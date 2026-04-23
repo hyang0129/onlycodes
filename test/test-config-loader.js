@@ -13,11 +13,11 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadConfig, getBridgeSocketPath } from "../config-loader.js";
+import { loadConfig, getBridgeSocketPath } from "../exec_server/config-loader.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-const SHIPPED_CONFIG = join(REPO_ROOT, "passthrough-config.json");
+const SHIPPED_CONFIG = join(REPO_ROOT, "exec_server", "passthrough-config.json");
 
 /**
  * Create a temp dir with a named config file containing the given JSON.

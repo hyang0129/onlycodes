@@ -42,8 +42,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-const SOURCE_ENTRY = join(REPO_ROOT, "exec-server.js");
-const BUNDLE_ENTRY = join(REPO_ROOT, "exec-server.bundle.mjs");
+const SOURCE_ENTRY = join(REPO_ROOT, "exec_server", "exec-server.js");
+const BUNDLE_ENTRY = join(REPO_ROOT, "exec_server", "dist", "exec-server.bundle.mjs");
 
 // Bundle-mode is opt-in via the ONLYCODES_TEST_BUNDLE=1 env var. Passing a
 // flag after the test file doesn't work under `node --test` (extra args are
@@ -219,8 +219,8 @@ function parseExecuteCodeOutput(response) {
 // picks it up via getBridgeSocketPath().
 process.env.ONLYCODES_BRIDGE_SOCK = TEST_SOCK_PATH;
 
-const { start: startBridge, stop: stopBridge } = await import("../bridge-server.js");
-const subMcpManager = (await import("../sub-mcp-manager.js")).default;
+const { start: startBridge, stop: stopBridge } = await import("../exec_server/bridge-server.js");
+const subMcpManager = (await import("../exec_server/sub-mcp-manager.js")).default;
 
 let bridgeServer;
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize SWE-bench experiment results from results_swebench/."""
+"""Summarize SWE-bench experiment results from runs/swebench/."""
 
 import csv
 import json
@@ -10,7 +10,11 @@ import statistics
 import sys
 from collections import defaultdict
 
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_swebench")
+RESULTS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "runs",
+    "swebench",
+)
 
 _RUN_RE = re.compile(r"^(?P<id>.+)_(?P<arm>baseline|onlycode)_run(?P<run>\d+)$")
 
