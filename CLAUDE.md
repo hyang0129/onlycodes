@@ -162,6 +162,6 @@ results_swebench/_analysis/<run_id>/
 
 ## Legacy Scripts
 
-`run_prevalidation.sh`, `run_mcp_integration_test.sh` — original fixture-based benchmarks (5-task suite in `fixtures/`). Still valid as a fast smoke test.
+`scripts/run_prevalidation.sh`, `scripts/run_mcp_integration_test.sh` — original fixture-based benchmarks (5-task suite in `fixtures/`). Still valid as a fast smoke test.
 
-`run_swebench.sh` — earlier shell-based SWE-bench runner (single instance, hardcoded problem text). Superseded by `python -m swebench run` but retained as a reference.
+`scripts/run_swebench.sh` — earlier shell-based SWE-bench runner (single instance, hardcoded problem text). Superseded by `python -m swebench run` but retained as a reference.

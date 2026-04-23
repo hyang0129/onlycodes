@@ -11,8 +11,8 @@
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
-FIXTURE_DIR="$(cd "$(dirname "$0")/fixtures_requests" && pwd)"
-RESULTS_DIR="$(cd "$(dirname "$0")" && pwd)/results_requests"
+FIXTURE_DIR="$(cd "$(dirname "$0")/../fixtures_requests" && pwd)"
+RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/results_requests"
 mkdir -p "$RESULTS_DIR"
 
 COMMON_FLAGS="--output-format stream-json --verbose --no-session-persistence --dangerously-skip-permissions --system-prompt You are a helpful assistant."

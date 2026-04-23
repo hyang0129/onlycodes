@@ -6,8 +6,8 @@
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
-FIXTURE_DIR="$(cd "$(dirname "$0")/fixtures" && pwd)"
-RESULTS_DIR="$(cd "$(dirname "$0")" && pwd)/results"
+FIXTURE_DIR="$(cd "$(dirname "$0")/../fixtures" && pwd)"
+RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/results"
 mkdir -p "$RESULTS_DIR"
 
 # Common flags for clean, reproducible benchmark runs:
