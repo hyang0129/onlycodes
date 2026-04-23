@@ -194,7 +194,18 @@ data/                      # Legacy fixture/oracle reference files (prevalidatio
   oracle_requests/         #   Ground-truth answers for requests-fixture grading
 results/                   # Legacy baseline run logs (JSONL)
 results_mcp/               # Legacy only-code run logs (JSONL)
-exec-server.bundle.mjs     # MCP server exposing execute_code (fast startup ~130ms)
-mcp-config.json            # MCP server config for --mcp-config CLI flag
+exec_server/               # MCP exec-server stack (JS + Python kernel helpers)
+  exec-server.js           #   MCP stdio entry point
+  bridge-server.js         #   Unix-socket bridge for sub-MCP passthrough
+  config-loader.js         #   Validates passthrough-config.json
+  interceptor.js           #   Content + dispatch deny-list
+  sub-mcp-manager.js       #   Spawns/manages sub-MCP child processes
+  codebox.py               #   Python API for execute_code helpers
+  mcp_bridge.py            #   Python client for bridge-server (staged into scratch)
+  python_kernel.py         #   Persistent Python REPL kernel (staged into scratch)
+  passthrough-config.json  #   Sub-MCP + intercept rules
+  build.mjs                #   esbuild script → exec_server/dist/exec-server.bundle.mjs
+  dist/exec-server.bundle.mjs  # Bundled server (gitignored; fast startup ~130ms)
+mcp-config.json            # MCP server config for --mcp-config CLI flag (points at dist/ bundle)
 scripts/                   # Shell runners + summarize_results.py
 ```

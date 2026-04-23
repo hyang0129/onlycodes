@@ -13,8 +13,14 @@ import tempfile
 import threading
 import unittest
 
-# Ensure the repo root is on the path so we can import mcp_bridge
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure exec_server/ is on the path so we can import mcp_bridge
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "exec_server",
+    ),
+)
 import mcp_bridge
 
 
