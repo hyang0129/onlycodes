@@ -24,7 +24,7 @@ constrained). Full methodology in `scripts/run_prevalidation.sh` and `scripts/ru
 - Both arms: identical `--system-prompt "You are a helpful assistant."` (eliminates CLAUDE.md
   injection as a confound), `--dangerously-skip-permissions` (no approval gates), `--no-session-persistence`
 - Constrained arm: `--tools Bash,Write` only, CONSTRAINT prefix asking for one script per task
-- Scored against pre-computed oracle files in `oracle/` and `oracle_requests/`
+- Scored against pre-computed oracle files in `data/oracle/` and `data/oracle_requests/`
 - Metrics captured per run: `total_cost_usd`, `num_turns`, `permission_denials` from stream-json
 
 ### Results
