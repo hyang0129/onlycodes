@@ -10,4 +10,5 @@ __pycache__/
 data/fixtures_requests/
 node_modules/
 exec_server/dist/
+results*/
 
