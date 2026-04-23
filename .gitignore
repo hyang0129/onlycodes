@@ -1,16 +1,13 @@
 .venv/
 venv/
-results/
-results_mcp/
-results_requests/
-results_swebench/
-results_swebench/_analysis/
-results_artifact/
+runs/*
+!runs/logs/
+runs/logs/*
+!runs/logs/.gitkeep
 __pycache__/
 *.pyc
 .pytest_cache/
 data/fixtures_requests/
 node_modules/
-logs/session.jsonl
 exec_server/dist/
 

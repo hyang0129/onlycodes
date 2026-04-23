@@ -154,7 +154,7 @@ Instance ID format: `<category>__<slug>` (two underscores). Category must match 
 ## Analysis Sidecar Layout
 
 ```
-results_swebench/_analysis/<run_id>/
+runs/swebench/_analysis/<run_id>/
   mechanical/          # Stage 1: JSON per JSONL log (mechanical flags + metrics)
   subagents/           # Stage 2: JSON per flagged log (Claude-classified findings)
   synthesizer.json     # Stage 3: full synthesizer output before merge into patterns.json

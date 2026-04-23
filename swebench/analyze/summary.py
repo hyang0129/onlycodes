@@ -91,7 +91,7 @@ def _register(analyze_command: click.Group) -> None:
         "--results-dir",
         type=click.Path(exists=True, file_okay=False),
         default=None,
-        help="Path to results directory (default: auto-detect results_swebench/).",
+        help="Path to results directory (default: auto-detect runs/swebench/).",
     )
     @click.option(
         "--out",
@@ -105,7 +105,7 @@ def _register(analyze_command: click.Group) -> None:
         if results_dir:
             rdir = Path(results_dir)
         else:
-            rdir = repo_root() / "results_swebench"
+            rdir = repo_root() / "runs" / "swebench"
 
         if not rdir.is_dir():
             click.echo(f"ERROR: Results directory not found: {rdir}", err=True)

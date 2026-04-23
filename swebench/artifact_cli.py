@@ -6,7 +6,7 @@ Additive-only: does not touch the existing ``run`` / ``add`` / ``analyze`` /
 Subcommands:
 
 - ``artifact run``     — execute code_only / tool_rich arms against artifact tasks.
-- ``artifact analyze`` — summarise ``results_artifact/`` as a flat table + aggregates.
+- ``artifact analyze`` — summarise ``runs/artifact/`` as a flat table + aggregates.
 - ``artifact verify``  — placeholder for the ``tools/verify_graders.py``
   functionality shipped in a later slice (#96). Declared here so the command
   namespace exists; invoking it prints a pointer message and exits 2.
@@ -65,7 +65,7 @@ def artifact_group() -> None:
     "output_dir",
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
     default=None,
-    help="Directory for result files [default: <repo>/results_artifact/].",
+    help="Directory for result files [default: <repo>/runs/artifact/].",
 )
 @click.option(
     "--resume/--no-resume",
@@ -107,7 +107,7 @@ def artifact_run_command(
 
     root = repo_root()
     tasks_root = Path(tasks_dir) if tasks_dir else (root / "problems" / "artifact")
-    results_dir = Path(output_dir) if output_dir else (root / "results_artifact")
+    results_dir = Path(output_dir) if output_dir else (root / "runs" / "artifact")
 
     filter_set: set[str] | None = None
     if filter_ids:
@@ -221,7 +221,7 @@ def _collect_artifact_rows(
     if not results_dir.is_dir():
         return rows
 
-    # results_artifact/<instance_id>/<arm>/run<N>/
+    # runs/artifact/<instance_id>/<arm>/run<N>/
     for instance_dir in sorted(p for p in results_dir.iterdir() if p.is_dir()):
         instance_id = instance_dir.name
         # Skip the analysis sidecar used by SWE-bench mode if it ever leaks
@@ -397,7 +397,7 @@ def _write_csv(rows: list[dict[str, Any]], out_path: Path) -> None:
     "results_dir",
     type=click.Path(file_okay=False, dir_okay=True, resolve_path=False),
     default=None,
-    help="Directory with artifact run results [default: <repo>/results_artifact/].",
+    help="Directory with artifact run results [default: <repo>/runs/artifact/].",
 )
 @click.option(
     "--tasks-dir",
@@ -418,9 +418,9 @@ def artifact_analyze_command(
     tasks_dir: str | None,
     out_path: str | None,
 ) -> None:
-    """Summarise results_artifact/ as a flat table + aggregates."""
+    """Summarise runs/artifact/ as a flat table + aggregates."""
     root = repo_root()
-    rdir = Path(results_dir) if results_dir else (root / "results_artifact")
+    rdir = Path(results_dir) if results_dir else (root / "runs" / "artifact")
     tdir = Path(tasks_dir) if tasks_dir else (root / "problems" / "artifact")
 
     if not rdir.is_dir():

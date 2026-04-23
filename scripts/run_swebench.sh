@@ -23,7 +23,7 @@ if [[ ! "$RUNS_PER_ARM" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: runs_per_arm must be a positive integer, got: '$RUNS_PER_ARM'" >&2
   exit 1
 fi
-RESULTS_DIR="${REPO_ROOT}/results_swebench"
+RESULTS_DIR="${REPO_ROOT}/runs/swebench"
 CLONE_BASE="/tmp/swebench"
 MCP_CONFIG="${REPO_ROOT}/mcp-config.json"
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Pre-M1 hypothesis validation
 # Runs 5 tasks in two arms: baseline (all tools) vs constrained (Bash only)
-# Results written to results/
+# Results written to runs/default/
 
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
 FIXTURE_DIR="$(cd "$(dirname "$0")/../data/fixtures" && pwd)"
-RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/results"
+RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/runs/default"
 mkdir -p "$RESULTS_DIR"
 
 # Common flags for clean, reproducible benchmark runs:

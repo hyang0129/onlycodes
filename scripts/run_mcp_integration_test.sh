@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MCP Integration Test
 # Runs 5 tasks using only the execute_code MCP tool (codebox).
-# Results written to results_mcp/
+# Results written to runs/mcp/
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FIXTURE_DIR="$REPO_ROOT/data/fixtures"
-RESULTS_DIR="$REPO_ROOT/results_mcp"
+RESULTS_DIR="$REPO_ROOT/runs/mcp"
 MCP_CONFIG="$REPO_ROOT/mcp-config.json"  # points to exec-server.bundle.mjs (bundled for fast startup)
 mkdir -p "$RESULTS_DIR"
 

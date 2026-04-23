@@ -71,7 +71,7 @@ python -m swebench analyze pathology --run-id my-run
 python -m swebench analyze pathology --concurrency 4
 ```
 
-Results go to `results_swebench/` keyed by `instance_id`. Analysis sidecars go to `results_swebench/_analysis/<run_id>/`.
+Results go to `runs/swebench/` keyed by `instance_id`. Analysis sidecars go to `runs/swebench/_analysis/<run_id>/`.
 
 ### OverlayFS Cache
 
@@ -136,7 +136,7 @@ python -m swebench artifact run --runs 3
 python -m swebench artifact run --no-resume
 ```
 
-Results go to `results_artifact/`. Task schema is documented in [`docs/SCHEMA_ARTIFACT.md`](docs/SCHEMA_ARTIFACT.md). Architecture decisions in [`docs/adr-0001-artifact-mode.md`](docs/adr-0001-artifact-mode.md).
+Results go to `runs/artifact/`. Task schema is documented in [`docs/SCHEMA_ARTIFACT.md`](docs/SCHEMA_ARTIFACT.md). Architecture decisions in [`docs/adr-0001-artifact-mode.md`](docs/adr-0001-artifact-mode.md).
 
 ---
 
@@ -170,7 +170,7 @@ The "only code" approach was **2× faster and 32% cheaper** overall.
 ./scripts/run_mcp_integration_test.sh   # only-code (MCP) arm
 ```
 
-Results are written as JSONL to `results/` and `results_mcp/`. Grade against `data/oracle/`.
+Results are written as JSONL to `runs/default/` and `runs/mcp/`. Grade against `data/oracle/`.
 
 ---
 
@@ -181,8 +181,13 @@ swebench/                  # Python harness package (python -m swebench)
 problems/
   swe/                     # SWE-bench problem YAML files (organized by set)
   artifact/                # Artifact-graded task trees (organized by category)
-results_swebench/          # SWE-bench run outputs (JSONL, keyed by instance_id)
-results_artifact/          # Artifact run outputs
+runs/                      # All run outputs (gitignored)
+  swebench/                #   SWE-bench run outputs (JSONL, keyed by instance_id)
+  artifact/                #   Artifact run outputs
+  mcp/                     #   Legacy only-code (MCP) run logs (JSONL)
+  requests/                #   Requests-fixture run logs (JSONL)
+  default/                 #   Legacy baseline run logs (JSONL)
+  logs/                    #   Session logs (e.g. session.jsonl)
 docs/
   SCHEMA_ARTIFACT.md       # Normative artifact task schema
   adr-0001-artifact-mode.md
@@ -192,8 +197,6 @@ data/                      # Legacy fixture/oracle reference files (prevalidatio
   fixtures_requests/       #   Alternate fixture set (HTTP/requests-based tasks; gitignored)
   oracle/                  #   Ground-truth answers for legacy fixture grading
   oracle_requests/         #   Ground-truth answers for requests-fixture grading
-results/                   # Legacy baseline run logs (JSONL)
-results_mcp/               # Legacy only-code run logs (JSONL)
 exec_server/               # MCP exec-server stack (JS + Python kernel helpers)
   exec-server.js           #   MCP stdio entry point
   bridge-server.js         #   Unix-socket bridge for sub-MCP passthrough
