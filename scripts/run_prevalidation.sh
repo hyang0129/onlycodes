@@ -6,7 +6,7 @@
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
-FIXTURE_DIR="$(cd "$(dirname "$0")/../fixtures" && pwd)"
+FIXTURE_DIR="$(cd "$(dirname "$0")/../data/fixtures" && pwd)"
 RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/results"
 mkdir -p "$RESULTS_DIR"
 
@@ -68,9 +68,9 @@ done
 
 echo "=== Done. Results in $RESULTS_DIR ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
-echo "Grade each task against oracle/ files:"
-echo "  oracle/task1.txt  -- imports"
-echo "  oracle/task2.txt  -- missing env vars"
-echo "  oracle/task3.txt  -- test failures"
-echo "  oracle/task4.txt  -- server_url files"
-echo "  oracle/task5_cli.py -- reference --dry-run implementation"
+echo "Grade each task against data/oracle/ files:"
+echo "  data/oracle/task1.txt  -- imports"
+echo "  data/oracle/task2.txt  -- missing env vars"
+echo "  data/oracle/task3.txt  -- test failures"
+echo "  data/oracle/task4.txt  -- server_url files"
+echo "  data/oracle/task5_cli.py -- reference --dry-run implementation"

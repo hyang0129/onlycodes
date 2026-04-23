@@ -8,7 +8,7 @@ set -euo pipefail
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-FIXTURE_DIR="$REPO_ROOT/fixtures"
+FIXTURE_DIR="$REPO_ROOT/data/fixtures"
 RESULTS_DIR="$REPO_ROOT/results_mcp"
 MCP_CONFIG="$REPO_ROOT/mcp-config.json"  # points to exec-server.bundle.mjs (bundled for fast startup)
 mkdir -p "$RESULTS_DIR"
@@ -65,9 +65,9 @@ done
 
 echo "=== Done. Results in $RESULTS_DIR ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
-echo "Grade each task against oracle/ files:"
-echo "  oracle/task1.txt       -- imports"
-echo "  oracle/task2.txt       -- missing env vars"
-echo "  oracle/task3.txt       -- test failures"
-echo "  oracle/task4.txt       -- server_url files"
-echo "  oracle/task5_cli.py    -- reference --dry-run implementation"
+echo "Grade each task against data/oracle/ files:"
+echo "  data/oracle/task1.txt       -- imports"
+echo "  data/oracle/task2.txt       -- missing env vars"
+echo "  data/oracle/task3.txt       -- test failures"
+echo "  data/oracle/task4.txt       -- server_url files"
+echo "  data/oracle/task5_cli.py    -- reference --dry-run implementation"

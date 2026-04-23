@@ -23,7 +23,7 @@ Three benchmark modes, each targeting a different evaluation surface:
 |---|---|---|---|
 | **SWE-bench** | `python -m swebench run` | `problems/swe/` YAML files | Test suite pass/fail |
 | **Artifact-graded** | `python -m swebench artifact run` | `problems/artifact/` YAML files | Hidden Python grader |
-| **Fixture (legacy)** | `./scripts/run_prevalidation.sh` | `fixtures/myapp/` | Oracle files in `oracle/` |
+| **Fixture (legacy)** | `./scripts/run_prevalidation.sh` | `data/fixtures/myapp/` | Oracle files in `data/oracle/` |
 
 ---
 
@@ -142,7 +142,7 @@ Results go to `results_artifact/`. Task schema is documented in [`docs/SCHEMA_AR
 
 ## Legacy Fixture Benchmark
 
-The original 5-task benchmark against `fixtures/myapp/`. Still valid as a fast smoke test.
+The original 5-task benchmark against `data/fixtures/myapp/`. Still valid as a fast smoke test.
 
 **Tasks:**
 1. Find all Python files that import `os` or `os.path` — list file paths and line numbers
@@ -170,7 +170,7 @@ The "only code" approach was **2× faster and 32% cheaper** overall.
 ./scripts/run_mcp_integration_test.sh   # only-code (MCP) arm
 ```
 
-Results are written as JSONL to `results/` and `results_mcp/`. Grade against `oracle/`.
+Results are written as JSONL to `results/` and `results_mcp/`. Grade against `data/oracle/`.
 
 ---
 
@@ -187,9 +187,11 @@ docs/
   SCHEMA_ARTIFACT.md       # Normative artifact task schema
   adr-0001-artifact-mode.md
 patterns.json              # Canonical failure-pattern vocabulary (pathology pipeline)
-fixtures/                  # Legacy fixture project (myapp/ + tests/)
-fixtures_requests/         # Alternate fixture set (HTTP/requests-based tasks)
-oracle/                    # Ground-truth answers for legacy fixture grading
+data/                      # Legacy fixture/oracle reference files (prevalidation benchmarks)
+  fixtures/                #   Legacy fixture project (myapp/ + tests/)
+  fixtures_requests/       #   Alternate fixture set (HTTP/requests-based tasks; gitignored)
+  oracle/                  #   Ground-truth answers for legacy fixture grading
+  oracle_requests/         #   Ground-truth answers for requests-fixture grading
 results/                   # Legacy baseline run logs (JSONL)
 results_mcp/               # Legacy only-code run logs (JSONL)
 exec-server.bundle.mjs     # MCP server exposing execute_code (fast startup ~130ms)

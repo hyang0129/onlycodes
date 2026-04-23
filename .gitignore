@@ -9,7 +9,7 @@ results_artifact/
 __pycache__/
 *.pyc
 .pytest_cache/
-fixtures_requests/
+data/fixtures_requests/
 node_modules/
 logs/session.jsonl
 exec-server.bundle.cjs

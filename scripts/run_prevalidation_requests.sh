@@ -11,7 +11,7 @@
 set -euo pipefail
 
 CLAUDE=/home/vscode/.vscode-server/extensions/anthropic.claude-code-2.1.109-linux-x64/resources/native-binary/claude
-FIXTURE_DIR="$(cd "$(dirname "$0")/../fixtures_requests" && pwd)"
+FIXTURE_DIR="$(cd "$(dirname "$0")/../data/fixtures_requests" && pwd)"
 RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/results_requests"
 mkdir -p "$RESULTS_DIR"
 
@@ -69,9 +69,9 @@ done
 
 echo "=== Done. Results in $RESULTS_DIR ===" | tee -a "$RESULTS_DIR/run.log"
 echo ""
-echo "Grade each task against oracle_requests/ files:"
-echo "  oracle_requests/task1.txt  -- os imports"
-echo "  oracle_requests/task2.txt  -- env var names"
-echo "  oracle_requests/task3.txt  -- test summary"
-echo "  oracle_requests/task4.txt  -- REDIRECT_STATI files"
-echo "  oracle_requests/task5_adapters.py -- reference default_timeout impl"
+echo "Grade each task against data/oracle_requests/ files:"
+echo "  data/oracle_requests/task1.txt  -- os imports"
+echo "  data/oracle_requests/task2.txt  -- env var names"
+echo "  data/oracle_requests/task3.txt  -- test summary"
+echo "  data/oracle_requests/task4.txt  -- REDIRECT_STATI files"
+echo "  data/oracle_requests/task5_adapters.py -- reference default_timeout impl"
