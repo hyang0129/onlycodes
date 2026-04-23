@@ -1,0 +1,19 @@
+instance_id: data_processing__outlier_days
+category: data_processing
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/outliers.jsonl
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - data_processing
+  - anomaly_detection
+  - rolling_window
+  - mad
+  - realism_checklist_v1

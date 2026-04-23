@@ -11,4 +11,4 @@ reference_output: grader/reference_output.jsonl
 execution_budget:
   max_code_runs: 0
   max_wall_seconds: 0
-tags: [aggregation, jsonl, percentile, seed_v1]
+tags: [aggregation, jsonl, percentile, seed_v1, realism_checklist_v1]

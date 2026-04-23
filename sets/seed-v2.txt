@@ -7,36 +7,69 @@
 # append the remaining ~33 tasks to reach 48.
 #
 # Per-category counts as of seed-v2 bootstrap:
-#   algorithmic:         1 easy / 1 medium / 0 hard  (target 2/3/3)
-#   data_processing:     1 easy / 1 medium / 1 hard  (target 2/3/3)
-#   enumeration:         1 easy / 1 medium / 0 hard  (target 2/3/3)
-#   iterative_numerical: 1 easy / 1 medium / 1 hard  (target 2/3/3)
-#   stateful_reasoning:  0 easy / 2 medium / 1 hard  (target 2/3/3)
-#   verification_heavy:  1 easy / 1 medium / 0 hard  (target 2/3/3)
+#   algorithmic:         2 easy / 3 medium / 3 hard  (target met, #130)
+#   data_processing:     2 easy / 3 medium / 3 hard  (target met, #131)
+#   enumeration:         2 easy / 3 medium / 3 hard  (target met, #132)
+#   iterative_numerical: 2 easy / 3 medium / 3 hard  (target met, #133)
+#   stateful_reasoning:  2 easy / 3 medium / 3 hard  (target met, #134)
+#   verification_heavy:  2 easy / 3 medium / 3 hard  (target met, #135)
 
 # algorithmic
 algorithmic__makespan_scheduling
+algorithmic__coin_change_min
 algorithmic__min_cost_assignment
+algorithmic__knapsack_01
+algorithmic__traveling_salesman_small
+algorithmic__interval_scheduling_weighted
+algorithmic__bin_packing_first_fit_optimal
+algorithmic__graph_min_vertex_cover
 
 # data_processing
 data_processing__p95_latency_easy
+data_processing__duplicate_orders
 data_processing__regression_detection
+data_processing__funnel_conversion
+data_processing__session_window
 data_processing__multi_file_cohort
+data_processing__cohort_retention
+data_processing__outlier_days
 
 # enumeration
 enumeration__latin_squares_3
 enumeration__graphs_chromatic_3
+enumeration__permutations_fixed_points
+enumeration__subset_sum_count
+enumeration__sudoku_row_completions
+enumeration__nqueens_7
+enumeration__integer_partitions_15
+enumeration__binary_strings_no_run
 
 # iterative_numerical
 iterative_numerical__exp_decay_fit
 iterative_numerical__hparam_search
 iterative_numerical__bisection_calibration
+iterative_numerical__newton_sqrt
+iterative_numerical__logistic_fit
+iterative_numerical__secant_root_budgeted
+iterative_numerical__gradient_descent_rosenbrock
+iterative_numerical__gauss_newton_circle_fit
 
 # stateful_reasoning
 stateful_reasoning__unreachable_functions
 stateful_reasoning__upgrade_impact
 stateful_reasoning__event_ledger
+stateful_reasoning__counter_replay
+stateful_reasoning__feature_flag_timeline
+stateful_reasoning__session_fsm
+stateful_reasoning__inventory_reconciliation
+stateful_reasoning__rate_limiter_replay
 
 # verification_heavy
 verification_heavy__parse_iso_duration
+verification_heavy__csv_dialect_parser
 verification_heavy__lru_cache_impl
+verification_heavy__semver_compare
+verification_heavy__expression_evaluator
+verification_heavy__cron_next_fire
+verification_heavy__json_pointer_rfc6901
+verification_heavy__iban_validator

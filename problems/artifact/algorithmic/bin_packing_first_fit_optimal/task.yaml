@@ -1,0 +1,17 @@
+instance_id: algorithmic__bin_packing_first_fit_optimal
+category: algorithmic
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/bins.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 240
+tags:
+  - algorithmic
+  - bin_packing
+  - subset_dp
+  - optimization
+  - realism_checklist_v1

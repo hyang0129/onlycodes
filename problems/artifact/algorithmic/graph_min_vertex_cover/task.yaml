@@ -1,0 +1,17 @@
+instance_id: algorithmic__graph_min_vertex_cover
+category: algorithmic
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/cover.json
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 20
+  max_wall_seconds: 180
+tags:
+  - algorithmic
+  - graph
+  - vertex_cover
+  - branch_and_bound
+  - realism_checklist_v1

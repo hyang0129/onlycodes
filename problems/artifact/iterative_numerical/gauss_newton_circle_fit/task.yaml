@@ -1,0 +1,19 @@
+instance_id: iterative_numerical__gauss_newton_circle_fit
+category: iterative_numerical
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/circle.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 30
+  max_wall_seconds: 180
+tags:
+  - iterative_numerical
+  - curve_fitting
+  - least_squares
+  - geometry
+  - numerical
+  - realism_checklist_v1

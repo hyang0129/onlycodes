@@ -1,0 +1,17 @@
+instance_id: enumeration__sudoku_row_completions
+category: enumeration
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+output_artifact: output/completions.jsonl
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.jsonl
+execution_budget:
+  max_code_runs: 15
+  max_wall_seconds: 180
+tags:
+  - enumeration
+  - sudoku
+  - constraint_satisfaction
+  - combinatorics
+  - realism_checklist_v1

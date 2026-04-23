@@ -1,0 +1,466 @@
+{
+  "cohorts": [
+    {
+      "cohort_week": "2024-01-08",
+      "cohort_size": 398,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 289,
+          "retention_rate": 0.7261
+        },
+        {
+          "week_offset": 1,
+          "active_users": 242,
+          "retention_rate": 0.608
+        },
+        {
+          "week_offset": 2,
+          "active_users": 208,
+          "retention_rate": 0.5226
+        },
+        {
+          "week_offset": 3,
+          "active_users": 159,
+          "retention_rate": 0.3995
+        },
+        {
+          "week_offset": 4,
+          "active_users": 133,
+          "retention_rate": 0.3342
+        },
+        {
+          "week_offset": 5,
+          "active_users": 111,
+          "retention_rate": 0.2789
+        },
+        {
+          "week_offset": 6,
+          "active_users": 110,
+          "retention_rate": 0.2764
+        },
+        {
+          "week_offset": 7,
+          "active_users": 77,
+          "retention_rate": 0.1935
+        },
+        {
+          "week_offset": 8,
+          "active_users": 61,
+          "retention_rate": 0.1533
+        },
+        {
+          "week_offset": 9,
+          "active_users": 54,
+          "retention_rate": 0.1357
+        },
+        {
+          "week_offset": 10,
+          "active_users": 52,
+          "retention_rate": 0.1307
+        },
+        {
+          "week_offset": 11,
+          "active_users": 33,
+          "retention_rate": 0.0829
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-01-15",
+      "cohort_size": 482,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 355,
+          "retention_rate": 0.7365
+        },
+        {
+          "week_offset": 1,
+          "active_users": 309,
+          "retention_rate": 0.6411
+        },
+        {
+          "week_offset": 2,
+          "active_users": 239,
+          "retention_rate": 0.4959
+        },
+        {
+          "week_offset": 3,
+          "active_users": 190,
+          "retention_rate": 0.3942
+        },
+        {
+          "week_offset": 4,
+          "active_users": 144,
+          "retention_rate": 0.2988
+        },
+        {
+          "week_offset": 5,
+          "active_users": 134,
+          "retention_rate": 0.278
+        },
+        {
+          "week_offset": 6,
+          "active_users": 120,
+          "retention_rate": 0.249
+        },
+        {
+          "week_offset": 7,
+          "active_users": 121,
+          "retention_rate": 0.251
+        },
+        {
+          "week_offset": 8,
+          "active_users": 99,
+          "retention_rate": 0.2054
+        },
+        {
+          "week_offset": 9,
+          "active_users": 74,
+          "retention_rate": 0.1535
+        },
+        {
+          "week_offset": 10,
+          "active_users": 60,
+          "retention_rate": 0.1245
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-01-22",
+      "cohort_size": 484,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 352,
+          "retention_rate": 0.7273
+        },
+        {
+          "week_offset": 1,
+          "active_users": 282,
+          "retention_rate": 0.5826
+        },
+        {
+          "week_offset": 2,
+          "active_users": 238,
+          "retention_rate": 0.4917
+        },
+        {
+          "week_offset": 3,
+          "active_users": 214,
+          "retention_rate": 0.4421
+        },
+        {
+          "week_offset": 4,
+          "active_users": 177,
+          "retention_rate": 0.3657
+        },
+        {
+          "week_offset": 5,
+          "active_users": 145,
+          "retention_rate": 0.2996
+        },
+        {
+          "week_offset": 6,
+          "active_users": 111,
+          "retention_rate": 0.2293
+        },
+        {
+          "week_offset": 7,
+          "active_users": 106,
+          "retention_rate": 0.219
+        },
+        {
+          "week_offset": 8,
+          "active_users": 104,
+          "retention_rate": 0.2149
+        },
+        {
+          "week_offset": 9,
+          "active_users": 83,
+          "retention_rate": 0.1715
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-01-29",
+      "cohort_size": 501,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 349,
+          "retention_rate": 0.6966
+        },
+        {
+          "week_offset": 1,
+          "active_users": 286,
+          "retention_rate": 0.5709
+        },
+        {
+          "week_offset": 2,
+          "active_users": 246,
+          "retention_rate": 0.491
+        },
+        {
+          "week_offset": 3,
+          "active_users": 200,
+          "retention_rate": 0.3992
+        },
+        {
+          "week_offset": 4,
+          "active_users": 174,
+          "retention_rate": 0.3473
+        },
+        {
+          "week_offset": 5,
+          "active_users": 150,
+          "retention_rate": 0.2994
+        },
+        {
+          "week_offset": 6,
+          "active_users": 133,
+          "retention_rate": 0.2655
+        },
+        {
+          "week_offset": 7,
+          "active_users": 101,
+          "retention_rate": 0.2016
+        },
+        {
+          "week_offset": 8,
+          "active_users": 102,
+          "retention_rate": 0.2036
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-02-05",
+      "cohort_size": 516,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 364,
+          "retention_rate": 0.7054
+        },
+        {
+          "week_offset": 1,
+          "active_users": 317,
+          "retention_rate": 0.6143
+        },
+        {
+          "week_offset": 2,
+          "active_users": 234,
+          "retention_rate": 0.4535
+        },
+        {
+          "week_offset": 3,
+          "active_users": 214,
+          "retention_rate": 0.4147
+        },
+        {
+          "week_offset": 4,
+          "active_users": 188,
+          "retention_rate": 0.3643
+        },
+        {
+          "week_offset": 5,
+          "active_users": 155,
+          "retention_rate": 0.3004
+        },
+        {
+          "week_offset": 6,
+          "active_users": 137,
+          "retention_rate": 0.2655
+        },
+        {
+          "week_offset": 7,
+          "active_users": 123,
+          "retention_rate": 0.2384
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-02-12",
+      "cohort_size": 534,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 361,
+          "retention_rate": 0.676
+        },
+        {
+          "week_offset": 1,
+          "active_users": 336,
+          "retention_rate": 0.6292
+        },
+        {
+          "week_offset": 2,
+          "active_users": 260,
+          "retention_rate": 0.4869
+        },
+        {
+          "week_offset": 3,
+          "active_users": 212,
+          "retention_rate": 0.397
+        },
+        {
+          "week_offset": 4,
+          "active_users": 196,
+          "retention_rate": 0.367
+        },
+        {
+          "week_offset": 5,
+          "active_users": 146,
+          "retention_rate": 0.2734
+        },
+        {
+          "week_offset": 6,
+          "active_users": 123,
+          "retention_rate": 0.2303
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-02-19",
+      "cohort_size": 588,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 393,
+          "retention_rate": 0.6684
+        },
+        {
+          "week_offset": 1,
+          "active_users": 337,
+          "retention_rate": 0.5731
+        },
+        {
+          "week_offset": 2,
+          "active_users": 267,
+          "retention_rate": 0.4541
+        },
+        {
+          "week_offset": 3,
+          "active_users": 255,
+          "retention_rate": 0.4337
+        },
+        {
+          "week_offset": 4,
+          "active_users": 185,
+          "retention_rate": 0.3146
+        },
+        {
+          "week_offset": 5,
+          "active_users": 191,
+          "retention_rate": 0.3248
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-02-26",
+      "cohort_size": 585,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 400,
+          "retention_rate": 0.6838
+        },
+        {
+          "week_offset": 1,
+          "active_users": 330,
+          "retention_rate": 0.5641
+        },
+        {
+          "week_offset": 2,
+          "active_users": 284,
+          "retention_rate": 0.4855
+        },
+        {
+          "week_offset": 3,
+          "active_users": 229,
+          "retention_rate": 0.3915
+        },
+        {
+          "week_offset": 4,
+          "active_users": 220,
+          "retention_rate": 0.3761
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-03-04",
+      "cohort_size": 580,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 417,
+          "retention_rate": 0.719
+        },
+        {
+          "week_offset": 1,
+          "active_users": 324,
+          "retention_rate": 0.5586
+        },
+        {
+          "week_offset": 2,
+          "active_users": 283,
+          "retention_rate": 0.4879
+        },
+        {
+          "week_offset": 3,
+          "active_users": 246,
+          "retention_rate": 0.4241
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-03-11",
+      "cohort_size": 620,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 456,
+          "retention_rate": 0.7355
+        },
+        {
+          "week_offset": 1,
+          "active_users": 354,
+          "retention_rate": 0.571
+        },
+        {
+          "week_offset": 2,
+          "active_users": 309,
+          "retention_rate": 0.4984
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-03-18",
+      "cohort_size": 607,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 421,
+          "retention_rate": 0.6936
+        },
+        {
+          "week_offset": 1,
+          "active_users": 343,
+          "retention_rate": 0.5651
+        }
+      ]
+    },
+    {
+      "cohort_week": "2024-03-25",
+      "cohort_size": 630,
+      "retention": [
+        {
+          "week_offset": 0,
+          "active_users": 469,
+          "retention_rate": 0.7444
+        }
+      ]
+    }
+  ]
+}
