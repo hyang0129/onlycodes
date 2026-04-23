@@ -24,7 +24,7 @@ const TEST_SOCK = `/tmp/test-bridge-${process.pid}.sock`;
 process.env.ONLYCODES_BRIDGE_SOCK = TEST_SOCK;
 
 // Import AFTER setting the env var so getBridgeSocketPath() picks it up.
-const { start, stop } = await import("../bridge-server.js");
+const { start, stop } = await import("../exec_server/bridge-server.js");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

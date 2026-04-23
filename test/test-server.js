@@ -44,7 +44,7 @@ function assert(condition, message) {
  */
 async function callServer(request, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [join(ROOT, "exec-server.js")], {
+    const child = spawn("node", [join(ROOT, "exec_server", "exec-server.js")], {
       cwd: ROOT,
       stdio: ["pipe", "pipe", "pipe"],
     });

@@ -17,8 +17,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSubMcpEnv } from "../sub-mcp-manager.js";
-import manager from "../sub-mcp-manager.js";
+import { buildSubMcpEnv } from "../exec_server/sub-mcp-manager.js";
+import manager from "../exec_server/sub-mcp-manager.js";
 
 // ---------------------------------------------------------------------------
 // buildSubMcpEnv tests

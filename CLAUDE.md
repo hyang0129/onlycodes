@@ -125,7 +125,9 @@ tests/
 
 **`mcp-config.json`** — MCP server config for the codebox (execute_code) tool. Sets `ONLYCODES_PERSISTENT_KERNEL=1` to enable a persistent Python REPL across calls. The harness strips this env var for `--no-persistent-kernel` runs by writing a modified config to a temp file.
 
-**`passthrough-config.json`** — Interception rules for the MCP bridge (sub-MCP-manager). Defines content and dispatch deny-lists without code changes. Add rules here to block tool calls or patterns in execute_code output.
+**`exec_server/passthrough-config.json`** — Interception rules for the MCP bridge (sub-MCP-manager). Defines content and dispatch deny-lists without code changes. Add rules here to block tool calls or patterns in execute_code output.
+
+**`exec_server/`** — Self-contained MCP exec-server stack: JS runtime (`exec-server.js`, `bridge-server.js`, `config-loader.js`, `interceptor.js`, `sub-mcp-manager.js`), Python kernel helpers (`codebox.py`, `mcp_bridge.py`, `python_kernel.py`), config (`passthrough-config.json`), and build (`build.mjs`). Python helpers live alongside the JS because `exec-server.js` stages them into the execute_code scratch dir via `__dirname`. `npm run build` emits `exec_server/dist/exec-server.bundle.mjs` (gitignored).
 
 ---
 
