@@ -4,7 +4,7 @@ Pipeline overview (epic #62):
 
 - **Stage 1 (mechanical).** For every ``*_run*.jsonl`` under ``--results-dir``,
   call :func:`swebench.analyze.extractor.extract` and persist the result as a
-  sidecar JSON under ``results_swebench/_analysis/<run_id>/mechanical/``.
+  sidecar JSON under ``runs/swebench/_analysis/<run_id>/mechanical/``.
   Produce a ``triage.json`` listing the top ``TRIAGE_TOP_PERCENTILE`` of runs
   (via :func:`swebench.analyze.extractor.triage_rank`) — those are the ones
   fed to Stage 2.
@@ -12,7 +12,7 @@ Pipeline overview (epic #62):
   ``claude -p`` command using :func:`swebench.harness.find_claude_binary` and
   :func:`swebench.harness.make_isolated_claude_config`, compressed log body +
   the system prompt at ``subagent_prompt.md``. Write the subagent's JSON reply
-  to ``results_swebench/_analysis/<run_id>/subagents/<log_ref>.json``.
+  to ``runs/swebench/_analysis/<run_id>/subagents/<log_ref>.json``.
   Parallel fan-out follows the ``swebench/add.py`` template: ``_print_lock``
   serialises ``click.echo`` and ``_process_one`` returns ``(id, ok, msg)``.
 - **Stage 3 (synthesize).** Read every Stage 2 subagent sidecar, pass the
@@ -66,7 +66,7 @@ def _echo(msg: str, *, err: bool = False) -> None:
 
 
 #: Regex to split a run filename stem into (instance_id, arm, run_idx).
-#: SWE-bench layout: ``results_swebench/<instance>_<arm>_run<N>.jsonl``.
+#: SWE-bench layout: ``runs/swebench/<instance>_<arm>_run<N>.jsonl``.
 _RUN_STEM_RE = re.compile(r"^(?P<instance>.+)_(?P<arm>baseline|onlycode)_run(?P<run>\d+)$")
 
 #: Valid artifact-arm directory names (matches ``VALID_ARMS`` in registry.py).
@@ -672,8 +672,8 @@ def register_pathology_command(analyze_command: click.Group) -> None:
         type=click.Path(exists=True, file_okay=False, path_type=Path),
         default=None,
         help=(
-            "Path to results directory (default: results_swebench/). "
-            "Pass results_artifact/ for the artifact benchmark; layouts "
+            "Path to results directory (default: runs/swebench/). "
+            "Pass runs/artifact/ for the artifact benchmark; layouts "
             "(flat SWE-bench, nested <task>/<arm>/run<N>/agent.jsonl) are "
             "auto-detected."
         ),
@@ -722,7 +722,7 @@ def register_pathology_command(analyze_command: click.Group) -> None:
         if concurrency < 1:
             raise click.UsageError("--concurrency must be >= 1.")
 
-        rdir = Path(results_dir) if results_dir else (repo_root() / "results_swebench")
+        rdir = Path(results_dir) if results_dir else (repo_root() / "runs" / "swebench")
         if not rdir.is_dir():
             _echo(f"ERROR: results directory not found: {rdir}", err=True)
             sys.exit(1)

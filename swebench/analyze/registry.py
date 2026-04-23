@@ -3,7 +3,7 @@
 ``patterns.json`` is the canonical pathology vocabulary for epic #62: it
 collects every distinct pathology ``candidate_id`` and its human-readable
 description. Tracking metadata (frequency, arm distribution, evidence refs)
-lives in the per-run analysis output under ``results_swebench/_analysis/``,
+lives in the per-run analysis output under ``runs/swebench/_analysis/``,
 not here. This module exposes:
 
 - :func:`load_patterns` — read + validate an existing file.
