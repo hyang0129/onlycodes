@@ -232,7 +232,42 @@ def test_is_run_complete_true_false(tmp_path):
 
 
 def test_arm_list_constants():
-    assert set(ARMS) == {"code_only", "tool_rich"}
+    assert set(ARMS) == {"code_only", "tool_rich", "bash_only"}
+
+
+def test_build_tools_flags_bash_only():
+    flags = _build_tools_flags("bash_only", mcp_config_path=None)
+    assert "--tools" in flags
+    tools_val = flags[flags.index("--tools") + 1]
+    assert tools_val == "Bash"
+    assert "--disallowedTools" in flags
+    disallowed = flags[flags.index("--disallowedTools") + 1]
+    # Bash must NOT be in the disallowed list for bash_only.
+    assert "Bash" not in disallowed
+    # Known blocked builtins must still be disallowed.
+    assert "Read" in disallowed
+    # No MCP flags for bash_only.
+    assert "--mcp-config" not in flags
+    assert "--strict-mcp-config" not in flags
+
+
+def test_run_artifact_arm_end_to_end_bash_only(tmp_path, stub_claude, monkeypatch):
+    task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42)
+    monkeypatch.setattr(
+        artifact_run_mod, "run_claude",
+        _stub_claude_writes("42\n"),
+    )
+    results_dir = tmp_path / "results"
+    result = run_artifact_arm(
+        task, "bash_only", 1,
+        results_dir=results_dir,
+        claude_binary="/bin/true",
+        echo=lambda _m: None,
+    )
+    assert result.arm == "bash_only"
+    assert result.verdict == "PASS"
+    assert result.grade_result is not None
+    assert result.grade_result.passed is True
 
 
 def test_build_prompt_uses_absolute_paths(tmp_path):
