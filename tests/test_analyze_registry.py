@@ -131,13 +131,6 @@ def test_validate_full_pattern_ok() -> None:
             {
                 "id": "amnesiac_retry",
                 "description": "x",
-                "evidence_refs": [
-                    {"log_ref": "a", "run_id": "r", "turn": 1, "excerpt": "e"}
-                ],
-                "frequency": 1,
-                "arm_distribution": {"baseline": 0, "onlycode": 1},
-                "first_seen_run_id": "r",
-                "last_seen_run_id": "r",
             }
         ],
     }
@@ -147,17 +140,7 @@ def test_validate_full_pattern_ok() -> None:
 def test_validate_bad_pattern_id() -> None:
     data = {
         "version": 1,
-        "patterns": [
-            {
-                "id": "BadID!",
-                "description": "x",
-                "evidence_refs": [],
-                "frequency": 0,
-                "arm_distribution": {"baseline": 0, "onlycode": 0},
-                "first_seen_run_id": "r",
-                "last_seen_run_id": "r",
-            }
-        ],
+        "patterns": [{"id": "BadID!", "description": "x"}],
     }
     errs = registry.validate(data)
     assert any("invalid slug" in e for e in errs)
@@ -172,30 +155,13 @@ def test_validate_pattern_missing_key() -> None:
     assert any("missing keys" in e for e in errs)
 
 
-def test_validate_evidence_ref_excerpt_too_long() -> None:
+def test_validate_pattern_unknown_key_rejected() -> None:
     data = {
         "version": 1,
-        "patterns": [
-            {
-                "id": "foo",
-                "description": "x",
-                "evidence_refs": [
-                    {
-                        "log_ref": "a",
-                        "run_id": "r",
-                        "turn": 1,
-                        "excerpt": "x" * 241,
-                    }
-                ],
-                "frequency": 0,
-                "arm_distribution": {"baseline": 0, "onlycode": 0},
-                "first_seen_run_id": "r",
-                "last_seen_run_id": "r",
-            }
-        ],
+        "patterns": [{"id": "foo", "description": "x", "extra_key": "surprise"}],
     }
     errs = registry.validate(data)
-    assert any("240" in e for e in errs)
+    assert any("unknown keys" in e for e in errs)
 
 
 # ---------------------------------------------------------------------------
@@ -262,24 +228,8 @@ def test_write_patterns_atomic_and_sorted(tmp_path: Path) -> None:
     data = {
         "version": 1,
         "patterns": [
-            {
-                "id": "zzz",
-                "description": "z",
-                "evidence_refs": [],
-                "frequency": 0,
-                "arm_distribution": {"baseline": 0, "onlycode": 0},
-                "first_seen_run_id": "r",
-                "last_seen_run_id": "r",
-            },
-            {
-                "id": "aaa",
-                "description": "a",
-                "evidence_refs": [],
-                "frequency": 0,
-                "arm_distribution": {"baseline": 0, "onlycode": 0},
-                "first_seen_run_id": "r",
-                "last_seen_run_id": "r",
-            },
+            {"id": "zzz", "description": "z"},
+            {"id": "aaa", "description": "a"},
         ],
     }
     registry.write_patterns(p, data)
@@ -328,84 +278,59 @@ def test_write_patterns_creates_parent_dir(tmp_path: Path) -> None:
 
 def test_merge_new_id_insertion() -> None:
     existing = _seed_registry()
-    out = registry.merge(existing, [_make_finding()], run_id="r1")
+    out = registry.merge(existing, [_make_finding()])
     assert len(out["patterns"]) == 1
     pat = out["patterns"][0]
     assert pat["id"] == "amnesiac_retry"
-    assert pat["frequency"] == 1
-    assert pat["arm_distribution"] == {"baseline": 0, "onlycode": 1}
-    assert pat["first_seen_run_id"] == "r1"
-    assert pat["last_seen_run_id"] == "r1"
+    assert pat["description"] == "agent re-ran same command repeatedly"
     assert existing == _seed_registry()  # pure: not mutated
 
 
-def test_merge_same_id_collision_increments() -> None:
+def test_merge_same_id_no_duplicate() -> None:
     existing = _seed_registry()
-    r1 = registry.merge(existing, [_make_finding(turn=1)], run_id="r1")
-    r2 = registry.merge(
-        r1,
-        [_make_finding(turn=2, log_ref="other_onlycode_run1")],
-        run_id="r2",
-    )
-    pat = r2["patterns"][0]
-    assert pat["frequency"] == 2
-    assert pat["arm_distribution"]["onlycode"] == 2
-    assert pat["first_seen_run_id"] == "r1"
-    assert pat["last_seen_run_id"] == "r2"
-    assert len(pat["evidence_refs"]) == 2
+    r1 = registry.merge(existing, [_make_finding(turn=1)])
+    r2 = registry.merge(r1, [_make_finding(turn=2, log_ref="other_onlycode_run1")])
+    assert len(r2["patterns"]) == 1
+    assert r2["patterns"][0]["id"] == "amnesiac_retry"
 
 
-def test_merge_evidence_dedup_by_tuple() -> None:
+def test_merge_dedup_by_candidate_id() -> None:
     existing = _seed_registry()
-    r1 = registry.merge(existing, [_make_finding(turn=5)], run_id="r1")
-    # Same (log_ref, run_id, turn) — should be de-duped.
-    r2 = registry.merge(r1, [_make_finding(turn=5)], run_id="r1")
-    pat = r2["patterns"][0]
-    assert pat["frequency"] == 1
-    assert len(pat["evidence_refs"]) == 1
+    r1 = registry.merge(existing, [_make_finding(turn=5)])
+    r2 = registry.merge(r1, [_make_finding(turn=5)])
+    assert len(r2["patterns"]) == 1
 
 
-def test_merge_evidence_cap_at_20() -> None:
+def test_merge_many_findings_same_id_still_one_pattern() -> None:
     existing = _seed_registry()
     current = existing
     for turn in range(25):
         current = registry.merge(
             current,
             [_make_finding(turn=turn, log_ref=f"log_{turn}")],
-            run_id="r1",
         )
-    pat = current["patterns"][0]
-    assert len(pat["evidence_refs"]) == registry.MAX_EVIDENCE_REFS
-    # Most-recent-first: the last added (turn=24) must be present.
-    assert pat["evidence_refs"][0]["turn"] == 24
-    # Oldest (turn=0) must have been dropped.
-    assert all(r["turn"] != 0 for r in pat["evidence_refs"])
+    assert len(current["patterns"]) == 1
+    assert current["patterns"][0]["id"] == "amnesiac_retry"
 
 
-def test_merge_arm_distribution_sums_both_arms() -> None:
+def test_merge_multiple_findings_same_id_coalesced() -> None:
     existing = _seed_registry()
     findings = [
         _make_finding(arm="baseline", log_ref="b1", turn=1),
-        _make_finding(arm="baseline", log_ref="b2", turn=1),
-        _make_finding(arm="onlycode", log_ref="o1", turn=1),
+        _make_finding(arm="baseline", log_ref="b2", turn=2),
+        _make_finding(arm="onlycode", log_ref="o1", turn=3),
     ]
-    out = registry.merge(existing, findings, run_id="r1")
-    pat = out["patterns"][0]
-    assert pat["arm_distribution"] == {"baseline": 2, "onlycode": 1}
-    assert pat["frequency"] == 3
+    out = registry.merge(existing, findings)
+    assert len(out["patterns"]) == 1
+    assert out["patterns"][0]["id"] == "amnesiac_retry"
 
 
 def test_merge_first_writer_wins_description() -> None:
     existing = _seed_registry()
-    r1 = registry.merge(
-        existing,
-        [_make_finding(description="first description")],
-        run_id="r1",
-    )
+    r1 = registry.merge(existing, [_make_finding(description="first description")])
     r2 = registry.merge(
         r1,
         [_make_finding(log_ref="other", turn=9, description="DIFFERENT description")],
-        run_id="r2",
     )
     assert r2["patterns"][0]["description"] == "first description"
 
@@ -417,7 +342,7 @@ def test_merge_sorts_patterns_by_id() -> None:
         _make_finding(cid="aaa_first", log_ref="b", turn=1),
         _make_finding(cid="mmm_mid", log_ref="c", turn=1),
     ]
-    out = registry.merge(existing, findings, run_id="r1")
+    out = registry.merge(existing, findings)
     assert [p["id"] for p in out["patterns"]] == ["aaa_first", "mmm_mid", "zzz_last"]
 
 
@@ -426,13 +351,13 @@ def test_merge_is_pure_no_mutation() -> None:
     snapshot = json.dumps(existing, sort_keys=True)
     findings = [_make_finding()]
     findings_snapshot = json.dumps(findings, sort_keys=True)
-    registry.merge(existing, findings, run_id="r1")
+    registry.merge(existing, findings)
     assert json.dumps(existing, sort_keys=True) == snapshot
     assert json.dumps(findings, sort_keys=True) == findings_snapshot
 
 
 def test_merge_accepts_none_existing() -> None:
-    out = registry.merge(None, [_make_finding()], run_id="r1")  # type: ignore[arg-type]
+    out = registry.merge(None, [_make_finding()])  # type: ignore[arg-type]
     assert out["version"] == 1
     assert len(out["patterns"]) == 1
 
@@ -442,7 +367,7 @@ def test_merge_accepts_none_existing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_flatten_findings_carries_log_ref_and_arm() -> None:
+def test_flatten_findings_returns_candidate_id_and_description() -> None:
     outputs = [
         {
             "log_ref": "X_onlycode_run1",
@@ -460,5 +385,5 @@ def test_flatten_findings_carries_log_ref_and_arm() -> None:
     ]
     flat = registry.flatten_findings(outputs)
     assert len(flat) == 1
-    assert flat[0]["log_ref"] == "X_onlycode_run1"
-    assert flat[0]["arm"] == "onlycode"
+    assert flat[0]["candidate_id"] == "cid1"
+    assert flat[0]["description"] == "d"
