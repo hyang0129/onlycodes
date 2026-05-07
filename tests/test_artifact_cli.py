@@ -84,6 +84,7 @@ def test_artifact_run_help():
     assert "--filter" in r.output
     assert "--arms" in r.output
     assert "--runs" in r.output
+    assert "bash_only" in r.output
 
 
 def test_artifact_verify_is_placeholder():
@@ -109,7 +110,7 @@ def test_artifact_run_end_to_end(tmp_path, stub_runtime):
     ])
     assert r.exit_code == 0, r.output
 
-    for arm in ("code_only", "tool_rich"):
+    for arm in ("code_only", "tool_rich", "bash_only"):
         run_dir = results_dir / iid / arm / "run1"
         assert (run_dir / "result.json").is_file()
         assert (run_dir / "agent.jsonl").is_file()
@@ -373,6 +374,63 @@ def test_artifact_analyze_missing_results_dir(tmp_path):
     ])
     assert r.exit_code == 1
     assert "Results directory not found" in (r.output + (r.stderr or ""))
+
+
+def test_artifact_run_bash_only_arm(tmp_path, stub_runtime):
+    tasks_root = tmp_path / "tasks"
+    results_dir = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "run",
+        "--tasks-dir", str(tasks_root),
+        "--output-dir", str(results_dir),
+        "--filter", iid,
+        "--arms", "bash_only",
+    ])
+    assert r.exit_code == 0, r.output
+    # Only the bash_only arm dir should exist.
+    assert (results_dir / iid / "bash_only" / "run1" / "result.json").is_file()
+    assert not (results_dir / iid / "code_only").exists()
+    assert not (results_dir / iid / "tool_rich").exists()
+
+
+def test_artifact_run_all_sentinel(tmp_path, stub_runtime):
+    tasks_root = tmp_path / "tasks"
+    results_dir = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "run",
+        "--tasks-dir", str(tasks_root),
+        "--output-dir", str(results_dir),
+        "--filter", iid,
+        "--arms", "all",
+    ])
+    assert r.exit_code == 0, r.output
+    # All three arms must have been executed.
+    for arm in ("code_only", "tool_rich", "bash_only"):
+        assert (results_dir / iid / arm / "run1" / "result.json").is_file(), \
+            f"missing result.json for arm={arm}"
+
+
+def test_artifact_run_both_alias(tmp_path, stub_runtime):
+    tasks_root = tmp_path / "tasks"
+    results_dir = tmp_path / "results"
+    iid = _write_fixture_task(tasks_root)
+    runner = CliRunner()
+    r = runner.invoke(cli, [
+        "artifact", "run",
+        "--tasks-dir", str(tasks_root),
+        "--output-dir", str(results_dir),
+        "--filter", iid,
+        "--arms", "both",
+    ])
+    assert r.exit_code == 0, r.output
+    # 'both' is an alias for 'all' — all three arms must run.
+    for arm in ("code_only", "tool_rich", "bash_only"):
+        assert (results_dir / iid / arm / "run1" / "result.json").is_file(), \
+            f"missing result.json for arm={arm} (both alias)"
 
 
 def test_swebench_run_unchanged_smoke():

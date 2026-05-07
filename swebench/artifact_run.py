@@ -40,7 +40,7 @@ _BLOCKED_BUILTINS = (
     "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
 )
 
-ARMS = ("code_only", "tool_rich")
+ARMS = ("code_only", "tool_rich", "bash_only")
 
 
 def run_dir_for(results_dir: Path, instance_id: str, arm: str, run_idx: int) -> Path:
@@ -93,6 +93,11 @@ def _build_tools_flags(arm: str, mcp_config_path: str | None) -> list[str]:
             "--disallowedTools", _BLOCKED_BUILTINS,
         ])
         return flags
+    if arm == "bash_only":
+        blocked = ",".join(
+            t for t in _BLOCKED_BUILTINS.split(",") if t.strip() != "Bash"
+        )
+        return ["--tools", "Bash", "--disallowedTools", blocked]
     raise ValueError(f"Unknown arm: {arm!r}")
 
 

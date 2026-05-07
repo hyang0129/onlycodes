@@ -47,10 +47,10 @@ def artifact_group() -> None:
 )
 @click.option(
     "--arms",
-    type=click.Choice(["code_only", "tool_rich", "both"]),
-    default="both",
+    type=click.Choice(["code_only", "tool_rich", "bash_only", "both", "all"]),
+    default="all",
     show_default=True,
-    help="Which arms to run.",
+    help="Which arms to run. 'all' runs every arm. 'both' is a deprecated alias for 'all'.",
 )
 @click.option(
     "--runs",
@@ -134,7 +134,7 @@ def artifact_run_command(
         raise SystemExit(1)
 
     arm_list: list[str]
-    if arms == "both":
+    if arms in ("both", "all"):
         arm_list = list(ARMS)
     else:
         arm_list = [arms]
