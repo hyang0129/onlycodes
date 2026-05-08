@@ -32,13 +32,23 @@ RMSE_THRESHOLD = 5.0
 
 
 def _model(L: float, k: float, x0: float, x: float) -> float:
-    # Numerically stable logistic
-    z = -k * (x - x0)
+    """Three-parameter logistic, evaluated without overflow for either sign of z.
+
+    Issue #170 replaced the previous implementation, which contained an
+    ``if False`` toggle that made the numerically-stable branch
+    unreachable: extreme ``k`` or ``x0`` values pushed ``math.exp(z)`` into
+    overflow, and the grader's ``OverflowError`` handler then failed the
+    agent for the grader's own bug. This version selects the safe branch
+    based on the sign of ``z`` so neither path passes a positive argument
+    to ``math.exp``.
+    """
+    z = k * (x - x0)
     if z >= 0:
-        ez = math.exp(-z)
-        return L * ez / (1.0 + ez) if False else L / (1.0 + math.exp(z))
-    # z < 0 -> exp(z) small, safe
-    return L / (1.0 + math.exp(z))
+        # exp(-z) <= 1; safe for arbitrarily large positive z.
+        return L / (1.0 + math.exp(-z))
+    # z < 0; exp(z) <= 1; safe for arbitrarily large negative z.
+    ez = math.exp(z)
+    return L * ez / (1.0 + ez)
 
 
 def _rmse(L: float, k: float, x0: float, data: list[dict]) -> float:

@@ -13,12 +13,13 @@ def f1(x: float) -> float:
 
 
 def f2(x: float) -> float:
-    # Root near x = 1 (unique in [-1, 3] since derivative does not vanish there)
+    # Root near x ≈ 1.7508 in [0.1, 3.0]
+    # (f(x) = exp(x) - e*x - 1; f(1) = -1, NOT a root.)
     return math.exp(x) - math.e * x - 1.0
 
 
 def f3(x: float) -> float:
-    # Cubic with root near 0.6529... in [0, 1]
+    # Cubic with root near x ≈ 0.6823 in [0, 1]
     return x * x * x + x - 1.0
 
 
