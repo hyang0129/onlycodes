@@ -1,0 +1,47 @@
+name: check-graders
+
+# Run the pre-merge grader gates on every PR that touches the artifact
+# benchmark — graders, tasks, the harness loader, or the gate tools
+# themselves. See docs/SCHEMA_ARTIFACT.md §5.4 (positive) and §5.5
+# (negative).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "problems/artifact/**"
+      - "swebench/artifact_*"
+      - "tools/verify_graders.py"
+      - "tools/check_grader_negative.py"
+      - "tools/check_grader_leaks.py"
+      - "Makefile"
+      - ".github/workflows/check-graders.yml"
+      - "tests/test_verify_graders.py"
+      - "tests/test_check_grader_negative.py"
+
+jobs:
+  graders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Positive sanity check
+        run: make check-graders-positive
+
+      - name: Negative sanity check
+        run: make check-graders-negative
+
+      - name: Answer-leak lint
+        run: make check-graders-leaks

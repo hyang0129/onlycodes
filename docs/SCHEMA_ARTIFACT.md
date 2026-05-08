@@ -234,11 +234,112 @@ The harness (#2) is responsible for the copy step and for ensuring no grader pat
 
 The invariant "no golden solution or correctness signal is ever visible to the agent" is a hard epic invariant (see #92). Any task author who finds themselves needing to reference `grader/` or `reference_output` from inside `workspace/` has a bug — the task is miscategorized and needs re-shaping.
 
-### 5.4 Pre-merge sanity check
+### 5.4 Pre-merge sanity check (positive)
 
 Before a task PR lands, a harness utility runs the task's `reference_output` through its `grade()` function and asserts `passed=True, score=1.0`. This catches graders that reject their own known-good answer — the single most common silent-failure mode.
 
 This sanity check is run by the harness slice (#2); task authors MAY run it locally once the harness lands by invoking the sanity-check entry point on their task directory.
+
+The implementation is `tools/verify_graders.py`; CI invokes it via `make check-graders-positive`.
+
+### 5.5 Pre-merge sanity check (negative)
+
+The §5.4 positive check catches graders that reject their own known-good answer. It does NOT catch the dual silent-failure mode: a grader that *accepts* artifacts it should reject because the prompt's correctness criterion was incompletely encoded. Examples seen in seed-v1:
+
+- A prompt requires descending-by-revenue order, but the grader checks set equality — a reversed artifact passes.
+- A prompt requires a chronological list, but the grader uses set comparison — a permutation passes.
+- A prompt requires both `function` AND `module` keys, but the grader only validates `function` — a JSONL with bogus modules passes.
+- A grader has an "output is empty" early-exit before the correctness check — when the *correct* answer happens to be empty, a correct empty agent output is rejected.
+
+Negative sanity check: for every task, a harness utility takes `reference_output`, applies a small set of *deliberately wrong* mutations, places each mutated artifact at `output_artifact`, and runs `grade()`. The expected outcome is `passed=False`.
+
+#### 5.5.1 Default mutations (every task)
+
+Every task's grader is exercised against six task-agnostic mutations supplied by `swebench.artifact_negative.default_negative_cases()`:
+
+| Mutation | Description |
+|---|---|
+| `empty` | Replace the artifact with the empty string. |
+| `truncated_half` | Keep only the first 50% of bytes. |
+| `reversed_lines` | Reverse the order of non-empty lines. |
+| `renamed_field` | Rename one required JSON key to a guaranteed-wrong name. |
+| `off_by_one` | Add 1 to the first numeric literal in the artifact. |
+| `wrap_in_list` | Wrap the artifact in `[ ... ]`. |
+
+These exercise structural properties most graders should already enforce. They are deliberately *generic* — they should fire across categories without per-task knowledge.
+
+#### 5.5.2 Per-task mutations (`grader/negative_cases.py`)
+
+A task author who knows their prompt encodes a property the default mutations do not exercise (sort order, optional fields, set vs. list semantics, numeric tolerance bands, …) SHOULD ship a `grader/negative_cases.py` exposing a `NEGATIVE_CASES` list:
+
+```python
+from swebench.artifact_negative import NegativeCase
+
+def _reverse_jsonl(text: str) -> str:
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return "\n".join(reversed(lines)) + "\n"
+
+NEGATIVE_CASES = [
+    NegativeCase(
+        name="reversed_lines",
+        mutate=_reverse_jsonl,
+        expected_substring="order",
+        currently_caught=True,
+    ),
+    # ... more cases
+]
+```
+
+When a task ships `grader/negative_cases.py`, the per-task list **replaces** the defaults. A task author who wants the defaults plus extras should re-import them:
+
+```python
+from swebench.artifact_negative import NegativeCase, default_negative_cases
+
+NEGATIVE_CASES = default_negative_cases() + [
+    NegativeCase(name="task_specific_X", mutate=..., expected_substring=...),
+]
+```
+
+`NegativeCase` fields:
+
+| Field | Required? | Description |
+|---|---|---|
+| `name` | required | Short stable identifier. Unique within a task's case list. |
+| `mutate` | required | `Callable[[str], str]`. Takes the reference-output text, returns a deliberately-wrong text. Must produce a value different from the input. |
+| `expected_substring` | optional | Case-insensitive substring expected in the grader's `detail` on rejection. Empty string means "any rejection is fine". Authors SHOULD provide a substring when the case targets a specific property — that catches graders rejecting for the wrong reason (e.g. an empty-file shortcut firing before the correctness check). |
+| `currently_caught` | optional, default `True` | When `False`, the case documents a known grader-vs-prompt alignment bug: the mutation slips through the grader today. The negative gate prints a WARNING and continues. Flip to `True` once the alignment fix lands. |
+| `notes` | optional | Free-form annotation. Often a GitHub issue link explaining a `currently_caught=False` entry. |
+
+#### 5.5.3 The `currently_caught=False` escape hatch
+
+`currently_caught=False` exists for ONE narrow purpose: documenting a known prompt-vs-grader misalignment that the negative-test framework would otherwise flag every CI run. The case still runs; the gate still inspects the outcome; the outcome is reported as `EXPECTED_MISS` (warning) instead of `MISS` (failure).
+
+A `currently_caught=False` entry MUST cite the tracking issue in `notes`. Once the underlying alignment fix lands, the same PR flips the flag back to `True`.
+
+If you find yourself reaching for `currently_caught=False` for any reason other than "the prompt-vs-grader alignment is being fixed in a follow-up PR", you are using it wrong: file an issue, fix the grader, and add the case as `currently_caught=True` from day one.
+
+#### 5.5.4 Tooling
+
+| Tool | Purpose |
+|---|---|
+| `tools/check_grader_negative.py` | CLI driver. Walks tasks, runs cases, prints PASS / MISS / WEAK_MISS / WRONG_REASON / EXPECTED_MISS / ERROR per case. |
+| `make check-graders-negative` | Convenience wrapper. |
+| `make check-graders` | Runs §5.4 + §5.5 + the `check_grader_leaks.py` answer-leak lint. CI invokes the individual targets. |
+
+Outcome statuses:
+
+| Status | Meaning | Exits non-zero? |
+|---|---|---|
+| `PASS` | Grader correctly rejected the mutation. Detail substring matched (if specified). | — |
+| `MISS` | Grader accepted a deliberately-wrong artifact from a **custom** per-task case. Hard failure. | yes |
+| `WEAK_MISS` | Grader accepted a deliberately-wrong artifact from a **default** mutation, on a task that hasn't yet shipped `grader/negative_cases.py`. Diagnostic only. | no |
+| `WRONG_REASON` | Grader rejected, but `detail` did not contain the expected substring. Hard failure for custom cases (the grader rejected for the wrong reason); diagnostic-only for default mutations. | yes (custom only) |
+| `EXPECTED_MISS` | Grader accepted, AND the case is annotated `currently_caught=False`. Tracked alignment bug; warning only. | no |
+| `ERROR` | Infrastructure failure (missing reference, mutate raised, grader timeout, …). | yes |
+
+The `WEAK_MISS` distinction lets the framework ship today without forcing every existing task to be retro-audited in one PR. Promote a `WEAK_MISS` to a tracked `EXPECTED_MISS` by adding a per-task `negative_cases.py` with `currently_caught=False` and an issue link in `notes`.
+
+Self-test for the negative framework lives in `tests/test_check_grader_negative.py`.
 
 ---
 
@@ -296,7 +397,8 @@ A new task is ready to merge when all of the following are true:
 - [ ] `workspace/verify.py`, if present, does structural checks only (test: would a trivial-wrong artifact pass?).
 - [ ] `grader/hidden.py` defines `grade(scratch_dir) -> GradeResult`, is deterministic, offline, and seeds randomness from `instance_id`.
 - [ ] `grader/reference_output.*` exists and is known-good.
-- [ ] The grader returns `passed=True, score=1.0` on the reference output (sanity check).
+- [ ] The grader returns `passed=True, score=1.0` on the reference output (positive sanity check, §5.4).
+- [ ] The grader returns `passed=False` on the default negative mutations, and on any per-task `grader/negative_cases.py` mutations (§5.5). Any `currently_caught=False` entry cites a tracking issue in `notes`.
 - [ ] `execution_budget.max_code_runs` and `max_wall_seconds` are declared (`0` is fine for seed-v1).
 - [ ] Nothing in `workspace/` references `grader/` or `reference_output` by path or name.
 
