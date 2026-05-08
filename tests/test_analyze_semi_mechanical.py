@@ -176,7 +176,18 @@ def test_run_semi_mechanical_returns_empty_when_no_extractors(tmp_path: Path) ->
     assert matched == set()
 
 
-def test_run_semi_mechanical_no_match_produces_no_sidecar(tmp_path: Path) -> None:
+def test_run_semi_mechanical_no_match_produces_no_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ``run_semi_mechanical(dry_run=False)`` upfront-requires a ``claude``
+    # binary on PATH (so a missing-binary error fires before any worker
+    # spawns). CI runners do not ship that binary, so stub the lookup —
+    # the filter below returns no matches, so the binary is never actually
+    # invoked and the stub value never escapes the test.
+    monkeypatch.setattr(
+        "swebench.analyze.semi_mechanical.find_claude_binary",
+        lambda: "/usr/local/bin/fake-claude-for-test",
+    )
     jsonl = tmp_path / "log.jsonl"
     _write_fake_jsonl(jsonl)
     register("never", target_pattern_id="p",

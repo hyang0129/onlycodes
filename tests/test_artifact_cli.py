@@ -15,6 +15,24 @@ from swebench import artifact_cli as artifact_cli_mod
 from swebench.cli import cli
 
 
+def _all_output(r) -> str:
+    """Concatenate stdout and stderr from a click ``Result``, version-agnostic.
+
+    click 8.1.x defaults to mixing stderr into stdout; afterwards
+    ``r.stderr`` raises ``ValueError`` and the combined text is in
+    ``r.output``. click 8.2 removed the ``mix_stderr`` parameter and made
+    "stderr captured separately" the only behaviour; ``r.output`` is
+    stdout-only and ``r.stderr`` is stderr-only. This helper accepts both
+    so tests don't have to pin click.
+    """
+    try:
+        extra = r.stderr or ""
+    except (ValueError, AttributeError):
+        # click 8.1 default: ``r.output`` already contains stderr.
+        return r.output
+    return r.output + extra
+
+
 def _write_fixture_task(tasks_root: Path, agent_answer: str = "42") -> str:
     """Create a minimal valid task at tasks/test_fixture/trivial_pass/. Returns instance_id."""
     task_dir = tasks_root / "test_fixture" / "trivial_pass"
@@ -92,7 +110,7 @@ def test_artifact_verify_is_placeholder():
     r = runner.invoke(cli, ["artifact", "verify"])
     # Placeholder exits 2 with a pointer message.
     assert r.exit_code == 2
-    assert "placeholder" in (r.output + r.stderr).lower()
+    assert "placeholder" in _all_output(r).lower()
 
 
 def test_artifact_run_end_to_end(tmp_path, stub_runtime):
@@ -178,7 +196,7 @@ def test_artifact_run_filter_no_match(tmp_path, stub_runtime):
         "--filter", "does_not_exist__nope",
     ])
     assert r.exit_code == 1
-    assert "No matching" in (r.output + r.stderr)
+    assert "No matching" in _all_output(r)
 
 
 def test_artifact_run_no_tasks(tmp_path, stub_runtime):
@@ -191,7 +209,7 @@ def test_artifact_run_no_tasks(tmp_path, stub_runtime):
         "--output-dir", str(tmp_path / "results"),
     ])
     assert r.exit_code == 1
-    assert "No tasks found" in (r.output + r.stderr)
+    assert "No tasks found" in _all_output(r)
 
 
 def _write_result_json(
@@ -319,7 +337,7 @@ def test_artifact_analyze_cost_ratio_fallback(tmp_path):
     ])
     assert r.exit_code == 0, r.output
     # No ZeroDivisionError in stderr
-    assert "ZeroDivisionError" not in (r.output + (r.stderr or ""))
+    assert "ZeroDivisionError" not in _all_output(r)
     assert "cost ratio: N/A" in r.output
 
 
@@ -373,7 +391,7 @@ def test_artifact_analyze_missing_results_dir(tmp_path):
         "--results-dir", str(tmp_path / "does_not_exist"),
     ])
     assert r.exit_code == 1
-    assert "Results directory not found" in (r.output + (r.stderr or ""))
+    assert "Results directory not found" in _all_output(r)
 
 
 def test_artifact_run_bash_only_arm(tmp_path, stub_runtime):
