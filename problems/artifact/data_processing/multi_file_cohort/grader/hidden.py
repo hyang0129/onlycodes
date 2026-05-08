@@ -34,7 +34,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(False, 0.0, f"could not parse output: {exc}")
 
     if len(agent_top5) != 5:
-        return GradeResult(False, 0.0, f"expected 5 entries, got {len(agent_top5)}")
+        return GradeResult(False, 0.0, f"output must have 5 entries (got {len(agent_top5)})")
 
     for entry in agent_top5:
         if "product_id" not in entry or "total_revenue" not in entry:
@@ -45,7 +45,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     agent_pids = [e["product_id"] for e in agent_top5]
 
     if set(agent_pids) != set(expected_pids):
-        return GradeResult(False, 0.0, f"wrong top-5 products: got {agent_pids}, expected {expected_pids}")
+        return GradeResult(False, 0.0, f"wrong top-5 products: got {agent_pids}")
 
     # Check revenues within tolerance
     expected_dict = dict(expected)
@@ -54,6 +54,6 @@ def grade(scratch_dir: Path) -> GradeResult:
         expected_rev = expected_dict[pid]
         agent_rev = float(entry["total_revenue"])
         if abs(agent_rev - expected_rev) / expected_rev > TOLERANCE:
-            return GradeResult(False, 0.0, f"revenue for {pid}: got {agent_rev:.2f}, expected {expected_rev:.2f}")
+            return GradeResult(False, 0.0, f"revenue for {pid}: got {agent_rev:.2f}, out of tolerance")
 
     return GradeResult(True, 1.0, f"correct top-5 products identified with revenues within {TOLERANCE*100:.0f}% tolerance")

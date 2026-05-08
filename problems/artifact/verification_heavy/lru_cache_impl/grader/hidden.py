@@ -44,7 +44,7 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
 
     def check(name: str, got, expected):
         if got != expected:
-            failures.append(f"  [{name}] expected {expected!r}, got {got!r}")
+            failures.append(f"  [{name}] got {got!r}, wrong")
 
     # ── Group 1: basic put/get ────────────────────────────────────────────
     c = LRUCache(3)
@@ -141,7 +141,7 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
             expected = ref_get(key)
             if got != expected:
                 failures.append(
-                    f"  [g7-random] after {ops}: get({key})={got!r}, expected {expected!r}"
+                    f"  [g7-random] after {len(ops)} ops: get({key})={got!r}, wrong"
                 )
                 break
             ops.append(f"get({key})->{got}")
@@ -182,7 +182,7 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
             expected = ref_get2(key)
             if got != expected:
                 failures.append(
-                    f"  [g8-random] after {ops2}: get({key})={got!r}, expected {expected!r}"
+                    f"  [g8-random] after {len(ops2)} ops: get({key})={got!r}, wrong"
                 )
                 break
             ops2.append(f"get({key})->{got}")

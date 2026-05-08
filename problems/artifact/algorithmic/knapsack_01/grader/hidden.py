@@ -107,6 +107,6 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     optimal = _optimal_value(capacity, items)
     if tv != optimal:
-        return GradeResult(False, 0.0, f"total_value {tv} is not optimal (optimal={optimal})")
+        return GradeResult(False, 0.0, f"total_value {tv} is not optimal")
 
-    return GradeResult(True, 1.0, f"optimal total_value={optimal}")
+    return GradeResult(True, 1.0, "total_value is optimal")

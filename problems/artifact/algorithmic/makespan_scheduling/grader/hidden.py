@@ -86,7 +86,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if int(round(agent_ms)) != optimal:
         return GradeResult(
             False, 0.0,
-            f"makespan {agent_ms} is not optimal (optimal={optimal})",
+            f"makespan {agent_ms} is not optimal",
         )
 
     # Optional: validate assignment feasibility if provided
@@ -113,4 +113,4 @@ def grade(scratch_dir: Path) -> GradeResult:
                     f"makespan {declared_ms} from the assignment",
                 )
 
-    return GradeResult(True, 1.0, f"optimal makespan {optimal} achieved")
+    return GradeResult(True, 1.0, "makespan is optimal")

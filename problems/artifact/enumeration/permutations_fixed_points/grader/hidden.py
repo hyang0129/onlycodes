@@ -75,7 +75,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if perm is None:
             return GradeResult(
                 False, 0.0,
-                f"line {lineno}: expected permutation of 0..{N-1}, got {obj!r}",
+                f"line {lineno}: not a valid permutation of 0..{N-1}, got {obj!r}",
             )
         agent_perms.append(perm)
 

@@ -91,7 +91,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             continue
         norm = -1 if got < 0 else (1 if got > 0 else 0)
         if norm != expected:
-            failures.append(f"  compare_semver({a!r},{b!r}): expected {expected}, got {got}")
+            failures.append(f"  compare_semver({a!r},{b!r}): got {got}, wrong")
 
     n_pass = len(_TESTS) - len(failures)
     if failures:

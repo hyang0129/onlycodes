@@ -105,6 +105,6 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     optimal = _optimal_revenue(requests)
     if tr != optimal:
-        return GradeResult(False, 0.0, f"total_revenue {tr} is not optimal (optimal={optimal})")
+        return GradeResult(False, 0.0, f"total_revenue {tr} is not optimal")
 
-    return GradeResult(True, 1.0, f"optimal total_revenue={optimal}")
+    return GradeResult(True, 1.0, "total_revenue is optimal")

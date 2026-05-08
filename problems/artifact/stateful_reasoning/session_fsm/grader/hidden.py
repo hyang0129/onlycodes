@@ -175,7 +175,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             continue
         for k in required_keys:
             if av[k] != ref_val[k]:
-                wrong.append(f"{sid}.{k}: {av[k]!r} vs ref {ref_val[k]!r}")
+                wrong.append(f"{sid}.{k}: {av[k]!r} mismatch")
                 break
 
     if missing or wrong:

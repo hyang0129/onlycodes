@@ -82,7 +82,7 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     missing = ref_keys - agent_keys
     extra = agent_keys - ref_keys
-    wrong = {k: (agent[k], reference[k]) for k in agent_keys & ref_keys if agent[k] != reference[k]}
+    wrong = {k for k in agent_keys & ref_keys if agent[k] != reference[k]}
 
     if missing or extra or wrong:
         parts = []
@@ -91,8 +91,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if extra:
             parts.append(f"extra {len(extra)}: {sorted(extra)[:5]}")
         if wrong:
-            sample = list(wrong.items())[:3]
-            parts.append(f"{len(wrong)} wrong values, e.g. {sample}")
+            parts.append(f"{len(wrong)} wrong values (keys: {sorted(wrong)[:5]})")
         correct = len(ref_keys & agent_keys) - len(wrong)
         score = round(correct / max(len(ref_keys), 1), 4)
         return GradeResult(False, score, "; ".join(parts))

@@ -142,7 +142,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if abs(computed - optimal) > _TOL * max(1.0, abs(optimal)):
         return GradeResult(
             False, 0.0,
-            f"tour_length {computed} is not optimal (optimal={optimal})",
+            f"tour_length {computed} is not optimal",
         )
 
-    return GradeResult(True, 1.0, f"optimal tour_length={optimal:.6f}")
+    return GradeResult(True, 1.0, "tour_length is optimal")

@@ -144,12 +144,12 @@ def grade(scratch_dir: Path) -> GradeResult:
         if got["units_sold"] != want["units_sold"]:
             return GradeResult(
                 False, 0.0,
-                f"{key}: units_sold {got['units_sold']} != expected {want['units_sold']}",
+                f"{key}: units_sold {got['units_sold']} mismatch",
             )
         if got["direction"] != want["direction"]:
             return GradeResult(
                 False, 0.0,
-                f"{key}: direction {got['direction']!r} != expected {want['direction']!r}",
+                f"{key}: direction {got['direction']!r} mismatch",
             )
         for field in ("window_median", "mad", "modified_z"):
             gv = got[field]
@@ -164,7 +164,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             if abs(float(gv) - want[field]) > FLOAT_TOL:
                 return GradeResult(
                     False, 0.0,
-                    f"{key}: {field} {gv} != expected ~{want[field]}",
+                    f"{key}: {field} {gv} out of tolerance",
                 )
 
     return GradeResult(True, 1.0, f"matched {len(truth)} outlier day(s)")

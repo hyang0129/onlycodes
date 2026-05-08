@@ -168,7 +168,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             if got[k] != expected[k]:
                 return GradeResult(
                     False, 0.0,
-                    f"pair {pair}: {k} mismatch (got {got[k]!r}, want {expected[k]!r})",
+                    f"pair {pair}: {k} mismatch (got {got[k]!r})",
                 )
         got_amt = got["amount_cents"]
         if isinstance(got_amt, bool) or not isinstance(got_amt, int):
@@ -177,7 +177,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False, 0.0,
                 f"pair {pair}: amount_cents mismatch "
-                f"(got {got_amt}, want {expected['amount_cents']})",
+                f"(got {got_amt})",
             )
         got_delta = got["delta_seconds"]
         if isinstance(got_delta, bool) or not isinstance(got_delta, (int, float)):
@@ -186,7 +186,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False, 0.0,
                 f"pair {pair}: delta_seconds off "
-                f"(got {got_delta}, want ~{expected['delta_seconds']})",
+                f"(got {got_delta}, out of tolerance)",
             )
 
     return GradeResult(
