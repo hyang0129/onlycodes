@@ -42,22 +42,19 @@ jobs:
           pip install networkx
 
       - name: Run unit tests
+        id: pytest
         run: |
           set -e
-          # Capture pytest output to a file, then publish it to both the
-          # raw step log AND ``$GITHUB_STEP_SUMMARY`` (which is rendered
-          # on the run-summary page even for logged-out viewers — the
-          # raw log viewer truncates large step bodies and is gated by
-          # auth).
           rc=0
           pytest tests/ -m "not integration" -q --tb=short -ra \
-            > /tmp/pytest.log 2>&1 || rc=$?
-          {
-            echo "## pytest output"
-            echo
-            echo '```'
-            cat /tmp/pytest.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/pytest.log
+            > pytest.log 2>&1 || rc=$?
+          cat pytest.log
           exit "$rc"
+
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log
+          path: pytest.log
+          if-no-files-found: warn
