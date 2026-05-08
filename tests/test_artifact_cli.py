@@ -78,7 +78,7 @@ def stub_runtime(monkeypatch):
 
 
 def test_artifact_run_help():
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, ["artifact", "run", "--help"])
     assert r.exit_code == 0
     assert "--filter" in r.output
@@ -88,7 +88,7 @@ def test_artifact_run_help():
 
 
 def test_artifact_verify_is_placeholder():
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, ["artifact", "verify"])
     # Placeholder exits 2 with a pointer message.
     assert r.exit_code == 2
@@ -100,7 +100,7 @@ def test_artifact_run_end_to_end(tmp_path, stub_runtime):
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -128,7 +128,7 @@ def test_artifact_run_single_arm(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -145,7 +145,7 @@ def test_artifact_run_resume_skips(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     # First run
     r1 = runner.invoke(cli, [
         "artifact", "run",
@@ -170,7 +170,7 @@ def test_artifact_run_resume_skips(tmp_path, stub_runtime):
 def test_artifact_run_filter_no_match(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -184,7 +184,7 @@ def test_artifact_run_filter_no_match(tmp_path, stub_runtime):
 def test_artifact_run_no_tasks(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     tasks_root.mkdir()
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -223,7 +223,7 @@ def _write_result_json(
 
 
 def test_artifact_analyze_help():
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, ["artifact", "analyze", "--help"])
     assert r.exit_code == 0
     assert "--results-dir" in r.output
@@ -237,7 +237,7 @@ def test_artifact_analyze_populated(tmp_path):
     _write_result_json(results_root, iid, "code_only", 1, verdict="PASS")
     _write_result_json(results_root, iid, "tool_rich", 1, verdict="PASS")
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -263,7 +263,7 @@ def test_artifact_analyze_out_csv(tmp_path):
     _write_result_json(results_root, iid, "code_only", 1, verdict="PASS")
     _write_result_json(results_root, iid, "tool_rich", 1, verdict="FAIL")
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -290,7 +290,7 @@ def test_artifact_analyze_missing_result(tmp_path):
     # Create the run dir without a result.json
     (results_root / iid / "code_only" / "run1").mkdir(parents=True)
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -311,7 +311,7 @@ def test_artifact_analyze_cost_ratio_fallback(tmp_path):
     _write_result_json(results_root, iid, "tool_rich", 1,
                        verdict="ERROR", cost_usd=0.0)
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -336,7 +336,7 @@ def test_artifact_analyze_skips_scratch_result(tmp_path):
         json.dumps({"verdict": "PASS", "cost_usd": 0.5, "num_turns": 10, "wall_secs": 99})
     )
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -356,7 +356,7 @@ def test_artifact_analyze_empty_results(tmp_path):
     results_root.mkdir()
     _write_fixture_task(tasks_root)
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(results_root),
@@ -367,7 +367,7 @@ def test_artifact_analyze_empty_results(tmp_path):
 
 
 def test_artifact_analyze_missing_results_dir(tmp_path):
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "analyze",
         "--results-dir", str(tmp_path / "does_not_exist"),
@@ -380,7 +380,7 @@ def test_artifact_run_bash_only_arm(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -399,7 +399,7 @@ def test_artifact_run_all_sentinel(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -418,7 +418,7 @@ def test_artifact_run_both_alias(tmp_path, stub_runtime):
     tasks_root = tmp_path / "tasks"
     results_dir = tmp_path / "results"
     iid = _write_fixture_task(tasks_root)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, [
         "artifact", "run",
         "--tasks-dir", str(tasks_root),
@@ -436,7 +436,7 @@ def test_artifact_run_both_alias(tmp_path, stub_runtime):
 def test_swebench_run_unchanged_smoke():
     """Additive-only: ``python -m swebench run --help`` must still work and
     must not advertise any artifact-mode flag."""
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     r = runner.invoke(cli, ["run", "--help"])
     assert r.exit_code == 0
     assert "--filter" in r.output
