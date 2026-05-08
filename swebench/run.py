@@ -248,20 +248,20 @@ def _run_arm(
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
     # Build tools flags based on arm
+    _BLOCKED_BUILTINS = (
+        "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
+        "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
+        "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
+        "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
+        "RemoteTrigger,SendMessage,Skill,"
+        "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
+        "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
+    )
     tools_flags: list[str] = []
     if is_onlycode:
         # --tools whitelists MCP tools but does not reliably block built-ins
         # like Monitor (added v2.1.98). --disallowedTools explicitly removes
         # every built-in so the agent can only use the two codebox MCP tools.
-        _BLOCKED_BUILTINS = (
-            "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
-            "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
-            "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
-            "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
-            "RemoteTrigger,SendMessage,Skill,"
-            "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
-            "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
-        )
         # The default mcp-config.json enables the persistent kernel via
         # ONLYCODES_PERSISTENT_KERNEL=1. When --no-persistent-kernel is passed
         # we emit a per-run temp config with that env scrubbed.
@@ -276,6 +276,10 @@ def _run_arm(
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
             "--disallowedTools", _BLOCKED_BUILTINS,
         ]
+    elif arm == "bash_only":
+        # Allow only Bash; block every other built-in tool.
+        blocked_no_bash = ",".join(t for t in _BLOCKED_BUILTINS.split(",") if t.strip() != "Bash")
+        tools_flags = ["--tools", "Bash", "--disallowedTools", blocked_no_bash]
 
     start_time = time.time()
 
@@ -533,9 +537,9 @@ def _cleanup_stale_overlays(
 )
 @click.option(
     "--arms",
-    type=click.Choice(["baseline", "onlycode", "both"]),
+    type=click.Choice(["baseline", "onlycode", "bash_only", "both", "all"]),
     default="both",
-    help="Which arms to run (default: both).",
+    help="Which arms to run (default: both). 'both'=baseline+onlycode; 'all'=baseline+onlycode+bash_only.",
 )
 @click.option(
     "--persistent-kernel/--no-persistent-kernel",
@@ -659,10 +663,12 @@ def run_command(
 
     # Determine arms to run
     arm_list: list[str] = []
-    if arms in ("baseline", "both"):
+    if arms in ("baseline", "both", "all"):
         arm_list.append("baseline")
-    if arms in ("onlycode", "both"):
+    if arms in ("onlycode", "both", "all"):
         arm_list.append("onlycode")
+    if arms in ("bash_only", "all"):
+        arm_list.append("bash_only")
 
     # --- Environment pre-flight checks ------------------------------------------
     env_errors: list[str] = []
