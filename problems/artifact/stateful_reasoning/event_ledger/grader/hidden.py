@@ -67,15 +67,31 @@ def grade(scratch_dir: Path) -> GradeResult:
     if wrong_balances:
         return GradeResult(False, 0.0, f"wrong balances: {wrong_balances[:3]}")
 
-    # Check rejected list (must be exact, order-insensitive for set comparison)
-    agent_rejected = set(agent_out["rejected"])
-    expected_rejected_set = set(expected_rejected)
-    if agent_rejected != expected_rejected_set:
-        extra = agent_rejected - expected_rejected_set
-        missing_r = expected_rejected_set - agent_rejected
+    # Check rejected: per the prompt, this MUST be a JSON array in chronological
+    # order (the order rejections were encountered while replaying). Issue #166
+    # tightened the grader from set-comparison to typed-list-and-order: a wrong
+    # shape (dict, scalar, …) or a permuted list now both fail.
+    agent_rejected = agent_out["rejected"]
+    if not isinstance(agent_rejected, list):
         return GradeResult(False, 0.0,
-            f"rejected mismatch: got {len(agent_out['rejected'])} entries, "
+            f"rejected must be a JSON list (chronological order), "
+            f"got {type(agent_rejected).__name__}")
+
+    # Set-equality first — gives a precise "missing/extra" message when the
+    # agent has the wrong elements rather than just the wrong order.
+    agent_rejected_set = set(agent_rejected)
+    expected_rejected_set = set(expected_rejected)
+    if agent_rejected_set != expected_rejected_set:
+        extra = agent_rejected_set - expected_rejected_set
+        missing_r = expected_rejected_set - agent_rejected_set
+        return GradeResult(False, 0.0,
+            f"rejected mismatch: got {len(agent_rejected)} entries, "
             f"{len(extra)} extra, {len(missing_r)} missing")
 
+    # Same elements, possibly wrong order.
+    if list(agent_rejected) != list(expected_rejected):
+        return GradeResult(False, 0.0,
+            "rejected list is not in chronological order")
+
     return GradeResult(True, 1.0,
-        f"all {len(expected_balances)} balances correct, {len(expected_rejected)} rejected transactions identified")
+        f"all {len(expected_balances)} balances correct, {len(expected_rejected)} rejected transactions identified in chronological order")

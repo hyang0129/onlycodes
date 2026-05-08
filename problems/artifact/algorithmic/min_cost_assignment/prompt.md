@@ -23,13 +23,13 @@ Write `output/assignment.json`:
 ```json
 {
   "assignment": [task_for_worker_0, task_for_worker_1, ..., task_for_worker_19],
-  "total_cost": <integer>
+  "assignment_cost": <integer>
 }
 ```
 
 - `assignment`: list of 20 integers — `assignment[i]` is the 0-indexed task assigned to worker `i`
 - Every task must appear exactly once (perfect matching)
-- `total_cost`: the sum of `cost_matrix[i][assignment[i]]` for all `i`
+- `assignment_cost`: the sum of `cost_matrix[i][assignment[i]]` for all `i`
 
 ## Requirements
 

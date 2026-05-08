@@ -1,14 +1,16 @@
 """Per-task negative cases for ``stateful_reasoning__unreachable_functions``.
 
 The prompt requires every output line to carry **both** ``function`` AND
-``module`` keys. The grader, however, only validates ``function`` — the
-``module`` field is read from the reference but never checked against the
-agent's output, so a JSONL with a bogus or missing module slips through.
-That's the bug issue #171 calls out as ``unreachable_functions module``.
+``module`` keys. Originally the grader only validated ``function`` — the
+``module`` field was read from the reference but never checked against
+the agent's output, so a JSONL with a bogus or missing module slipped
+through; that was issue #171's ``unreachable_functions module`` bug.
 
-The ``drop_module_field`` and ``wrong_module_value`` cases below are
-annotated ``currently_caught=False``; flip them to ``True`` once the grader
-validates ``module`` per the prompt.
+Issue #166 tightened the grader to (a) require a ``module`` key and (b)
+validate it against the file each function was defined in (computed by
+the same AST walk that drives reachability). The ``drop_module_field``
+and ``wrong_module_value`` cases below now lock that behaviour in
+(``currently_caught=True``).
 """
 
 from __future__ import annotations
@@ -110,21 +112,18 @@ NEGATIVE_CASES = [
     NegativeCase(
         name="drop_module_field",
         mutate=_mutate_drop_module,
-        # PROMPT-VS-GRADER ALIGNMENT BUG: prompt requires both 'function'
-        # AND 'module', grader only checks 'function'. Dropping ``module``
-        # entirely slips through today.
+        # Locked in by issue #166: grader now requires a ``module`` key on
+        # every line.
         expected_substring="module",
-        currently_caught=False,
-        notes="issue #171 — unreachable_functions module field unvalidated",
+        notes="issue #166 — locks 'module' key requirement",
     ),
     NegativeCase(
         name="wrong_module_value",
         mutate=_mutate_wrong_module,
-        # Same alignment bug as drop_module_field — the grader doesn't
-        # check what's in ``module``, so a wrong value also slips.
+        # Locked in by issue #166: grader now validates ``module`` against
+        # the file each function was defined in.
         expected_substring="module",
-        currently_caught=False,
-        notes="issue #171 — unreachable_functions module field unvalidated",
+        notes="issue #166 — locks 'module' value validation",
     ),
     NegativeCase(
         name="wrap_in_list",

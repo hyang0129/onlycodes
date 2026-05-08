@@ -1,16 +1,16 @@
 """Per-task negative cases for ``data_processing__multi_file_cohort``.
 
 The prompt requires the output rows to be sorted in **descending order by
-total_revenue**, but the current grader only checks the *set* of product_ids,
-not the row order. A reversed reference output therefore slips through the
-grader today; that's the bug issue #171 calls out as
-``multi_file_cohort order``. The ``reversed_lines`` case below is annotated
-``currently_caught=False`` so the negative gate prints a WARNING for it
-without failing CI; once the grader is updated to enforce ordering (tracked
-under the prompt-vs-grader-alignment issue), flip it to ``True``.
+total_revenue**. Originally the grader only checked the *set* of
+product_ids, not the row order, so a reversed reference output slipped
+through; that was issue #171's ``multi_file_cohort order`` bug.
 
-Other cases here are mutations that the current grader DOES correctly catch
-— they document the existing safety net.
+Issue #166 tightened the grader to verify monotonically non-increasing
+``total_revenue`` across rows. The ``reversed_lines`` case below now
+locks that behaviour in (``currently_caught=True``).
+
+Other cases here are mutations that the grader's existing structural
+checks correctly catch — they document the safety net.
 """
 
 from __future__ import annotations
@@ -59,14 +59,10 @@ NEGATIVE_CASES = [
     NegativeCase(
         name="reversed_lines",
         mutate=_mutate_reverse_lines,
-        # PROMPT-VS-GRADER ALIGNMENT BUG: the prompt says "descending order"
-        # but the grader does set-equality on product_ids without checking
-        # row order. Today the grader returns passed=True on this mutation;
-        # ``check_grader_negative`` will print WARNING and continue. Flip
-        # ``currently_caught=True`` once the grader checks order.
+        # Locked in by issue #166: grader now verifies the output is in
+        # descending order by total_revenue. A reversed reference fails.
         expected_substring="order",
-        currently_caught=False,
-        notes="issue #171 — multi_file_cohort missing descending-order check",
+        notes="issue #166 — locks descending-order requirement",
     ),
     NegativeCase(
         name="renamed_required_field",

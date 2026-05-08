@@ -96,4 +96,13 @@ def grade(scratch_dir: Path) -> GradeResult:
         score = round(correct / max(len(ref_keys), 1), 4)
         return GradeResult(False, score, "; ".join(parts))
 
-    return GradeResult(True, 1.0, f"all {len(reference)} counter values correct")
+    # Issue #166: prompt requires keys "sorted by name (alphabetical) so
+    # diffs are stable" — enforce alphabetical key order on the agent's
+    # JSON object. We compare the agent's key insertion order (which
+    # ``json.loads`` preserves on Python 3.7+) against ``sorted(...)``.
+    agent_key_order = list(agent.keys())
+    if agent_key_order != sorted(agent_key_order):
+        return GradeResult(False, 0.0,
+            "counter keys not in alphabetical order (prompt requires sorted by name)")
+
+    return GradeResult(True, 1.0, f"all {len(reference)} counter values correct, keys in alphabetical order")

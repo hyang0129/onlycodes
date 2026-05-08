@@ -4,10 +4,17 @@ Contract: ``grade(scratch_dir: Path) -> GradeResult``. See docs/SCHEMA_ARTIFACT.
 
 Correctness criterion:
 
-    The agent's output/assignment.json MUST contain an "assignment" key
-    (list of num_workers ints, assignment[worker] = task) representing a
-    perfect matching whose total cost equals the optimal minimum cost.
-    The grader accepts any optimal-cost assignment — identity is not checked.
+    The agent's output/assignment.json MUST contain:
+
+      - ``assignment``: list of num_workers ints, assignment[worker] = task,
+        representing a perfect matching whose total cost equals the optimal
+        minimum cost. The grader accepts any optimal-cost assignment —
+        identity is not checked.
+      - ``assignment_cost``: integer equal to the sum of
+        cost_matrix[i][assignment[i]] for all i, AND equal to the optimal
+        minimum cost. Issue #166 aligned this name across prompt, grader,
+        and reference output (previously: prompt said "total_cost", grader
+        ignored the field, reference said "optimal_cost").
 
     Optimal cost is computed via the Hungarian algorithm (pure Python,
     no scipy dependency — see _hungarian below).
@@ -144,7 +151,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             )
         assigned_tasks.add(task)
 
-    # Compute agent's total cost
+    # Compute agent's total cost from the matching
     agent_cost = sum(cost_matrix[i][assignment[i]] for i in range(num_workers))
 
     # Compute optimal
@@ -156,4 +163,22 @@ def grade(scratch_dir: Path) -> GradeResult:
             f"assignment cost {agent_cost} is not optimal",
         )
 
-    return GradeResult(True, 1.0, "assignment cost is optimal")
+    # Issue #166: validate the agent's reported ``assignment_cost`` field
+    # (previously the prompt asked for it but the grader never read it,
+    # and the reference output used a third name, ``optimal_cost``).
+    # The reported value must (a) be present, (b) be an integer, and (c)
+    # equal the cost we just summed from the matching.
+    if "assignment_cost" not in agent_output:
+        return GradeResult(False, 0.0,
+            "output missing required key 'assignment_cost'")
+    reported = agent_output["assignment_cost"]
+    if isinstance(reported, bool) or not isinstance(reported, int):
+        return GradeResult(False, 0.0,
+            f"assignment_cost must be an integer, got {type(reported).__name__}")
+    if reported != agent_cost:
+        return GradeResult(False, 0.0,
+            f"assignment_cost {reported} disagrees with cost summed "
+            f"from the matching ({agent_cost})")
+
+    return GradeResult(True, 1.0,
+        "assignment cost is optimal and assignment_cost is consistent")

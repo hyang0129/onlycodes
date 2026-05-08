@@ -172,4 +172,21 @@ def grade(scratch_dir: Path) -> GradeResult:  # noqa: C901
             f"regression_score out of tolerance on {len(bad)} row(s): {bad}",
         )
 
-    return GradeResult(True, 1.0, f"correct top-{TOP_N} regressions identified")
+    # Issue #166: prompt requires rows in descending order of regression_score.
+    # The grader previously checked set membership only; now also check the
+    # row order matches the canonical descending-then-lex ordering computed
+    # by ``_top_n``.
+    expected_order = [ep for ep, _ in _top_n(regressions, TOP_N)]
+    agent_order = [row["endpoint"] for row in agent_rows]
+    if agent_order != expected_order:
+        # Either rows are out of order or there's a tie-break disagreement.
+        # The set check above already passed, so the elements are correct;
+        # only the order is off.
+        agent_scores = [float(row["regression_score"]) for row in agent_rows]
+        if agent_scores != sorted(agent_scores, reverse=True):
+            return GradeResult(False, 0.0,
+                "rows not in descending order by regression_score")
+        return GradeResult(False, 0.0,
+            "row order does not match canonical descending-then-lexicographic order")
+
+    return GradeResult(True, 1.0, f"correct top-{TOP_N} regressions identified, in descending order")
