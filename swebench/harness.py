@@ -432,7 +432,7 @@ def run_claude(
 
         env = os.environ.copy()
         env["CLAUDE_CONFIG_DIR"] = cfg_dir
-        env["DISABLE_PROMPT_CACHING"] = "1"
+        env["FORCE_PROMPT_CACHING_5M"] = "1"
 
         with open(result_file, "w") as out:
             subprocess.run(cmd, cwd=repo_dir, stdout=out, stderr=subprocess.STDOUT, env=env)
