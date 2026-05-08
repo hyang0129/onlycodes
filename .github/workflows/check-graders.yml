@@ -36,6 +36,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Some task graders import third-party libraries that are not
+          # part of the harness's runtime dependency set. Install them
+          # here so the positive sanity check (which exercises every
+          # task's grader) doesn't false-fail on an env-missing dep.
+          pip install networkx
 
       - name: Positive sanity check
         run: make check-graders-positive
