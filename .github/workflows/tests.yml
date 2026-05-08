@@ -18,6 +18,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -44,16 +48,31 @@ jobs:
       - name: Run unit tests
         id: pytest
         run: |
-          set -e
           rc=0
           pytest tests/ -m "not integration" -q --tb=short -ra \
             > pytest.log 2>&1 || rc=$?
           cat pytest.log
-          if [ "$rc" -ne 0 ]; then
-            # Surface the failure tail as a CI annotation — annotations
-            # render on the run summary and are visible to logged-out
-            # viewers, unlike step logs and artifacts. Annotation
-            # escape order is %->%25 first, then \n->%0A and \r->%0D.
-            python3 -c "import sys; t=open('pytest.log').read()[-6000:]; e=t.replace('%','%25').replace(chr(13),'%0D').replace(chr(10),'%0A'); print(f'::error::pytest failed (last 6KB):%0A{e}')"
-          fi
-          exit "$rc"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Comment failure log on PR
+        # Posts the (truncated) pytest output as a PR comment whenever the
+        # test step failed. Public artifact / step-log inspection is
+        # auth-gated; PR comments are not. Conditional on `failure()` AND
+        # this being a pull_request event so push-to-main runs don't
+        # spam any associated issue.
+        if: steps.pytest.outputs.rc != '0' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('pytest.log', 'utf8').slice(-50000);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '<details><summary>pytest failed (last 50KB)</summary>\n\n```\n' + body + '\n```\n</details>',
+            });
+
+      - name: Fail step on pytest non-zero rc
+        if: steps.pytest.outputs.rc != '0'
+        run: exit 1
