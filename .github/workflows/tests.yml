@@ -42,4 +42,10 @@ jobs:
           pip install networkx
 
       - name: Run unit tests
-        run: pytest tests/ -m "not integration" -v
+        # ``-q`` keeps the per-test output compact; ``--tb=line`` renders one
+        # line per failure (test name + exception class + message) so a CI
+        # failure summary fits in the GitHub UI without truncation.
+        # ``-ra`` appends a short summary of all non-passing outcomes so
+        # the maintainer can see at a glance what flipped without expanding
+        # the raw log.
+        run: pytest tests/ -m "not integration" -q --tb=line -ra
