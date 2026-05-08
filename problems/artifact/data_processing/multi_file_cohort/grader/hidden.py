@@ -56,4 +56,13 @@ def grade(scratch_dir: Path) -> GradeResult:
         if abs(agent_rev - expected_rev) / expected_rev > TOLERANCE:
             return GradeResult(False, 0.0, f"revenue for {pid}: got {agent_rev:.2f}, out of tolerance")
 
-    return GradeResult(True, 1.0, f"correct top-5 products identified with revenues within {TOLERANCE*100:.0f}% tolerance")
+    # Issue #166: prompt requires rows in descending order by total_revenue.
+    # Verify agent's row order matches this requirement. We check monotonic
+    # non-increasing because two products could in principle tie on revenue
+    # (though that's vanishingly rare with float arithmetic on this data).
+    agent_revs = [float(e["total_revenue"]) for e in agent_top5]
+    if agent_revs != sorted(agent_revs, reverse=True):
+        return GradeResult(False, 0.0,
+            "rows not in descending order by total_revenue")
+
+    return GradeResult(True, 1.0, f"correct top-5 products identified with revenues within {TOLERANCE*100:.0f}% tolerance, in descending order")

@@ -2,14 +2,14 @@
 
 The prompt requires ``rejected`` to be a JSON **array** in **chronological
 order** (the order the rejected transactions were encountered while
-replaying the ledger). The grader, however, compares ``rejected`` as a
-*set*, so any permutation slips through. That's the bug issue #171 calls
-out as ``event_ledger rejected order``.
+replaying the ledger). Originally the grader compared ``rejected`` as a
+*set*, so any permutation (or even a wrong-shape dict) slipped through;
+that was issue #171's ``event_ledger rejected order`` bug.
 
-The ``reversed_rejected`` case below is annotated ``currently_caught=False``
-— the grader incorrectly accepts a reversed rejected list today. Flip to
-``True`` once the grader enforces chronological order (and / or list-vs-set
-semantics) per the prompt.
+Issue #166 tightened the grader to require a list in chronological order.
+The ``reversed_rejected`` and ``rejected_as_dict`` cases now lock that
+behaviour in (``currently_caught=True``) — they would fail again if the
+grader regressed to set-comparison.
 """
 
 from __future__ import annotations
@@ -114,21 +114,18 @@ NEGATIVE_CASES = [
     NegativeCase(
         name="reversed_rejected",
         mutate=_mutate_reverse_rejected,
-        # PROMPT-VS-GRADER ALIGNMENT BUG: prompt requires chronological order,
-        # grader uses set-equality. Reversing slips through today.
+        # Locked in by issue #166: grader now compares rejected as an
+        # ordered list, so a reversed list fails the order check.
         expected_substring="order",
-        currently_caught=False,
-        notes="issue #171 — event_ledger rejected list-vs-set bug",
+        notes="issue #166 — locks chronological-order requirement",
     ),
     NegativeCase(
         name="rejected_as_dict",
         mutate=_mutate_rejected_as_set,
-        # PROMPT-VS-GRADER ALIGNMENT BUG: ``rejected`` is required to be a
-        # list. The grader's ``set(...)`` coerces a dict to its key-set so
-        # this slips through.
+        # Locked in by issue #166: grader now type-checks rejected as a
+        # list, rejecting dict-coercion.
         expected_substring="list",
-        currently_caught=False,
-        notes="issue #171 — event_ledger list-vs-set bug (dict coercion)",
+        notes="issue #166 — locks list-shape requirement",
     ),
     NegativeCase(
         name="wrap_in_list",
