@@ -11,6 +11,7 @@
  */
 
 import * as esbuild from "esbuild";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -28,4 +29,12 @@ await esbuild.build({
   },
 });
 
+const distDir = join(__dirname, "dist");
+mkdirSync(distDir, { recursive: true });
+copyFileSync(
+  join(__dirname, "passthrough-config.json"),
+  join(distDir, "passthrough-config.json"),
+);
+
 console.log("Build complete: exec_server/dist/exec-server.bundle.mjs");
+console.log("Copied: exec_server/dist/passthrough-config.json");
