@@ -49,12 +49,11 @@ jobs:
           pytest tests/ -m "not integration" -q --tb=short -ra \
             > pytest.log 2>&1 || rc=$?
           cat pytest.log
+          if [ "$rc" -ne 0 ]; then
+            # Surface the failure tail as a CI annotation — annotations
+            # render on the run summary and are visible to logged-out
+            # viewers, unlike step logs and artifacts. Annotation
+            # escape order is %->%25 first, then \n->%0A and \r->%0D.
+            python3 -c "import sys; t=open('pytest.log').read()[-6000:]; e=t.replace('%','%25').replace(chr(13),'%0D').replace(chr(10),'%0A'); print(f'::error::pytest failed (last 6KB):%0A{e}')"
+          fi
           exit "$rc"
-
-      - name: Upload pytest log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-log
-          path: pytest.log
-          if-no-files-found: warn
