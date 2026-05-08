@@ -42,10 +42,22 @@ jobs:
           pip install networkx
 
       - name: Run unit tests
-        # ``-q`` keeps the per-test output compact; ``--tb=line`` renders one
-        # line per failure (test name + exception class + message) so a CI
-        # failure summary fits in the GitHub UI without truncation.
-        # ``-ra`` appends a short summary of all non-passing outcomes so
-        # the maintainer can see at a glance what flipped without expanding
-        # the raw log.
-        run: pytest tests/ -m "not integration" -q --tb=line -ra
+        run: |
+          set -e
+          # Capture pytest output to a file, then publish it to both the
+          # raw step log AND ``$GITHUB_STEP_SUMMARY`` (which is rendered
+          # on the run-summary page even for logged-out viewers — the
+          # raw log viewer truncates large step bodies and is gated by
+          # auth).
+          rc=0
+          pytest tests/ -m "not integration" -q --tb=short -ra \
+            > /tmp/pytest.log 2>&1 || rc=$?
+          {
+            echo "## pytest output"
+            echo
+            echo '```'
+            cat /tmp/pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/pytest.log
+          exit "$rc"
