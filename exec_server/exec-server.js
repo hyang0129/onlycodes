@@ -127,6 +127,19 @@ function _stageHelperModules(workDir) {
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB per stream
 
+// Soft cap returned to the agent. The agent rarely benefits from more than
+// 16 KB of stdout per call — bigger payloads are usually a whole-file dump
+// that the agent should be slicing instead. Clipping at the response
+// boundary keeps the conversation cheap without affecting what the
+// subprocess itself was able to produce.
+const RESPONSE_CLIP_BYTES = 16 * 1024;
+const _CLIP_MARKER = "\n... (clipped, use codebox.read_lines/peek to inspect specific ranges)";
+
+function clipForResponse(text) {
+  if (typeof text !== "string" || text.length <= RESPONSE_CLIP_BYTES) return text;
+  return text.slice(0, RESPONSE_CLIP_BYTES) + _CLIP_MARKER;
+}
+
 // --- Persistent Python kernel pool -----------------------------------------
 //
 // Python execute_code calls run inside a long-lived REPL keyed by cwd, so
@@ -642,8 +655,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "execute_code",
       description: PERSISTENT_KERNEL_ENABLED
-        ? "Execute a Python or Bash script. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read a file once into a variable and reference it on later turns instead of re-reading it. The kernel resets only on per-call timeout or kernel crash — when that happens, stderr will say \"kernel reset\" and you must restage any state you need.\n\nBash runs in a FRESH subprocess each call — no state carries over. Use Python for stateful work and Bash only for one-shot shell commands.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls — its output is byte-stable across identical reads, which keeps prompt-cache reuse high."
-        : "Execute a Python or Bash script in a subprocess. Returns stdout, stderr, and exit code. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter — no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.\n\nA `codebox` helper module is auto-imported into your cwd: `import codebox; codebox.read(path)`, `codebox.read_lines(path, start, end)`, `codebox.grep(pattern, path)`, `codebox.files(root)`, `codebox.edit_replace(path, old, new)`. Prefer it over hand-rolled subprocess.run(['cat', ...]) calls — its output is byte-stable across identical reads, which keeps prompt-cache reuse high.",
+        ? "Execute a Python or Bash script. On clean exit (stderr empty, exit 0) returns raw stdout; otherwise returns a JSON envelope {stdout, stderr, exit_code}. Output is clipped at 16 KB. Use cwd= to set the working directory.\n\nPython runs in a PERSISTENT REPL keyed by cwd: variables, imports, opened files, and module-level state carry across calls (one kernel per cwd, lives for the session). Read into a variable once and slice it on later turns — do not re-read a file you already loaded. The kernel resets only on per-call timeout or kernel crash; stderr will say \"kernel reset\" when that happens.\n\nBash runs in a FRESH subprocess each call — no state carries over. Prefer Python for stateful work; use Bash only for one-shot shell commands.\n\nA `codebox` helper module is auto-imported into your cwd. The intended workflow is `outline` → `grep` → `read_lines`/`peek` → `edit_replace` → `run`:\n  outline(path)              top-level def/class with line numbers\n  read_lines(path, s, e)     inclusive 1-indexed slice\n  peek(path, line, around)   numbered context around a line\n  grep(pattern, path)        path:line:text matches\n  source_of(symbol, root)    locate a def/class and return its body\n  edit_replace(path, old, new)  exact-once swap; returns a diff preview (no need to re-read)\n  write(path, content)       overwrite whole file\n  run(cmd, *, tail=20)       shell wrapper; on test failures, includes failing-test source automatically\n\nDO NOT dump entire files. There is no `codebox.read(path)` — start with `outline` to get bearings, then use `read_lines`/`peek` for surgical reads. DO NOT re-read after `edit_replace` — its return value is the diff preview. DO NOT use `subprocess.run([...])` to run commands — use `codebox.run('...')`."
+        : "Execute a Python or Bash script in a subprocess. On clean exit (stderr empty, exit 0) returns raw stdout; otherwise returns a JSON envelope {stdout, stderr, exit_code}. Output is clipped at 16 KB. Use cwd= to set the working directory.\n\nIMPORTANT: Each call runs in a FRESH interpreter — no state, variables, or imports carry over between calls. Every script must be fully self-contained: include all imports, redefine any variables, and reopen any files it needs. Do NOT rely on results from a previous call being available. Prefer one longer self-contained script over multiple short dependent calls.\n\nA `codebox` helper module is auto-imported into your cwd. The intended workflow is `outline` → `grep` → `read_lines`/`peek` → `edit_replace` → `run`:\n  outline(path)              top-level def/class with line numbers\n  read_lines(path, s, e)     inclusive 1-indexed slice\n  peek(path, line, around)   numbered context around a line\n  grep(pattern, path)        path:line:text matches\n  source_of(symbol, root)    locate a def/class and return its body\n  edit_replace(path, old, new)  exact-once swap; returns a diff preview\n  write(path, content)       overwrite whole file\n  run(cmd, *, tail=20)       shell wrapper; on test failures, includes failing-test source automatically\n\nDO NOT dump entire files. There is no `codebox.read(path)` — start with `outline` and slice with `read_lines`/`peek`. DO NOT re-read after `edit_replace`. DO NOT use `subprocess.run([...])` — use `codebox.run('...')`.",
       inputSchema: {
         type: "object",
         properties: {
@@ -782,19 +795,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const canonStdout = canonicalizeOutput(result.stdout);
   const canonStderr = canonicalizeOutput(result.stderr);
 
-  // Build response content blocks
+  // Clean-call short-circuit (B1): when stderr is empty and exit is 0, return
+  // raw stdout instead of the JSON envelope. This is the common case (~80%+
+  // of calls in successful runs) and the JSON wrapping costs ~100 framing
+  // bytes plus newline-escape inflation per call.
+  // Clip at RESPONSE_CLIP_BYTES (B2) so a runaway dump cannot blow context.
+  let responseText;
+  const isCleanCall =
+    result.exit_code === 0 && (canonStderr === "" || canonStderr == null);
+  if (isCleanCall) {
+    responseText = clipForResponse(canonStdout);
+  } else {
+    responseText = JSON.stringify(
+      {
+        stdout: clipForResponse(canonStdout),
+        stderr: clipForResponse(canonStderr),
+        exit_code: result.exit_code,
+      },
+      null,
+      2
+    );
+  }
+
   const content = [
     {
       type: "text",
-      text: JSON.stringify(
-        {
-          stdout: canonStdout,
-          stderr: canonStderr,
-          exit_code: result.exit_code,
-        },
-        null,
-        2
-      ),
+      text: responseText,
     },
   ];
 

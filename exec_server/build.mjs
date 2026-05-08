@@ -31,10 +31,21 @@ await esbuild.build({
 
 const distDir = join(__dirname, "dist");
 mkdirSync(distDir, { recursive: true });
-copyFileSync(
-  join(__dirname, "passthrough-config.json"),
-  join(distDir, "passthrough-config.json"),
-);
+
+// Files staged into the agent's cwd at runtime by exec-server.js — must live
+// next to the bundle in dist/ because exec-server.js resolves them via its
+// own __dirname.
+const _RUNTIME_FILES = [
+  "passthrough-config.json",
+  "codebox.py",
+  "mcp_bridge.py",
+  "python_kernel.py",
+];
+for (const fname of _RUNTIME_FILES) {
+  copyFileSync(join(__dirname, fname), join(distDir, fname));
+}
 
 console.log("Build complete: exec_server/dist/exec-server.bundle.mjs");
-console.log("Copied: exec_server/dist/passthrough-config.json");
+for (const fname of _RUNTIME_FILES) {
+  console.log(`Copied: exec_server/dist/${fname}`);
+}
