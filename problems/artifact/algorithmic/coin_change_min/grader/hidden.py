@@ -86,7 +86,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if agent_mc != optimal:
         return GradeResult(
             False, 0.0,
-            f"min_coins {agent_mc} is not optimal (optimal={optimal})",
+            f"min_coins {agent_mc} is not optimal",
         )
 
-    return GradeResult(True, 1.0, f"optimal min_coins={optimal}")
+    return GradeResult(True, 1.0, "min_coins is optimal")

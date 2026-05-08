@@ -153,7 +153,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if agent_cost != optimal_cost:
         return GradeResult(
             False, 0.0,
-            f"assignment cost {agent_cost} is not optimal (optimal={optimal_cost})",
+            f"assignment cost {agent_cost} is not optimal",
         )
 
-    return GradeResult(True, 1.0, f"optimal assignment cost {optimal_cost} achieved")
+    return GradeResult(True, 1.0, "assignment cost is optimal")

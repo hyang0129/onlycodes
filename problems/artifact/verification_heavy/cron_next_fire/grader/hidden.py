@@ -83,7 +83,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if not isinstance(got, datetime):
             failures.append(f"  next_fire({expr!r}, {after}): expected datetime, got {type(got).__name__}")
         elif got != expected:
-            failures.append(f"  next_fire({expr!r}, {after}): expected {expected}, got {got}")
+            failures.append(f"  next_fire({expr!r}, {after}): got {got}, wrong")
 
     n_pass = len(_TESTS) - len(failures)
     if failures:

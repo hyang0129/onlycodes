@@ -140,7 +140,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if len(got_cohorts) != len(truth["cohorts"]):
         return GradeResult(
             False, 0.0,
-            f"cohort count mismatch: got {len(got_cohorts)}, expected {len(truth['cohorts'])}",
+            f"cohort count mismatch: got {len(got_cohorts)}",
         )
 
     for i, (got, want) in enumerate(zip(got_cohorts, truth["cohorts"])):
@@ -160,8 +160,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if got["cohort_week"] != want["cohort_week"]:
             return GradeResult(
                 False, 0.0,
-                f"cohorts[{i}].cohort_week {got['cohort_week']!r} != expected "
-                f"{want['cohort_week']!r}",
+                f"cohorts[{i}].cohort_week {got['cohort_week']!r} mismatch",
             )
         cs = got["cohort_size"]
         if isinstance(cs, bool) or not isinstance(cs, int):
@@ -169,7 +168,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if cs != want["cohort_size"]:
             return GradeResult(
                 False, 0.0,
-                f"cohort {want['cohort_week']}: size {cs} != expected {want['cohort_size']}",
+                f"cohort {want['cohort_week']}: size {cs} mismatch",
             )
 
         got_ret = got["retention"]
@@ -178,8 +177,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False, 0.0,
                 f"cohort {want['cohort_week']}: retention length mismatch "
-                f"(got {len(got_ret) if isinstance(got_ret, list) else 'non-list'}, "
-                f"expected {len(want_ret)})",
+                f"(got {len(got_ret) if isinstance(got_ret, list) else 'non-list'})",
             )
         for j, (gr, wr) in enumerate(zip(got_ret, want_ret)):
             if not isinstance(gr, dict):
@@ -208,7 +206,7 @@ def grade(scratch_dir: Path) -> GradeResult:
                     return GradeResult(
                         False, 0.0,
                         f"cohort {want['cohort_week']} ret[{j}].{f_}: "
-                        f"got {gv}, expected {wr[f_]}",
+                        f"got {gv}, mismatch",
                     )
             rate = gr["retention_rate"]
             if isinstance(rate, bool) or not isinstance(rate, (int, float)):
@@ -222,7 +220,7 @@ def grade(scratch_dir: Path) -> GradeResult:
                 return GradeResult(
                     False, 0.0,
                     f"cohort {want['cohort_week']} ret[{j}].retention_rate "
-                    f"{rate} != expected ~{wr['retention_rate']}",
+                    f"{rate} out of tolerance",
                 )
 
     return GradeResult(

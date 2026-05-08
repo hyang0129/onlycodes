@@ -139,7 +139,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             if gv != want[field]:
                 return GradeResult(
                     False, 0.0,
-                    f"{key}: {field} {gv} != expected {want[field]}",
+                    f"{key}: {field} {gv} mismatch",
                 )
         for field in ("start_ts", "end_ts"):
             gv = got[field]
@@ -148,7 +148,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             if abs(float(gv) - want[field]) > TS_ABS_TOL:
                 return GradeResult(
                     False, 0.0,
-                    f"{key}: {field} {gv} != expected ~{want[field]}",
+                    f"{key}: {field} {gv} out of tolerance",
                 )
 
     return GradeResult(True, 1.0, f"matched {len(truth)} sessions across users")

@@ -92,7 +92,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             failures.append(f"  validate_iban({inp!r}): raised {type(exc).__name__}: {exc}")
             continue
         if got is not expected:  # strict True/False (not truthy)
-            failures.append(f"  validate_iban({inp!r}): expected {expected}, got {got!r}")
+            failures.append(f"  validate_iban({inp!r}): got {got!r}, wrong")
 
     n_pass = len(_TESTS) - len(failures)
     if failures:

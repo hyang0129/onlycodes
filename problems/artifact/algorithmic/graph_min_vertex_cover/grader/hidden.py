@@ -112,6 +112,6 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     optimal = _min_cover_size(n, edges)
     if cs != optimal:
-        return GradeResult(False, 0.0, f"cover_size {cs} is not optimal (optimal={optimal})")
+        return GradeResult(False, 0.0, f"cover_size {cs} is not optimal")
 
-    return GradeResult(True, 1.0, f"optimal cover_size={optimal}")
+    return GradeResult(True, 1.0, "cover_size is optimal")

@@ -203,7 +203,7 @@ def grade(scratch_dir: Path) -> GradeResult:  # noqa: C901 — single entrypoint
         if abs_err > ABS_TOL and abs_err > REL_TOL * true_p95:
             bad_p95.append(ep)
         if count != true_count:
-            bad_count.append(f"{ep}(got {count}, want {true_count})")
+            bad_count.append(f"{ep}(got {count}, mismatch)")
 
     if bad_type:
         return GradeResult(

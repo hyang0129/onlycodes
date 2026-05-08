@@ -63,7 +63,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     for acc, exp_bal in expected_balances.items():
         agent_bal = float(agent_balances.get(acc, -999999))
         if abs(agent_bal - exp_bal) > BALANCE_TOLERANCE:
-            wrong_balances.append(f"{acc}: got {agent_bal:.2f} expected {exp_bal:.2f}")
+            wrong_balances.append(f"{acc}: got {agent_bal:.2f}")
     if wrong_balances:
         return GradeResult(False, 0.0, f"wrong balances: {wrong_balances[:3]}")
 
@@ -74,8 +74,8 @@ def grade(scratch_dir: Path) -> GradeResult:
         extra = agent_rejected - expected_rejected_set
         missing_r = expected_rejected_set - agent_rejected
         return GradeResult(False, 0.0,
-            f"rejected mismatch: {len(expected_rejected)} expected, {len(agent_out['rejected'])} got. "
-            f"Extra: {sorted(extra)[:3]}, Missing: {sorted(missing_r)[:3]}")
+            f"rejected mismatch: got {len(agent_out['rejected'])} entries, "
+            f"{len(extra)} extra, {len(missing_r)} missing")
 
     return GradeResult(True, 1.0,
         f"all {len(expected_balances)} balances correct, {len(expected_rejected)} rejected transactions identified")

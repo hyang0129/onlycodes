@@ -120,7 +120,7 @@ def grade(scratch_dir: Path) -> GradeResult:  # noqa: C901
     if len(agent_rows) != TOP_N:
         return GradeResult(
             False, 0.0,
-            f"expected exactly {TOP_N} rows, got {len(agent_rows)}",
+            f"output must have exactly {TOP_N} rows (got {len(agent_rows)})",
         )
 
     # Compute ground truth
@@ -164,7 +164,7 @@ def grade(scratch_dir: Path) -> GradeResult:  # noqa: C901
         true_score = true_scores[ep]
         abs_err = abs(float(score) - true_score)
         if abs_err > REL_TOL * abs(true_score) + 0.5:
-            bad.append(f"{ep}(got {score:.1f}, want ~{true_score:.1f})")
+            bad.append(f"{ep}(got {score:.1f}, out of tolerance)")
 
     if bad:
         return GradeResult(

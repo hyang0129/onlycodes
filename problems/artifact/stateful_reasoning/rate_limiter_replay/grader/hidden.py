@@ -92,7 +92,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if len(agent) != len(ref):
         return GradeResult(False,
                            round(0.0, 4),
-                           f"output has {len(agent)} lines, expected {len(ref)}")
+                           f"output line count mismatch: got {len(agent)}")
 
     mismatches = 0
     sample = []
@@ -100,18 +100,18 @@ def grade(scratch_dir: Path) -> GradeResult:
         if a.get("request_id") != r["request_id"]:
             mismatches += 1
             if len(sample) < 3:
-                sample.append(f"line {i+1}: request_id {a.get('request_id')!r} vs ref {r['request_id']!r}")
+                sample.append(f"line {i+1}: request_id {a.get('request_id')!r} mismatch")
             continue
         if a.get("decision") != r["decision"]:
             mismatches += 1
             if len(sample) < 3:
-                sample.append(f"{r['request_id']}: decision {a.get('decision')!r} vs ref {r['decision']!r}")
+                sample.append(f"{r['request_id']}: decision {a.get('decision')!r} mismatch")
             continue
         if r["decision"] == "rejected":
             if a.get("reason") != r["reason"]:
                 mismatches += 1
                 if len(sample) < 3:
-                    sample.append(f"{r['request_id']}: reason {a.get('reason')!r} vs ref {r['reason']!r}")
+                    sample.append(f"{r['request_id']}: reason {a.get('reason')!r} mismatch")
 
     if mismatches:
         correct = len(ref) - mismatches

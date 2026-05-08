@@ -134,7 +134,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if got_total != truth["total_signups"]:
         return GradeResult(
             False, 0.0,
-            f"total_signups {got_total} != expected {truth['total_signups']}",
+            f"total_signups {got_total} mismatch",
         )
 
     got_steps = doc["steps"]
@@ -157,7 +157,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if got["step"] != want["step"]:
             return GradeResult(
                 False, 0.0,
-                f"steps[{idx}].step {got['step']!r} != expected {want['step']!r}",
+                f"steps[{idx}].step {got['step']!r} mismatch",
             )
         reached = got["reached"]
         if isinstance(reached, bool) or not isinstance(reached, int):
@@ -165,7 +165,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         if reached != want["reached"]:
             return GradeResult(
                 False, 0.0,
-                f"steps[{idx}] ({want['step']}).reached {reached} != expected {want['reached']}",
+                f"steps[{idx}] ({want['step']}).reached {reached} mismatch",
             )
         rate = got["rate_from_prev"]
         if isinstance(rate, bool) or not isinstance(rate, (int, float)):
@@ -175,11 +175,11 @@ def grade(scratch_dir: Path) -> GradeResult:
         if abs(float(rate) - want["rate_from_prev"]) > RATE_ABS_TOL:
             return GradeResult(
                 False, 0.0,
-                f"steps[{idx}] ({want['step']}).rate_from_prev {rate} != "
-                f"expected ~{want['rate_from_prev']}",
+                f"steps[{idx}] ({want['step']}).rate_from_prev {rate} "
+                f"out of tolerance",
             )
 
     return GradeResult(
         True, 1.0,
-        f"funnel matched: {[s['reached'] for s in truth['steps']]}",
+        f"funnel matched ({len(truth['steps'])} steps)",
     )

@@ -128,6 +128,6 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     optimal = _min_bins(weights, capacity)
     if nb != optimal:
-        return GradeResult(False, 0.0, f"num_bins {nb} is not optimal (optimal={optimal})")
+        return GradeResult(False, 0.0, f"num_bins {nb} is not optimal")
 
-    return GradeResult(True, 1.0, f"optimal num_bins={optimal}")
+    return GradeResult(True, 1.0, "num_bins is optimal")

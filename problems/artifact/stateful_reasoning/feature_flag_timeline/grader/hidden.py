@@ -90,9 +90,9 @@ def grade(scratch_dir: Path) -> GradeResult:
     wrong: list[str] = []
     for k in agent_keys & ref_keys:
         if agent[k].get("enabled") != reference[k]["enabled"]:
-            wrong.append(f"{k}: enabled {agent[k].get('enabled')} vs ref {reference[k]['enabled']}")
+            wrong.append(f"{k}: enabled mismatch")
         elif agent[k].get("toggle_count") != reference[k]["toggle_count"]:
-            wrong.append(f"{k}: toggle_count {agent[k].get('toggle_count')} vs ref {reference[k]['toggle_count']}")
+            wrong.append(f"{k}: toggle_count mismatch")
 
     if missing or extra or wrong:
         parts = []
