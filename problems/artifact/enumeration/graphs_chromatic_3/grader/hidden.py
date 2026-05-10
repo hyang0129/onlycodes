@@ -8,22 +8,26 @@ Correctness criterion:
     nodes with chromatic number exactly 3, up to isomorphism (one representative
     per isomorphism class). No duplicates (up to isomorphism), no extra.
 
-    Grader re-enumerates ground truth and uses networkx isomorphism to match.
+How comparison works:
+
+    A *frozen* reference set lives at ``grader/reference_output.jsonl``: 64
+    canonical edge lists (lex-smallest sorted edge tuple under any vertex
+    permutation). At grade time we load that set, canonicalise each agent
+    graph the same way, and check membership. No networkx required.
+
+    The frozen set can be regenerated offline via
+    ``tools/regenerate_chromatic_3.py`` (which uses networkx as the trusted
+    source for isomorphism).
 
 Determinism: deterministic enumeration, no randomness.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 from dataclasses import dataclass
 from pathlib import Path
-
-try:
-    import networkx as nx
-    _HAS_NX = True
-except ImportError:
-    _HAS_NX = False
 
 
 @dataclass(frozen=True)
@@ -36,13 +40,67 @@ class GradeResult:
 OUTPUT_REL = "output/graphs.jsonl"
 NUM_NODES = 6
 
+REFERENCE_FILE = Path(__file__).parent / "reference_output.jsonl"
 
-def _can_color(G, n, k):
+_PERMUTATIONS = tuple(itertools.permutations(range(NUM_NODES)))
+
+
+def _canonical_form(edges):
+    """Return the lex-smallest sorted edge tuple over all vertex permutations.
+
+    Two graphs on NUM_NODES vertices are isomorphic iff they share this
+    canonical form, so equality on the result is equivalent to networkx's
+    ``is_isomorphic`` for our fixed vertex count.
+    """
+    edge_set = {(min(u, v), max(u, v)) for u, v in edges}
+    best = None
+    for perm in _PERMUTATIONS:
+        relabelled = []
+        for u, v in edge_set:
+            pu, pv = perm[u], perm[v]
+            if pu > pv:
+                pu, pv = pv, pu
+            relabelled.append((pu, pv))
+        relabelled.sort()
+        candidate = tuple(relabelled)
+        if best is None or candidate < best:
+            best = candidate
+    return best
+
+
+def _adj(edges, n=NUM_NODES):
+    adj = [[] for _ in range(n)]
+    for u, v in edges:
+        adj[u].append(v)
+        adj[v].append(u)
+    return adj
+
+
+def _is_connected(edges, n=NUM_NODES):
+    if n <= 1:
+        return True
+    adj = _adj(edges, n)
+    seen = [False] * n
+    seen[0] = True
+    count = 1
+    stack = [0]
+    while stack:
+        u = stack.pop()
+        for w in adj[u]:
+            if not seen[w]:
+                seen[w] = True
+                count += 1
+                stack.append(w)
+    return count == n
+
+
+def _can_color(adj, n, k):
     color = [-1] * n
+
     def backtrack(v):
         if v == n:
             return True
-        used = {color[u] for u in G.neighbors(v) if color[u] != -1}
+        used = {color[u] for u in adj[v] if color[u] != -1}
         for c in range(k):
             if c not in used:
                 color[v] = c
@@ -50,43 +108,28 @@ def _can_color(G, n, k):
                     return True
                 color[v] = -1
         return False
+
     return backtrack(0)
 
 
-def _chromatic_number(G):
-    n = len(G.nodes)
+def _chromatic_number(edges, n=NUM_NODES):
+    adj = _adj(edges, n)
     for k in range(1, n + 1):
-        if _can_color(G, n, k):
+        if _can_color(adj, n, k):
             return k
     return n
 
 
-def _enumerate_reference():
-    """Return list of all connected 6-node graphs with χ=3, up to isomorphism."""
-    import itertools
-    nodes = list(range(NUM_NODES))
-    all_edges = [(i, j) for i in range(NUM_NODES) for j in range(i + 1, NUM_NODES)]
-    result = []
-    for mask in range(2 ** len(all_edges)):
-        edges = [all_edges[i] for i in range(len(all_edges)) if mask & (1 << i)]
-        G = nx.Graph()
-        G.add_nodes_from(nodes)
-        G.add_edges_from(edges)
-        if not nx.is_connected(G):
-            continue
-        if _chromatic_number(G) != 3:
-            continue
-        if all(not nx.is_isomorphic(G, h) for h in result):
-            result.append(G)
-    return result
+def _parse_edges(obj):
+    """Parse a JSON object as a list of [u,v] edges on NUM_NODES nodes.
 
-
-def _parse_graph(obj) -> "nx.Graph | None":
-    """Parse an edge list into a networkx Graph on NUM_NODES nodes, or None on error."""
+    Returns a list of normalised (u,v) tuples with u<v and duplicates removed,
+    or None if the input is malformed.
+    """
     if not isinstance(obj, list):
         return None
-    G = nx.Graph()
-    G.add_nodes_from(range(NUM_NODES))
+    edges = []
+    seen = set()
     for edge in obj:
         if not isinstance(edge, list) or len(edge) != 2:
             return None
@@ -95,15 +138,34 @@ def _parse_graph(obj) -> "nx.Graph | None":
             return None
         if u == v or u < 0 or v < 0 or u >= NUM_NODES or v >= NUM_NODES:
             return None
-        G.add_edge(u, v)
-    return G
+        if u > v:
+            u, v = v, u
+        if (u, v) in seen:
+            continue
+        seen.add((u, v))
+        edges.append((u, v))
+    return edges
+
+
+def _load_reference():
+    """Load the frozen reference set as a set of canonical edge tuples."""
+    canonical_set = set()
+    for lineno, line in enumerate(REFERENCE_FILE.read_text().splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        obj = json.loads(line)
+        edges = _parse_edges(obj)
+        if edges is None:
+            raise RuntimeError(
+                f"reference_output.jsonl line {lineno}: malformed edge list {obj!r}"
+            )
+        canonical_set.add(_canonical_form(edges))
+    return canonical_set
 
 
 def grade(scratch_dir: Path) -> GradeResult:
     scratch_dir = Path(scratch_dir).resolve()
-
-    if not _HAS_NX:
-        return GradeResult(False, 0.0, "grader requires networkx (not installed)")
 
     output_path = scratch_dir / OUTPUT_REL
     if not output_path.is_file():
@@ -113,7 +175,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     if not raw.strip():
         return GradeResult(False, 0.0, "output artifact is empty")
 
-    agent_graphs: list = []
+    agent_graphs = []  # list of (lineno, edges)
     for lineno, line in enumerate(raw.splitlines(), start=1):
         if not line.strip():
             continue
@@ -121,40 +183,48 @@ def grade(scratch_dir: Path) -> GradeResult:
             obj = json.loads(line)
         except json.JSONDecodeError as exc:
             return GradeResult(False, 0.0, f"line {lineno}: JSON parse error: {exc.msg}")
-        G = _parse_graph(obj)
-        if G is None:
+        edges = _parse_edges(obj)
+        if edges is None:
             return GradeResult(
                 False, 0.0,
                 f"line {lineno}: expected list of [u,v] edges on nodes 0-5, got {obj!r}",
             )
-        agent_graphs.append(G)
+        agent_graphs.append((lineno, edges))
 
     if not agent_graphs:
         return GradeResult(False, 0.0, "output contains no graphs")
 
-    # Check for isomorphism-duplicates in agent output
-    seen: list = []
+    # Canonicalise once, dedupe by canonical form
+    agent_canonical = [(lineno, edges, _canonical_form(edges))
+                       for lineno, edges in agent_graphs]
+
+    seen = set()
     dup_count = 0
-    for G in agent_graphs:
-        if any(nx.is_isomorphic(G, h) for h in seen):
+    deduped = []
+    for lineno, edges, canon in agent_canonical:
+        if canon in seen:
             dup_count += 1
         else:
-            seen.append(G)
+            seen.add(canon)
+            deduped.append((lineno, edges, canon))
     if dup_count:
         return GradeResult(
             False, 0.0,
             f"{dup_count} duplicate graph(s) in output (up to isomorphism) — remove duplicates",
         )
-    agent_graphs = seen  # deduped
 
-    # Validate each agent graph: connected? χ=3?
+    # Validate per-graph: must be connected with chromatic number exactly 3.
+    # Membership in the frozen reference set already implies these, but we
+    # surface the diagnostic separately so agents that submit a chi=4 graph
+    # get a precise error instead of just "not in reference set".
     invalid: list[str] = []
-    for i, G in enumerate(agent_graphs):
-        if not nx.is_connected(G):
+    for i, (_lineno, edges, _canon) in enumerate(deduped):
+        if not _is_connected(edges):
             invalid.append(f"graph {i}: not connected")
-        elif _chromatic_number(G) != 3:
-            chi = _chromatic_number(G)
-            invalid.append(f"graph {i}: chromatic number is {chi}, not 3")
+        else:
+            chi = _chromatic_number(edges)
+            if chi != 3:
+                invalid.append(f"graph {i}: chromatic number is {chi}, not 3")
     if invalid:
         return GradeResult(
             False, 0.0,
@@ -162,17 +232,10 @@ def grade(scratch_dir: Path) -> GradeResult:
             + (" ..." if len(invalid) > 3 else ""),
         )
 
-    # Enumerate reference
-    reference = _enumerate_reference()
-
-    # Count: how many reference graphs are matched by agent?
-    matched_ref = 0
-    for ref_g in reference:
-        if any(nx.is_isomorphic(ref_g, ag) for ag in agent_graphs):
-            matched_ref += 1
-
+    reference = _load_reference()
+    matched_ref = sum(1 for _l, _e, canon in deduped if canon in reference)
     n_ref = len(reference)
-    n_agent = len(agent_graphs)
+    n_agent = len(deduped)
 
     if matched_ref == n_ref and n_agent == n_ref:
         return GradeResult(True, 1.0, f"all {n_ref} graphs enumerated correctly")

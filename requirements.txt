@@ -3,3 +3,4 @@ click>=8.1          # CLI
 pyyaml>=6.0         # YAML problem files
 tabulate>=0.9       # analyze output table
 pytest>=7.0         # test-only; unit tests under tests/
+networkx>=2.5       # offline-only; required by tools/regenerate_chromatic_3.py
