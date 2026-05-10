@@ -201,35 +201,43 @@ def _run_arm(
     ]
     if is_onlycode:
         prompt_parts.append(
-            "A `codebox` helper module is auto-imported into your cwd. Prefer it "
-            "over hand-rolled subprocess.run(['cat', ...]) — its output is "
-            "byte-stable across identical reads, which keeps prompt-cache reuse "
-            "high. API:\n"
-            "  import codebox\n"
-            "  src   = codebox.read(path)              # full file as string\n"
-            "  block = codebox.read_lines(path, 200, 250)  # inclusive 1-indexed\n"
-            "  hits  = codebox.grep('pattern', path)   # 'path:line:text', sorted\n"
-            "  paths = codebox.files(root, pattern=None)   # recursive, sorted\n"
-            "  codebox.edit_replace(path, old, new)    # exact-once literal string, raises if 0/many\n"
-            "  codebox.write(path, content)            # overwrite whole file, mkdir -p\n"
+            "A `codebox` helper module is auto-imported into your cwd. Its output "
+            "is byte-stable across identical reads, which keeps prompt-cache reuse "
+            "high. The intended workflow is OUTLINE → GREP → READ_LINES → "
+            "EDIT_REPLACE → RUN.\n"
             "\n"
-            "To modify a file, use `codebox.edit_replace(path, old, new)` (an "
-            "exact-literal string swap — think of it as the Write tool's sibling "
-            "for surgical edits) or `codebox.write(path, content)` to rewrite the "
-            "whole file. Do NOT build edits by hand with `re.sub`, regex "
-            "substitution, string-split-and-join, or writing a script that "
-            "reads/mutates/writes a file — those patterns silently corrupt files "
-            "on partial matches. `edit_replace` raises on 0 or >1 matches, which "
-            "is the safety you want.\n"
+            "  import codebox\n"
+            "  codebox.outline(path)               # top-level def/class with line numbers\n"
+            "  codebox.read_lines(path, 200, 250)  # inclusive 1-indexed slice\n"
+            "  codebox.peek(path, 182, around=10)  # numbered context around a line\n"
+            "  codebox.grep('pattern', path)       # 'path:line:text', sorted\n"
+            "  codebox.source_of(symbol, root)     # locate a def/class and return its body\n"
+            "  codebox.files(root, pattern=None)   # recursive listing\n"
+            "  codebox.edit_replace(path, old, new)  # exact-once swap; returns a diff preview\n"
+            "  codebox.write(path, content)        # overwrite whole file, mkdir -p\n"
+            "  codebox.run('cmd', tail=20)         # shell wrapper; tails output, surfaces failing-test source\n"
+            "\n"
+            "Common mistakes to avoid:\n"
+            "  1. There is NO `codebox.read(path)`. Do not dump whole files. Start "
+            "with `outline` to get bearings, then `read_lines`/`peek` for the "
+            "specific region you need.\n"
+            "  2. Do NOT re-read after `edit_replace` — its return value already "
+            "shows the diff context, so a follow-up read wastes tokens.\n"
+            "  3. Do NOT use `subprocess.run([...])` to run shell commands or "
+            "tests. Use `codebox.run('python tests/runtests.py ...')` — it tails "
+            "output and, when a test command fails, automatically appends the "
+            "source of the failing tests so you don't have to fish for it.\n"
+            "  4. Do NOT build edits by hand with `re.sub`, string concatenation, "
+            "or read/mutate/write scripts — those silently corrupt files on "
+            "partial matches. `edit_replace` raises on 0 or >1 matches.\n"
         )
         if persistent_kernel:
             prompt_parts.append(
                 "The execute_code Python interpreter is a PERSISTENT REPL keyed by cwd: "
                 "variables, imports, and opened-file contents survive across calls. "
-                "After you read a file once with `src = codebox.read(path)`, reference "
-                "`src` on later turns instead of re-reading. Re-reading a file you "
-                "already loaded wastes tokens — before issuing any read, check what "
-                "you already have in memory.\n"
+                "After loading a slice once (e.g. `block = codebox.read_lines(...)`), "
+                "reference the variable on later turns instead of re-reading. Before "
+                "issuing any read, check what you already have in memory.\n"
             )
     prompt_parts.append(
         f"Fix the following bug. Make the minimal change needed.\n\n"
@@ -240,20 +248,20 @@ def _run_arm(
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
     # Build tools flags based on arm
+    _BLOCKED_BUILTINS = (
+        "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
+        "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
+        "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
+        "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
+        "RemoteTrigger,SendMessage,Skill,"
+        "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
+        "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
+    )
     tools_flags: list[str] = []
     if is_onlycode:
         # --tools whitelists MCP tools but does not reliably block built-ins
         # like Monitor (added v2.1.98). --disallowedTools explicitly removes
         # every built-in so the agent can only use the two codebox MCP tools.
-        _BLOCKED_BUILTINS = (
-            "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
-            "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
-            "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
-            "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
-            "RemoteTrigger,SendMessage,Skill,"
-            "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
-            "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
-        )
         # The default mcp-config.json enables the persistent kernel via
         # ONLYCODES_PERSISTENT_KERNEL=1. When --no-persistent-kernel is passed
         # we emit a per-run temp config with that env scrubbed.
@@ -268,6 +276,10 @@ def _run_arm(
             "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
             "--disallowedTools", _BLOCKED_BUILTINS,
         ]
+    elif arm == "bash_only":
+        # Allow only Bash; block every other built-in tool.
+        blocked_no_bash = ",".join(t for t in _BLOCKED_BUILTINS.split(",") if t.strip() != "Bash")
+        tools_flags = ["--tools", "Bash", "--disallowedTools", blocked_no_bash]
 
     start_time = time.time()
 
@@ -525,9 +537,9 @@ def _cleanup_stale_overlays(
 )
 @click.option(
     "--arms",
-    type=click.Choice(["baseline", "onlycode", "both"]),
+    type=click.Choice(["baseline", "onlycode", "bash_only", "both", "all"]),
     default="both",
-    help="Which arms to run (default: both).",
+    help="Which arms to run (default: both). 'both'=baseline+onlycode; 'all'=baseline+onlycode+bash_only.",
 )
 @click.option(
     "--persistent-kernel/--no-persistent-kernel",
@@ -651,10 +663,12 @@ def run_command(
 
     # Determine arms to run
     arm_list: list[str] = []
-    if arms in ("baseline", "both"):
+    if arms in ("baseline", "both", "all"):
         arm_list.append("baseline")
-    if arms in ("onlycode", "both"):
+    if arms in ("onlycode", "both", "all"):
         arm_list.append("onlycode")
+    if arms in ("bash_only", "all"):
+        arm_list.append("bash_only")
 
     # --- Environment pre-flight checks ------------------------------------------
     env_errors: list[str] = []
