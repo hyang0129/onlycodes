@@ -1,6 +1,6 @@
 {
-  "learning_rate": 0.01,
-  "hidden_size": 128,
-  "dropout": 0.3,
+  "learning_rate": 0.0012412191399767878,
+  "hidden_size": 232,
+  "dropout": 0.2396241143461019,
   "accuracy": 0.95
 }

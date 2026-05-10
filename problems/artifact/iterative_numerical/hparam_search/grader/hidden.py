@@ -1,23 +1,34 @@
 """Hidden grader for iterative_numerical__hparam_search.
 
-Contract: ``grade(scratch_dir: Path) -> GradeResult``. See docs/SCHEMA_ARTIFACT.md §3.
+Contract: ``grade(scratch_dir: Path) -> GradeResult``. See
+``docs/SCHEMA_ARTIFACT.md`` §3.
 
 Correctness criterion:
 
-    The agent's output/result.json MUST report hyperparameters (learning_rate,
-    hidden_size, dropout) such that when evaluate(lr, hs, do) is called with
-    these values, the returned accuracy >= ACCURACY_TARGET (0.90).
+    The agent's ``output/result.json`` MUST report hyperparameters
+    (``learning_rate``, ``hidden_size``, ``dropout``) such that when
+    ``evaluate(lr, hs, do)`` is called with these values, the returned
+    accuracy is ``>= ACCURACY_TARGET`` (0.90).
 
     The grader re-evaluates the toy model on the reported params — agents
     cannot hallucinate high accuracy without actually finding good params.
 
-Determinism: the toy model is a deterministic pure-Python function.
+Per issue #168 the Gaussian peak locations are derived from
+``sha256(INSTANCE_ID)`` rather than living as literal constants in source.
+The grader mirrors the derivation in ``workspace/generator.py``, so the
+grader stays independent of the materialized ``calibration.bin``.
+
+Determinism: the toy model is a deterministic pure-Python function and the
+peak-derivation RNG is seeded from a constant, so ``grade()`` is
+reproducible.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,13 +42,32 @@ class GradeResult:
 
 OUTPUT_REL = "output/result.json"
 ACCURACY_TARGET = 0.90
+INSTANCE_ID = "iterative_numerical__hparam_search"
+
+
+def _seed_for_instance(instance_id: str) -> int:
+    """Mirror of ``swebench.artifact_materialize._seed_for_instance``."""
+    digest = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16)
+
+
+def _derive_peaks(instance_id: str) -> tuple[float, int, float]:
+    """Mirror of ``workspace/generator.derive_peaks`` — keep in lockstep."""
+    rng = random.Random(_seed_for_instance(instance_id))
+    lr_peak = 10 ** rng.uniform(math.log10(3e-4), math.log10(5e-2))
+    hs_peak = 8 * rng.randint(4, 48)
+    do_peak = rng.uniform(0.10, 0.60)
+    return lr_peak, hs_peak, do_peak
+
+
+_LR_PEAK, _HS_PEAK, _DO_PEAK = _derive_peaks(INSTANCE_ID)
 
 
 def _evaluate(learning_rate: float, hidden_size: int, dropout: float) -> float:
-    """Mirror of toy_model.py:evaluate — kept in sync."""
-    lr_score = math.exp(-3.0 * (math.log10(learning_rate / 0.01)) ** 2)
-    hs_score = math.exp(-((hidden_size - 128) / 128.0) ** 2)
-    do_score = math.exp(-((dropout - 0.3) / 0.2) ** 2)
+    """Mirror of ``workspace/toy_model.py:evaluate`` — kept in sync (issue #168)."""
+    lr_score = math.exp(-3.0 * (math.log10(learning_rate / _LR_PEAK)) ** 2)
+    hs_score = math.exp(-((hidden_size - _HS_PEAK) / 128.0) ** 2)
+    do_score = math.exp(-((dropout - _DO_PEAK) / 0.2) ** 2)
     return round(0.95 * lr_score * hs_score * do_score, 6)
 
 
