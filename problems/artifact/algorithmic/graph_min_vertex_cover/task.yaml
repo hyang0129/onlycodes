@@ -4,6 +4,7 @@ difficulty: hard
 problem_statement: prompt.md
 workspace_dir: workspace/
 output_artifact: output/cover.json
+structural_verifier: workspace/verify.py
 hidden_grader: grader/hidden.py
 reference_output: grader/reference_output.json
 execution_budget:

@@ -15,10 +15,12 @@ on:
       - "tools/verify_graders.py"
       - "tools/check_grader_negative.py"
       - "tools/check_grader_leaks.py"
+      - "tools/check_structural_verifier_consistency.py"
       - "Makefile"
       - ".github/workflows/check-graders.yml"
       - "tests/test_verify_graders.py"
       - "tests/test_check_grader_negative.py"
+      - "tests/test_check_structural_verifier_consistency.py"
 
 jobs:
   graders:
@@ -50,3 +52,6 @@ jobs:
 
       - name: Answer-leak lint
         run: make check-graders-leaks
+
+      - name: Structural-verifier consistency lint
+        run: make check-graders-structural
