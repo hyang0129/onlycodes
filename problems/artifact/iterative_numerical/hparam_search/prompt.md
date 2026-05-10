@@ -7,11 +7,16 @@ You are provided a deterministic toy model in `toy_model.py`. Your goal is to fi
 ```python
 from toy_model import evaluate
 
-accuracy = evaluate(learning_rate=0.01, hidden_size=128, dropout=0.3)
+accuracy = evaluate(learning_rate=0.001, hidden_size=64, dropout=0.5)
 # returns a float in [0.0, 0.95]
 ```
 
 The function is **deterministic** — same inputs always return the same accuracy.
+
+The model has per-instance calibration data (loaded from `calibration.bin`
+sitting next to the module). The Gaussian *shape* of the response surface is
+fixed, but the *location* of its peak varies per task instance, so reading
+`toy_model.py` will NOT tell you the optimum. Call `evaluate()` and search.
 
 Parameters to search:
 - `learning_rate`: float, try values in [1e-4, 0.1] (log scale recommended)
@@ -20,10 +25,11 @@ Parameters to search:
 
 ## Your goal
 
-Find parameters with **accuracy ≥ 0.90**. The model has a unique global optimum — search to find it.
+Find parameters with **accuracy ≥ 0.90**. The model has a unique global optimum
+inside the declared search space — search to find it.
 
 Suggested approach:
-1. Start with a coarse grid search
+1. Start with a coarse grid search across the declared ranges
 2. Refine around the best-performing region
 3. Report the best configuration found
 
@@ -33,12 +39,14 @@ Write `output/result.json`:
 
 ```json
 {
-  "learning_rate": 0.01,
-  "hidden_size": 128,
-  "dropout": 0.3,
+  "learning_rate": 0.001,
+  "hidden_size": 64,
+  "dropout": 0.5,
   "accuracy": 0.95
 }
 ```
+
+(Values above are illustrative — they are *not* the answer.)
 
 The grader will **re-evaluate** `evaluate(learning_rate, hidden_size, dropout)` on your reported parameters. Reported `accuracy` is informational — the grader computes the actual value.
 
