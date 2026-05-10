@@ -538,8 +538,8 @@ def _cleanup_stale_overlays(
 @click.option(
     "--arms",
     type=click.Choice(["baseline", "onlycode", "bash_only", "both", "all"]),
-    default="both",
-    help="Which arms to run (default: both). 'both'=baseline+onlycode; 'all'=baseline+onlycode+bash_only.",
+    default="all",
+    help="Which arms to run (default: all = baseline+onlycode+bash_only). 'both'=baseline+onlycode (excludes bash_only).",
 )
 @click.option(
     "--persistent-kernel/--no-persistent-kernel",

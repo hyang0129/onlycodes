@@ -65,9 +65,11 @@ python -m swebench add <instance_id> --set swe/swebench-verified-mini
 python -m swebench add --from-file ids.txt --set swe/swebench-verified-mini --concurrency 8
 
 # Run evaluation arms
-python -m swebench run                           # both arms, all problems
+python -m swebench run                           # all three arms, all problems
 python -m swebench run --arms onlycode           # onlycode arm only
 python -m swebench run --arms baseline           # baseline arm only
+python -m swebench run --arms bash_only          # bash_only arm only
+python -m swebench run --arms both               # baseline+onlycode (excludes bash_only)
 python -m swebench run --filter django__django-16379
 python -m swebench run --runs 3                  # multiple runs per arm
 python -m swebench run --no-cache                # skip OverlayFS cache
