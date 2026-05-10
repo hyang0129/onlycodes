@@ -7,14 +7,15 @@
 PYTHON ?= python3
 
 .PHONY: help check-graders check-graders-positive check-graders-negative \
-        check-graders-leaks check-graders-fast test
+        check-graders-leaks check-graders-structural check-graders-fast test
 
 help:
 	@echo "Available targets:"
-	@echo "  make check-graders            run positive + negative + leak gates on every task"
+	@echo "  make check-graders            run positive + negative + leak + structural-verifier gates on every task"
 	@echo "  make check-graders-positive   run only the positive sanity check (verify_graders.py)"
 	@echo "  make check-graders-negative   run only the negative sanity check (check_grader_negative.py)"
 	@echo "  make check-graders-leaks      run only the answer-leak lint (check_grader_leaks.py)"
+	@echo "  make check-graders-structural run only the structural_verifier consistency lint"
 	@echo "  make check-graders-fast       run negative gate ONLY for tasks that ship grader/negative_cases.py"
 	@echo "  make test                     run pytest"
 
@@ -27,12 +28,14 @@ help:
 #   2. The negative check (deliberately wrong artifacts → grader returns
 #      passed=False). Catches graders that ACCEPT artifacts they shouldn't.
 #   3. The answer-leak lint (no embedded reference values in detail strings).
+#   4. The structural_verifier consistency lint (every workspace/verify.py is
+#      declared in task.yaml, and every declaration points at a real file).
 #
-# All three are individually invokable; ``check-graders`` is the umbrella
+# All four are individually invokable; ``check-graders`` is the umbrella
 # target the CI workflow uses.
 # ---------------------------------------------------------------------------
 
-check-graders: check-graders-positive check-graders-negative check-graders-leaks
+check-graders: check-graders-positive check-graders-negative check-graders-leaks check-graders-structural
 	@echo ""
 	@echo "All grader gates passed."
 
@@ -44,6 +47,9 @@ check-graders-negative:
 
 check-graders-leaks:
 	$(PYTHON) tools/check_grader_leaks.py
+
+check-graders-structural:
+	$(PYTHON) tools/check_structural_verifier_consistency.py
 
 # A faster lane for PRs that only add or modify a single task: skip the
 # default-mutation pass for unrelated tasks and only exercise tasks that
