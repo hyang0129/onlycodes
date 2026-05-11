@@ -86,7 +86,7 @@ def test_run_help_shows_default_all(runner):
     assert "all" in r.output
 
 
-def test_run_arms_invalid_value_rejected(runner):
+def test_run_arms_invalid_value_rejected_help_schema(runner):
     """An unrecognized arm name must exit with a non-zero status."""
     r = runner.invoke(cli, ["run", "--arms", "nonexistent_arm"])
     assert r.exit_code != 0
