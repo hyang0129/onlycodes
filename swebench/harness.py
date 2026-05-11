@@ -294,13 +294,21 @@ def _needs_jinja2_pin(repo_dir: str) -> bool:
 
 
 def _pin_jinja2(pip: str) -> None:
-    """Downgrade Jinja2 to a 2.x release compatible with Python 3.11."""
-    subprocess.run(
+    """Pin Jinja2 to >=2.11,<3.0 — the last series compatible with Python 3.11
+    that still exports environmentfilter."""
+    result = subprocess.run(
         [pip, "install", "--quiet", "jinja2<3.0,>=2.11"],
         capture_output=True,
         text=True,
-        check=True,
     )
+    if result.returncode != 0:
+        print(
+            f"[harness] jinja2 pin failed (rc={result.returncode}):\n{result.stderr}",
+            flush=True,
+        )
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
 
 
 def setup_venv(venv_dir: str, repo_dir: str) -> None:
