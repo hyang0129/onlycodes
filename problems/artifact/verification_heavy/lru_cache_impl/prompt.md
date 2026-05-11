@@ -49,7 +49,7 @@ Write your implementation to `output/lru_cache.py`.
 
 The file must define a class `LRUCache` with the interface above.
 
-All `get` and `put` operations must run in **O(1)** time. Standard Python's `collections.OrderedDict` or a doubly-linked list + hash map are both acceptable implementations.
+Standard Python's `collections.OrderedDict` or a doubly-linked list + hash map are both acceptable implementations.
 
 ## Verification
 

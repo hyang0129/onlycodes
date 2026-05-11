@@ -6,15 +6,17 @@ Correctness criterion:
 
     The agent's output/lru_cache.py must define ``LRUCache(capacity)`` with
     ``get(key) -> int`` (returns -1 on miss) and ``put(key, value) -> None``.
-    30 deterministic property tests covering: basic operations, capacity
+    Deterministic property tests covering: basic operations, capacity
     enforcement, access-order recency (get updates LRU), put-recency,
-    capacity-1 edge case, and seeded random operation sequences.
+    capacity-1 edge case, and sha256-seeded random operation sequences.
 
-Determinism: all test cases are fixed constants or seeded from instance_id.
+Determinism: all test cases are fixed constants or sha256-seeded from
+instance_id. Seeds are derived via ``int(sha256(instance_id + b":seqN")[:8], 16)``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import random
 import traceback
@@ -30,6 +32,14 @@ class GradeResult:
 
 
 OUTPUT_REL = "output/lru_cache.py"
+INSTANCE_ID = "verification_heavy__lru_cache_impl"
+
+
+def _seed_for(instance_id: str, salt: str) -> int:
+    """Derive an int RNG seed from instance_id + salt via sha256."""
+    payload = (instance_id + salt).encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest()
+    return int(digest[:8], 16)
 
 
 def _import_module(solution_path: Path):
@@ -39,12 +49,22 @@ def _import_module(solution_path: Path):
     return mod
 
 
-def _run_tests(LRUCache) -> list[str]:  # noqa: N803
-    failures: list[str] = []
+@dataclass
+class _Result:
+    name: str
+    passed: bool
+    detail: str
+
+
+def _run_tests(LRUCache) -> list[_Result]:  # noqa: N803
+    results: list[_Result] = []
 
     def check(name: str, got, expected):
-        if got != expected:
-            failures.append(f"  [{name}] got {got!r}, wrong")
+        results.append(_Result(
+            name=name,
+            passed=(got == expected),
+            detail="" if got == expected else f"got {got!r}, expected {expected!r}",
+        ))
 
     # ── Group 1: basic put/get ────────────────────────────────────────────
     c = LRUCache(3)
@@ -105,8 +125,8 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
     check("g6-seq-keep-4", c.get(4), 40)
     check("g6-seq-keep-5", c.get(5), 50)
 
-    # ── Group 7: seeded random sequence (10 ops) ─────────────────────────
-    rng = random.Random("verification_heavy__lru_cache_impl:seq1")
+    # ── Group 7: seeded random sequence (20 ops) ─────────────────────────
+    rng = random.Random(_seed_for(INSTANCE_ID, ":seq1"))
     cap = 4
     c = LRUCache(cap)
     ref: dict[int, int] = {}
@@ -128,26 +148,19 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
         lru_order.append(k)
         return ref[k]
 
-    ops = []
-    for _ in range(20):
+    for i in range(20):
         key = rng.randint(1, 6)
         if rng.random() < 0.5:
             val = rng.randint(1, 100)
             c.put(key, val)
             ref_put(key, val)
-            ops.append(f"put({key},{val})")
         else:
             got = c.get(key)
             expected = ref_get(key)
-            if got != expected:
-                failures.append(
-                    f"  [g7-random] after {len(ops)} ops: get({key})={got!r}, wrong"
-                )
-                break
-            ops.append(f"get({key})->{got}")
+            check(f"g7-random-op{i}", got, expected)
 
-    # ── Group 8: seeded random sequence (another 10 ops, different seed) ─
-    rng2 = random.Random("verification_heavy__lru_cache_impl:seq2")
+    # ── Group 8: seeded random sequence (20 ops, different seed) ─────────
+    rng2 = random.Random(_seed_for(INSTANCE_ID, ":seq2"))
     cap2 = 3
     c2 = LRUCache(cap2)
     ref2: dict[int, int] = {}
@@ -169,25 +182,18 @@ def _run_tests(LRUCache) -> list[str]:  # noqa: N803
         lru2.append(k)
         return ref2[k]
 
-    ops2 = []
-    for _ in range(20):
+    for i in range(20):
         key = rng2.randint(1, 5)
         if rng2.random() < 0.45:
             val = rng2.randint(10, 90)
             c2.put(key, val)
             ref_put2(key, val)
-            ops2.append(f"put({key},{val})")
         else:
             got = c2.get(key)
             expected = ref_get2(key)
-            if got != expected:
-                failures.append(
-                    f"  [g8-random] after {len(ops2)} ops: get({key})={got!r}, wrong"
-                )
-                break
-            ops2.append(f"get({key})->{got}")
+            check(f"g8-random-op{i}", got, expected)
 
-    return failures
+    return results
 
 
 def grade(scratch_dir: Path) -> GradeResult:
@@ -208,19 +214,18 @@ def grade(scratch_dir: Path) -> GradeResult:
 
     LRUCache = mod.LRUCache  # noqa: N806
     try:
-        failures = _run_tests(LRUCache)
+        results = _run_tests(LRUCache)
     except Exception as exc:
         tb = traceback.format_exc()
         return GradeResult(False, 0.0, f"grader error running tests: {exc}\n{tb[:400]}")
 
-    # Count total assertion calls as a proxy for total tests
-    # (groups 1-8 contain ~30 assertions; random groups may short-circuit)
-    total_tests = 30
-    n_fail = len(failures)
-    n_pass = max(0, total_tests - n_fail)
+    total_tests = len(results)
+    failures = [r for r in results if not r.passed]
+    n_pass = total_tests - len(failures)
 
     if failures:
-        detail = f"{n_pass}/{total_tests} checks passed. Failures:\n" + "\n".join(failures[:10])
+        lines = [f"  [{r.name}] {r.detail}" for r in failures[:10]]
+        detail = f"{n_pass}/{total_tests} checks passed. Failures:\n" + "\n".join(lines)
         if len(failures) > 10:
             detail += f"\n  ... ({len(failures) - 10} more)"
         return GradeResult(False, round(n_pass / total_tests, 4), detail)
