@@ -1,9 +1,9 @@
-instance_id: stateful_reasoning__upgrade_impact
-category: stateful_reasoning
+instance_id: verification_heavy__unreachable_functions
+category: verification_heavy
 difficulty: medium
 problem_statement: prompt.md
 workspace_dir: workspace/
-output_artifact: output/conflicts.jsonl
+output_artifact: output/unreachable.jsonl
 structural_verifier: workspace/verify.py
 hidden_grader: grader/hidden.py
 reference_output: grader/reference_output.jsonl
@@ -11,8 +11,8 @@ execution_budget:
   max_code_runs: 10
   max_wall_seconds: 120
 tags:
-  - stateful_reasoning
-  - semver
-  - dependency_resolution
-  - package_management
+  - verification_heavy
+  - static_analysis
+  - call_graph
+  - python
   - realism_checklist_v1

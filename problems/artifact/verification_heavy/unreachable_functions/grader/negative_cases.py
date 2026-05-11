@@ -1,4 +1,4 @@
-"""Per-task negative cases for ``stateful_reasoning__unreachable_functions``.
+"""Per-task negative cases for ``verification_heavy__unreachable_functions``.
 
 The prompt requires every output line to carry **both** ``function`` AND
 ``module`` keys. Originally the grader only validated ``function`` — the
@@ -11,6 +11,11 @@ validate it against the file each function was defined in (computed by
 the same AST walk that drives reachability). The ``drop_module_field``
 and ``wrong_module_value`` cases below now lock that behaviour in
 (``currently_caught=True``).
+
+Issue #185 fixed an empty-output false-negative: the grader now computes the
+reference *before* the empty check, so an empty output against a non-empty
+reference produces "output artifact is empty but N unreachable function(s) were
+expected" (not the old bare "output artifact is empty").
 """
 
 from __future__ import annotations
@@ -86,6 +91,9 @@ NEGATIVE_CASES = [
     NegativeCase(
         name="empty",
         mutate=_mutate_empty,
+        # Issue #185: after the fix the rejection message reads
+        # "output artifact is empty but N unreachable function(s) were expected"
+        # — still contains "empty", so the substring remains correct.
         expected_substring="empty",
     ),
     NegativeCase(

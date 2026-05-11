@@ -1,6 +1,8 @@
 # Batched Artifact Run
 
-48 problems split into 6 daily batches of 8 (one category per day). All batches write to the same output dir so `artifact analyze` sees a single cohesive run at the end.
+50 problems split into 6 daily batches (one category per day). All batches write to the same output dir so `artifact analyze` sees a single cohesive run at the end.
+
+> **Note (issue #185):** `unreachable_functions` and `upgrade_impact` were moved from `stateful_reasoning` to `verification_heavy`. Batch 5 now has 6 tasks; Batch 6 now has 10 tasks. Filter strings below reflect the new IDs.
 
 ## How it works
 
@@ -47,20 +49,20 @@ python -m swebench artifact run \
   --filter "iterative_numerical__bisection_calibration,iterative_numerical__exp_decay_fit,iterative_numerical__gauss_newton_circle_fit,iterative_numerical__gradient_descent_rosenbrock,iterative_numerical__hparam_search,iterative_numerical__logistic_fit,iterative_numerical__newton_sqrt,iterative_numerical__secant_root_budgeted"
 ```
 
-### Batch 5 — stateful_reasoning (8 tasks)
+### Batch 5 — stateful_reasoning (6 tasks)
 
 ```bash
 python -m swebench artifact run \
   --output-dir runs/artifact/full_run_v1 \
-  --filter "stateful_reasoning__counter_replay,stateful_reasoning__event_ledger,stateful_reasoning__feature_flag_timeline,stateful_reasoning__inventory_reconciliation,stateful_reasoning__rate_limiter_replay,stateful_reasoning__session_fsm,stateful_reasoning__unreachable_functions,stateful_reasoning__upgrade_impact"
+  --filter "stateful_reasoning__counter_replay,stateful_reasoning__event_ledger,stateful_reasoning__feature_flag_timeline,stateful_reasoning__inventory_reconciliation,stateful_reasoning__rate_limiter_replay,stateful_reasoning__session_fsm"
 ```
 
-### Batch 6 — verification_heavy (8 tasks)
+### Batch 6 — verification_heavy (10 tasks)
 
 ```bash
 python -m swebench artifact run \
   --output-dir runs/artifact/full_run_v1 \
-  --filter "verification_heavy__cron_next_fire,verification_heavy__csv_dialect_parser,verification_heavy__expression_evaluator,verification_heavy__iban_validator,verification_heavy__json_pointer_rfc6901,verification_heavy__lru_cache_impl,verification_heavy__parse_iso_duration,verification_heavy__semver_compare"
+  --filter "verification_heavy__cron_next_fire,verification_heavy__csv_dialect_parser,verification_heavy__expression_evaluator,verification_heavy__iban_validator,verification_heavy__json_pointer_rfc6901,verification_heavy__lru_cache_impl,verification_heavy__parse_iso_duration,verification_heavy__semver_compare,verification_heavy__unreachable_functions,verification_heavy__upgrade_impact"
 ```
 
 ## Intermediate analysis

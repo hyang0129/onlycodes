@@ -1,4 +1,4 @@
-"""Hidden grader for stateful_reasoning__unreachable_functions.
+"""Hidden grader for verification_heavy__unreachable_functions.
 
 Contract: ``grade(scratch_dir: Path) -> GradeResult``. See docs/SCHEMA_ARTIFACT.md §3.
 
@@ -92,9 +92,22 @@ def grade(scratch_dir: Path) -> GradeResult:
     if not output_path.is_file():
         return GradeResult(False, 0.0, "output artifact not produced")
 
+    # Issue #185: compute the reference *before* checking whether the output
+    # is empty.  When the correct answer is an empty set (all functions are
+    # reachable), an agent that correctly produces an empty file must PASS —
+    # the old early-exit wrongly rejected it.
+    reference, func_to_module = _analyze_reachability(src_dir)
+
     raw = output_path.read_text()
     if not raw.strip():
-        return GradeResult(False, 0.0, "output artifact is empty")
+        # Empty output is only wrong when the reference is non-empty.
+        if reference:
+            return GradeResult(
+                False, 0.0,
+                f"output artifact is empty but {len(reference)} unreachable "
+                f"function(s) were expected",
+            )
+        return GradeResult(True, 1.0, "no unreachable functions — empty output is correct")
 
     agent_funcs: set[str] = set()
     # function_name -> module string the agent claimed for it
@@ -124,8 +137,6 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(False, 0.0, f"duplicate function name: {fname!r}")
         agent_funcs.add(fname)
         agent_func_to_module[fname] = mod
-
-    reference, func_to_module = _analyze_reachability(src_dir)
 
     missing = reference - agent_funcs
     extra = agent_funcs - reference

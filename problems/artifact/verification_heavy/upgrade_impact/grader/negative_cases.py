@@ -1,19 +1,16 @@
-"""Per-task negative cases for ``stateful_reasoning__upgrade_impact``.
+"""Per-task negative cases for ``verification_heavy__upgrade_impact``.
 
-The grader contains an "output artifact is empty" early-exit (lines 100-101
-of grader/hidden.py). When the *correct* answer is empty (i.e. zero
-conflicts after the upgrade), an agent that correctly produces an empty
-artifact is rejected by that early-exit instead of being graded by the
-correctness check. The reference output for this task happens to have three
-conflicts, so the bug doesn't surface against ``reference_output.jsonl`` —
-that's the ``upgrade_impact empty-output`` bug called out in issue #171.
+Issue #185 fixed the empty-output false-negative in grader/hidden.py.  The
+grader now computes the reference *before* the empty-output check, so an empty
+output against a non-empty reference is rejected with "output artifact is empty
+but N conflict(s) were expected" instead of the old bare "output artifact is
+empty".  Since the reference for this task is non-empty (three conflicts), the
+empty-output mutation still triggers a rejection — ``expected_substring="empty"``
+remains correct.
 
-We can't fully exercise that bug with a pure mutation of the reference
-output (it requires constructing an alternate workspace where the correct
-answer is empty). What we CAN do is document the bug and add the regular
-suite of mutations so the rest of the grader's safety net is exercised.
-The empty-output regression test belongs in a future PR alongside the
-grader fix.
+The positive empty-output case (a packages.json where the upgrade causes zero
+conflicts → empty output must PASS) is exercised by the unit test added in
+issue #185 (``tests/test_artifact_grade.py::test_upgrade_impact_empty_output_pass``).
 """
 
 from __future__ import annotations
@@ -65,10 +62,9 @@ NEGATIVE_CASES = [
     NegativeCase(
         name="empty",
         mutate=_mutate_empty,
-        # Today the grader's structural early-exit catches this. After the
-        # empty-output false-negative fix lands, the rejection should come
-        # from the correctness check instead — at that point flip
-        # ``expected_substring`` to e.g. "missing".
+        # The reference for this task has three conflicts, so empty output is
+        # always wrong.  Issue #185 changed the rejection message to include
+        # "but N conflict(s) were expected" — it still contains "empty".
         expected_substring="empty",
     ),
     NegativeCase(

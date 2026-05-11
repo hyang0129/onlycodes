@@ -1,4 +1,4 @@
-"""Hidden grader for stateful_reasoning__upgrade_impact.
+"""Hidden grader for verification_heavy__upgrade_impact.
 
 Contract: ``grade(scratch_dir: Path) -> GradeResult``. See docs/SCHEMA_ARTIFACT.md §3.
 
@@ -96,9 +96,20 @@ def grade(scratch_dir: Path) -> GradeResult:
     if not output_path.is_file():
         return GradeResult(False, 0.0, "output artifact not produced")
 
+    # Issue #185: compute the reference *before* checking whether the output
+    # is empty.  When the upgrade causes zero conflicts, an agent that correctly
+    # produces an empty file must PASS — the old early-exit wrongly rejected it.
+    reference = _compute_conflicts(packages_data)
+
     raw = output_path.read_text()
     if not raw.strip():
-        return GradeResult(False, 0.0, "output artifact is empty")
+        # Empty output is only wrong when the reference is non-empty.
+        if reference:
+            return GradeResult(
+                False, 0.0,
+                f"output artifact is empty but {len(reference)} conflict(s) were expected",
+            )
+        return GradeResult(True, 1.0, "no conflicts — empty output is correct")
 
     agent_pkgs: set[str] = set()
     for lineno, line in enumerate(raw.splitlines(), start=1):
@@ -118,8 +129,6 @@ def grade(scratch_dir: Path) -> GradeResult:
         if pkg in agent_pkgs:
             return GradeResult(False, 0.0, f"duplicate package: {pkg!r}")
         agent_pkgs.add(pkg)
-
-    reference = _compute_conflicts(packages_data)
 
     missing = reference - agent_pkgs
     extra = agent_pkgs - reference

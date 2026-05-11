@@ -175,7 +175,7 @@ Columns: `co` = `code_only`, `bl` = `baseline` (stock Claude Code harness; the a
 | iterative_numerical__exp_decay_fit | PASS / PASS | 5 / 5 | 0.0542 / 0.0652 | 24 / 25 |
 | iterative_numerical__hparam_search | PASS / PASS | 5 / 5 | 0.0510 / 0.0642 | 20 / 17 |
 | stateful_reasoning__event_ledger | PASS / PASS | 2 / 4 | 0.0345 / 0.0812 | 10 / 19 |
-| stateful_reasoning__unreachable_functions | PASS / PASS | 7 / 9 | 0.0662 / 0.0812 | 27 / 22 |
+| verification_heavy__unreachable_functions | PASS / PASS | 7 / 9 | 0.0662 / 0.0812 | 27 / 22 |
 
 Aggregates appear in [Headline Results](#headline-results-artifact-seed-v1-12-tasks--1-run) at the top of this README.
 
