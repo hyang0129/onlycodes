@@ -3,6 +3,7 @@ category: verification_heavy
 difficulty: easy
 problem_statement: prompt.md
 workspace_dir: workspace/
+workspace_generator: workspace/generator.py
 output_artifact: output/solution.py
 structural_verifier: workspace/verify.py
 hidden_grader: grader/hidden.py
