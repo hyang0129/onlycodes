@@ -49,15 +49,14 @@ Any country code not in this table → `False` (do not attempt to validate).
 
 | Input | Output |
 |-------|--------|
-| `"DE89 3704 0044 0532 0130 00"` | `True` |
-| `"DE89370400440532013000"` | `True` |
-| `"GB82WEST12345698765432"` | `True` |
-| `"FR1420041010050500013M02606"` | `True` |
-| `"BE68539007547034"` | `True` |
-| `"DE89370400440532013001"` | `False` (wrong checksum) |
-| `"DE8937040044053201300"` | `False` (wrong length) |
-| `"XX89370400440532013000"` | `False` (unknown country) |
-| `"GB82XEST12345698765432"` | `True` if checksum holds — but this example is synthetic; real graders use known-valid / deliberately-broken IBANs |
+| `"DE77 2004 0060 0532 0130 01"` | `True` |
+| `"DE77200400600532013001"` | `True` |
+| `"GB29NWBK60161331926819"` | `True` |
+| `"CH5604835012345678009"` | `True` |
+| `"BE15430609679000"` | `True` |
+| `"DE77200400600532013002"` | `False` (wrong checksum) |
+| `"DE77200400600532013"` | `False` (wrong length) |
+| `"YY29NWBK60161331926819"` | `False` (unknown country) |
 | `""` | `False` |
 | `None` | `False` |
 

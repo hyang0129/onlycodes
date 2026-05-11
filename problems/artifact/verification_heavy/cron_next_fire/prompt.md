@@ -58,17 +58,17 @@ is `*` and the other is restricted, only the restricted one applies.
 
 ## Examples
 
-Given `after = datetime(2024, 1, 1, 12, 0, 0)`:
+Given `after = datetime(2025, 3, 15, 9, 30, 0)`:
 
 | Expression | Meaning | Next fire |
 |------------|---------|-----------|
-| `* * * * *` | every minute | `2024-01-01 12:01:00` |
-| `0 * * * *` | top of every hour | `2024-01-01 13:00:00` |
-| `0 0 * * *` | daily midnight | `2024-01-02 00:00:00` |
-| `30 14 * * *` | 14:30 daily | `2024-01-01 14:30:00` |
-| `0 0 1 * *` | 1st of month | `2024-02-01 00:00:00` |
-| `*/15 * * * *` | every 15 min | `2024-01-01 12:15:00` |
-| `0 9-17 * * 1-5` | hourly 9–17 M–F | `2024-01-01 13:00:00` |
+| `* * * * *` | every minute | `2025-03-15 09:31:00` |
+| `0 * * * *` | top of every hour | `2025-03-15 10:00:00` |
+| `0 0 * * *` | daily midnight | `2025-03-16 00:00:00` |
+| `30 14 * * *` | 14:30 daily | `2025-03-15 14:30:00` |
+| `0 0 1 * *` | 1st of month | `2025-04-01 00:00:00` |
+| `*/15 * * * *` | every 15 min | `2025-03-15 09:45:00` |
+| `0 9-17 * * 1-5` | hourly 9–17 M–F | `2025-03-17 09:00:00` |
 
 ## Output
 
