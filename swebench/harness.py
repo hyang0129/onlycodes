@@ -276,6 +276,41 @@ def clone_from_bare(bare_src: str, dest: str) -> None:
     )
 
 
+def _needs_jinja2_pin(repo_dir: str) -> bool:
+    """Return True if the repo uses jinja2.environmentfilter, removed in Jinja2 3.0.
+
+    Old Sphinx versions (< 4.0) import `environmentfilter` from jinja2, which was
+    removed in Jinja2 3.0. Detected by grepping the installed source so the check
+    is version-agnostic and doesn't require hard-coding instance IDs.
+    """
+    candidate = os.path.join(repo_dir, "sphinx", "util", "rst.py")
+    if not os.path.isfile(candidate):
+        return False
+    try:
+        with open(candidate) as f:
+            return "environmentfilter" in f.read()
+    except OSError:
+        return False
+
+
+def _pin_jinja2(pip: str) -> None:
+    """Pin Jinja2 to >=2.11,<3.0 — the last series compatible with Python 3.11
+    that still exports environmentfilter."""
+    result = subprocess.run(
+        [pip, "install", "--quiet", "jinja2<3.0,>=2.11"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(
+            f"[harness] jinja2 pin failed (rc={result.returncode}):\n{result.stderr}",
+            flush=True,
+        )
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
+
+
 def setup_venv(venv_dir: str, repo_dir: str) -> None:
     """Create a venv and pip install the project in editable mode (if not already done)."""
     pip = os.path.join(venv_dir, "bin", "pip")
@@ -319,6 +354,8 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
                 raise subprocess.CalledProcessError(
                     result.returncode, result.args, result.stdout, result.stderr
                 )
+            if _needs_jinja2_pin(repo_dir):
+                _pin_jinja2(pip)
             return
     subprocess.run(
         ["python3.11", "-m", "venv", venv_dir],
@@ -353,6 +390,8 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
         text=True,
         check=True,
     )
+    if _needs_jinja2_pin(repo_dir):
+        _pin_jinja2(pip)
 
 
 def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
