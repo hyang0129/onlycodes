@@ -1,26 +1,32 @@
 # Task Appropriateness Rubric (v1)
 
-**Purpose.** External-reviewer rubric for judging whether an artifact-graded task in `problems/artifact/` represents a workload a practicing **data analyst, data scientist, or ML engineer** would actually encounter. Distinct from `TASK_REALISM_CHECKLIST.md`, which is the *author's* self-cert during task creation. This rubric is applied by a fresh reviewer (human or subagent) who did not write the task.
+**Purpose.** External-reviewer rubric for judging whether an artifact-graded task in `problems/artifact/` represents the kind of **delegable subtask** a practicing data analyst, data scientist, or ML engineer would actually hand off to an agent. Distinct from `TASK_REALISM_CHECKLIST.md`, which is the *author's* self-cert during task creation. This rubric is applied by a fresh reviewer (human or subagent) who did not write the task.
 
-**Motivation.** The onlycodes benchmark currently shows the code-only arm winning on every artifact task. A skeptical reader (see issue #158, MVP-2) will ask: *are these tasks doing data-science work, or are they scientific-computing / pure-algorithm puzzles that happen to be written in Python?* This rubric is the instrument we use to answer that question per-task, then aggregate into a defensible regime figure.
+**Motivation.** The onlycodes benchmark currently shows the code-only arm winning on every artifact task. A skeptical reader (see issue #158, MVP-2) will ask: *are these tasks doing the kind of work a DS/DA practitioner actually delegates, or are they scientific-computing / pure-algorithm puzzles that happen to be written in Python?* This rubric is the instrument we use to answer that question per-task, then aggregate into a defensible regime figure.
 
-## Scope of "data analysis / data science workload"
+## Scope: delegated DS/DA subtasks
 
-For this rubric, a **DS/DA workload** is work whose primary content is one or more of:
+A practitioner does **not** hand an agent the entire job ("load → explore → clean → transform → model → report"). They hand off a **slice** of it. The rubric judges whether each task looks like a plausible slice.
 
-- Ingesting and inspecting tabular / log / event data of non-trivial schema.
-- Cleaning, joining, reshaping, or aggregating data.
-- Choosing and applying a statistical / ML method to answer a question.
-- Producing a report-style artifact (numbers, tables, model predictions) that a stakeholder would consume.
+A task is **in scope** if it resembles work a DS/DA practitioner would realistically delegate to an agent:
 
-Work that is **not** DS/DA workload (for the purposes of this rubric):
+- Compute a metric / aggregate / percentile from log or tabular data.
+- Clean / join / reshape / dedupe a specific dataset to a specified spec.
+- Detect outliers, anomalies, or regressions in a series under a defined rule.
+- Fit a *specified* model or run a *specified* test on prepared data.
+- Validate, parse, or extract structured information from a known-format input.
+- Produce a small report artifact (top-K, summary stats, predictions) from prepared inputs.
 
-- Combinatorial enumeration / exhaustive search.
-- Implementing a textbook algorithm from spec (knapsack, TSP, vertex cover).
-- Pure numerical-method implementation (root-finding, gradient descent on a known objective).
-- Parser / state-machine / verification work where the data is a means, not the subject.
+The DS already decided what they want; they are delegating the **execution** of a well-scoped slice. A scalar answer is a perfectly normal deliverable for a delegated subtask — do not penalize narrow scope.
 
-A task can be a perfectly good benchmark task and still score low on this rubric — that's the point. The rubric measures *one* property (DS/DA fit), not overall quality.
+Work **out of scope** (would not realistically be delegated as a DS/DA subtask):
+
+- Combinatorial enumeration / exhaustive search of mathematical objects.
+- Implementing a textbook algorithm from spec where no data-flavored input exists (knapsack, TSP, vertex cover on abstract inputs).
+- Pure numerical-method implementation on a known objective where the data is incidental.
+- Parser / state-machine / verification work where the input is a synthetic puzzle, not data.
+
+A task can be a perfectly good benchmark task and still score low on this rubric — that's the point. The rubric measures *one* property (delegated-DS-subtask fit), not overall quality.
 
 ## How to use this document
 
@@ -36,12 +42,12 @@ Each axis is scored 0, 1, 2, or 3. Anchors:
 
 ### A1. Workflow shape (0–3)
 
-Does the task force the agent through a recognizable DS workflow (load → inspect → clean / transform → analyze → report)?
+Does the task look like a recognizable **slice** of a DS workflow — load / inspect / clean / transform / aggregate / model / summarize? A high score does not require the full pipeline; it requires that the slice is recognizable and substantive.
 
-- **0** — Single deterministic computation on a pre-shaped input. No load/clean/transform stages.
-- **1** — Load + one transform / aggregate. Linear, no decisions about shape.
-- **2** — Load + inspect + at least one cleaning or joining decision + aggregate / model.
-- **3** — Full pipeline: load multi-source data, reconcile schema, clean, transform, analyze, produce stakeholder-facing artifact.
+- **0** — No data-shaped input at all. The "input" is an abstract mathematical object (a graph, a list of integers, a problem specification). Nothing to load, inspect, or shape.
+- **1** — Trivially shaped input that goes straight into a single computation. Load + one-line compute + return. No reading, joining, reshaping, or aggregation worth the name.
+- **2** — Recognizable slice of a DS workflow: load + at least one shaping / aggregating / filtering / fitting step that a practitioner would describe as "the analysis". A scalar or small structured return is fine.
+- **3** — Same as 2, but the slice involves multiple coordinated steps (e.g. join across files, then aggregate, then rank; or clean + transform + fit) such that an analyst would naturally describe the work in stages.
 
 ### A2. Data realism (0–3)
 
@@ -54,21 +60,21 @@ How closely does the input data resemble data a practitioner sees on the job?
 
 ### A3. Decision content (0–3)
 
-How much does the agent have to *choose* an approach, versus execute a dictated algorithm?
+How much execution judgment does the agent need to apply? Note that **delegation usually comes with a dictated approach** — the practitioner has already decided which method they want, and the agent's job is faithful execution under that spec. Score this axis on *execution-time* judgment, not methodological autonomy.
 
-- **0** — Algorithm is dictated by the prompt or trivially implied (e.g. "compute the p95 of column X").
-- **1** — One small decision (which aggregation function, which library call).
-- **2** — Multiple decisions: which join, which fillna strategy, which model family, which significance test.
-- **3** — Open-ended methodology: the agent must scope what "the answer" even means, then justify a method.
+- **0** — The "task" is so abstract that no judgment about real data is involved. Just implement an algorithm on synthetic inputs.
+- **1** — Faithful execution of a specified method on specified data. The agent must read the spec carefully and translate it to code, including handling the schema correctly and respecting tolerances / edge-case rules stated in the prompt.
+- **2** — Specified method, but the agent has to handle real shaping decisions: which rows count, how to break ties, how to handle missing or malformed entries that the spec didn't fully pin down.
+- **3** — Multiple substantive decisions the prompt leaves open: choice of join strategy, fillna policy, model family, significance test, or scoping what "the answer" even means.
 
 ### A4. Domain authenticity (0–3)
 
-Does the prompt read like something a working practitioner would receive (ticket / Slack / memo), and does the success criterion match a real business / research question?
+Does the prompt read like something a working practitioner would hand off (ticket / Slack / memo / DM), and does the success criterion map to a real business / research / engineering question?
 
-- **0** — Reads like a textbook exercise or coding interview question.
-- **1** — Domain-flavored framing but the underlying question is still abstract ("count the latin squares of order 3, presented as a checkerboard analyst would want").
-- **2** — Plausible ticket framing, plausible deliverable.
-- **3** — Indistinguishable from a real ticket: a stakeholder, a deadline-style ask, a numeric / artifact deliverable that maps to a known DS/DA work product.
+- **0** — Textbook exercise or coding-interview framing. Pure math/algorithm phrasing, abstract inputs, no domain. A practitioner would not phrase any handoff this way.
+- **1** — Thin domain veneer over an algorithmic / mathematical core. The "business framing" is window-dressing; the underlying ask is still abstract.
+- **2** — Plausible handoff: domain-appropriate names, a recognizable ask, a deliverable shape a colleague would actually use.
+- **3** — Indistinguishable from a real handoff: a specific stakeholder context, a concrete deliverable that maps to a known DS/DA work product, named entities/columns that match how a practitioner would actually describe their data.
 
 ### A5. Tool-surface relevance (0–3)
 
@@ -81,12 +87,12 @@ Would the IDE tool surface (Read, Grep, Glob, Edit, Write, Bash) actually be use
 
 ### A6. Artifact type (0–3)
 
-How report-shaped is the output?
+Does the output shape match what a downstream consumer would actually use? A scalar can be a perfectly good delegated deliverable; this axis rewards *fit-for-purpose*, not size.
 
-- **0** — Scalar or fixed-shape JSON answer ("return one number").
-- **1** — Small structured output (one JSONL with a fixed schema).
-- **2** — Tabular result with multiple derived columns / a small set of summary statistics keyed by group.
-- **3** — Multi-part deliverable: cleaned dataset + summary + diagnostic / model artifact. Stakeholder-facing.
+- **0** — Output shape would not be directly useful to any downstream consumer: e.g. a list of mathematical objects (all Latin squares), an enumeration result, an algorithmic optimum on abstract inputs.
+- **1** — A specific answer to a specific question, in a shape a colleague could paste into a doc or feed into the next step: a scalar metric, a model parameter set, a small key/value JSON.
+- **2** — A small structured deliverable a downstream pipeline would consume: top-K records, per-group summary stats, classified rows, a cleaned subset.
+- **3** — A multi-part deliverable matching a recognizable DS work product: e.g. a cleaned dataset plus a summary, or predictions plus a diagnostic, or a report-shaped JSON with grouped findings.
 
 ## Workload labels
 
@@ -146,8 +152,14 @@ Aggregation is mechanical — no LLM judgment involved past this point.
 
 ## Anti-patterns (reviewer guidance)
 
-- Do not score generously to be polite. The point is to surface gaps.
+- **Do not penalize narrow scope.** A well-scoped delegated subtask returning a scalar is a 1 or 2 on A1/A6, not a 0. The rubric rewards "looks like a real handoff", not "looks like the whole job of a data scientist".
+- **Do not penalize dictated methodology.** Delegation usually comes with a specified method. Score A3 on the agent's execution-time judgment, not on how much methodological autonomy the prompt offers.
+- Do not score generously to be polite. The point is to surface gaps where they exist (mainly A2 data realism and A4 domain authenticity for our corpus).
 - Do not let the `category/` directory name bias the label. Read the task.
 - A task scoring high on A5 (tool-surface relevance) is *not* automatically a better task — it just means it's a harder test of the code-only hypothesis. That's a feature, not a flaw.
 - If you cannot justify a score by pointing at a file or line, your confidence is `low`, not `high`.
 - The verdict is **for the paper**. Write it like a reviewer comment, not a code review.
+
+## Change history
+
+- **v1 (current).** Reframed scope from "full DS/DA workload" to "delegated DS/DA subtask" after a 4-task pilot revealed the original framing systematically under-scored well-scoped narrow tasks (e.g. compute-a-metric-from-logs) that a practitioner would in fact delegate to an agent. A1, A3, A4, A6 anchors recalibrated; A2 and A5 unchanged. The pilot scores from the pre-recalibration draft are not directly comparable to v1 scores and should be re-run before reporting.
