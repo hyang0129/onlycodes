@@ -29,6 +29,18 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3"],
 }
 
+
+def _venv_kwargs(repo_slug: str) -> dict:
+    """Per-repo overrides for ``setup_venv()``, suitable for ``**``-unpacking.
+
+    Centralised here so every caller of ``setup_venv`` (``run.py``,
+    ``cache_cli.py``, …) routes through the same lookup tables.
+    """
+    return {
+        "python_bin": _REPO_PYTHON.get(repo_slug, _DEFAULT_PYTHON),
+        "pre_install": _REPO_PRE_INSTALL.get(repo_slug),
+    }
+
 # Sentinel file written inside the venv dir to record which python binary
 # created it.  A mismatch triggers a full venv rebuild.
 _SENTINEL_FILENAME = ".python_bin"

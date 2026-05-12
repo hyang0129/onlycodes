@@ -32,9 +32,7 @@ from swebench.cache import (
     OverlayError,
 )
 from swebench.harness import (
-    _DEFAULT_PYTHON,
-    _REPO_PRE_INSTALL,
-    _REPO_PYTHON,
+    _venv_kwargs,
     apply_test_patch,
     clone_repo,
     find_claude_binary,
@@ -45,19 +43,6 @@ from swebench.harness import (
     setup_venv,
     strip_git_history,
 )
-
-
-def _venv_kwargs(repo_slug: str) -> dict:
-    """Return keyword args for ``setup_venv()`` based on the repo slug.
-
-    Looks up per-repo Python interpreter and pre-install pin overrides from
-    the harness lookup tables.  Returns a dict suitable for ``**``-unpacking
-    into ``setup_venv(..., **_venv_kwargs(slug))``.
-    """
-    return {
-        "python_bin": _REPO_PYTHON.get(repo_slug, _DEFAULT_PYTHON),
-        "pre_install": _REPO_PRE_INSTALL.get(repo_slug),
-    }
 from swebench.models import Problem
 
 
