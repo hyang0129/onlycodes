@@ -1,0 +1,20 @@
+instance_id: data_engineering__filter_aggregate_support_tickets_medium
+category: data_engineering
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/priority_resolved_summary.csv
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.csv
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - data_engineering
+  - filtering
+  - aggregation
+  - multi_file
+  - schema_inconsistency
+  - csv
