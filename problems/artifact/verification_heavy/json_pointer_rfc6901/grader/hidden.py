@@ -36,7 +36,6 @@ def _base_doc() -> dict:
         "a/b": "slash-in-key",
         "m~n": "tilde-in-key",
         "foo": ["bar", "baz"],
-        "": "empty-key",  # duplicate intentional — last wins
         "nested": {
             "x": 1,
             "y": {"z": [10, 20, 30]},
