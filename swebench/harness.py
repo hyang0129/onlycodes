@@ -26,7 +26,7 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # scikit-learn 0.20–0.22: pins required before `pip install -e .`
     "scikit-learn/scikit-learn": ["setuptools<60", "numpy<1.24", "cython<3"],
     # matplotlib 3.1 era: numpy 2.x ABI break + old setuptools/cython
-    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3"],
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6"],
 }
 
 # ---------------------------------------------------------------------------
@@ -47,6 +47,9 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # astropy 5.x era (2022): same issue
     "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
     "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
+    # repo-level setuptools<65 is too old for this version's pyproject.toml build.
+    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
 }
 
 # ---------------------------------------------------------------------------

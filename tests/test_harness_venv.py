@@ -261,6 +261,7 @@ def test_matplotlib_pre_install_pins() -> None:
     assert any("numpy<2" in p for p in pins)
     assert any("cython<3" in p for p in pins)
     assert any("setuptools<65" in p for p in pins)
+    assert any("pybind11" in p for p in pins)
 
 
 def test_default_python_is_311() -> None:
@@ -365,6 +366,19 @@ def test_astropy_5x_pre_install_pins() -> None:
         assert any("numpy<2" in p for p in pins), f"Missing numpy<2 in {instance_id}"
         assert any("cython<3" in p for p in pins), f"Missing cython<3 in {instance_id}"
         assert any("extension-helpers" in p for p in pins), f"Missing extension-helpers in {instance_id}"
+
+
+def test_matplotlib_26160_instance_pins() -> None:
+    """Test 18: matplotlib-26160 uses instance-level pins that drop setuptools<65."""
+    pins = _INSTANCE_PRE_INSTALL.get("matplotlib__matplotlib-26160")
+    assert pins is not None, "No instance pins for matplotlib__matplotlib-26160"
+    assert any("pybind11" in p for p in pins), "Missing pybind11"
+    assert any("certifi" in p for p in pins), "Missing certifi"
+    assert any("wheel" in p for p in pins), "Missing wheel"
+    # Must NOT carry the repo-level setuptools<65 (too old for this 2023 build)
+    assert not any("setuptools" in p for p in pins), (
+        "matplotlib__matplotlib-26160 should not pin setuptools"
+    )
 
 
 @pytest.mark.integration
