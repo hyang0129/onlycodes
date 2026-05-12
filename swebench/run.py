@@ -32,6 +32,9 @@ from swebench.cache import (
     OverlayError,
 )
 from swebench.harness import (
+    _DEFAULT_PYTHON,
+    _REPO_PRE_INSTALL,
+    _REPO_PYTHON,
     apply_test_patch,
     clone_repo,
     find_claude_binary,
@@ -42,6 +45,19 @@ from swebench.harness import (
     setup_venv,
     strip_git_history,
 )
+
+
+def _venv_kwargs(repo_slug: str) -> dict:
+    """Return keyword args for ``setup_venv()`` based on the repo slug.
+
+    Looks up per-repo Python interpreter and pre-install pin overrides from
+    the harness lookup tables.  Returns a dict suitable for ``**``-unpacking
+    into ``setup_venv(..., **_venv_kwargs(slug))``.
+    """
+    return {
+        "python_bin": _REPO_PYTHON.get(repo_slug, _DEFAULT_PYTHON),
+        "pre_install": _REPO_PRE_INSTALL.get(repo_slug),
+    }
 from swebench.models import Problem
 
 
@@ -356,7 +372,7 @@ def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
     # Strip history so the agent cannot recover the upstream fix via git log.
     # Safe to do here: this clone is thrown away after the run.
     strip_git_history(repo_dir)
-    setup_venv(venv_dir, repo_dir)
+    setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem.repo_slug))
     return repo_dir, venv_dir
 
 
@@ -410,7 +426,7 @@ def _setup_problem_cached(
         # setup_venv call that scrub_cache_dir later removed).
         git_reset(lower, problem.base_commit)
         shutil.rmtree(venv_dir, ignore_errors=True)
-        setup_venv(venv_dir, lower)
+        setup_venv(venv_dir, lower, **_venv_kwargs(problem.repo_slug))
         scrub_cache_dir(lower)
         write_lockfile(venv_dir, lockfile)
 

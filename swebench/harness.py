@@ -11,6 +11,41 @@ import tempfile
 import threading
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# Per-repo Python interpreter and pre-install pin tables
+# ---------------------------------------------------------------------------
+
+_DEFAULT_PYTHON = "python3.11"
+
+_REPO_PYTHON: dict[str, str] = {
+    # scikit-learn 0.20–0.22: setuptools ≥ 61 + Cython 0.29 ABI mismatch on 3.11
+    "scikit-learn/scikit-learn": "python3.10",
+}
+
+_REPO_PRE_INSTALL: dict[str, list[str]] = {
+    # scikit-learn 0.20–0.22: pins required before `pip install -e .`
+    "scikit-learn/scikit-learn": ["setuptools<60", "numpy<1.24", "cython<3"],
+    # matplotlib 3.1 era: numpy 2.x ABI break + old setuptools/cython
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3"],
+}
+
+# Sentinel file written inside the venv dir to record which python binary
+# created it.  A mismatch triggers a full venv rebuild.
+_SENTINEL_FILENAME = ".python_bin"
+
+
+def _venv_sentinel(venv_dir: str) -> str:
+    """Return the path to the python_bin sentinel file inside *venv_dir*."""
+    return os.path.join(venv_dir, _SENTINEL_FILENAME)
+
+
+def _read_sentinel(venv_dir: str) -> str | None:
+    """Read and return the sentinel value, or None if absent/unreadable."""
+    try:
+        return Path(_venv_sentinel(venv_dir)).read_text().strip()
+    except OSError:
+        return None
+
 # Per-slug locks so concurrent cache-setup threads don't race on the same bare clone.
 _bare_clone_locks: dict[str, threading.Lock] = {}
 _bare_clone_locks_mu = threading.Lock()
@@ -311,15 +346,41 @@ def _pin_jinja2(pip: str) -> None:
         )
 
 
-def setup_venv(venv_dir: str, repo_dir: str) -> None:
-    """Create a venv and pip install the project in editable mode (if not already done)."""
+def setup_venv(
+    venv_dir: str,
+    repo_dir: str,
+    *,
+    python_bin: str = _DEFAULT_PYTHON,
+    pre_install: list[str] | None = None,
+) -> None:
+    """Create a venv and pip install the project in editable mode (if not already done).
+
+    Parameters
+    ----------
+    venv_dir:
+        Directory where the virtual environment lives (created if absent).
+    repo_dir:
+        Root of the project to install in editable mode.
+    python_bin:
+        Python interpreter to use when creating a *fresh* venv (e.g.
+        ``"python3.10"``).  Defaults to ``_DEFAULT_PYTHON`` (``"python3.11"``).
+        Ignored when reusing an existing venv whose sentinel matches.
+    pre_install:
+        Optional list of pip requirement specs to install *before* the
+        editable install (e.g. ``["setuptools<60", "numpy<1.24", "cython<3"]``).
+        When non-empty, the editable install uses ``--no-build-isolation`` so
+        the pinned packages are visible during the build.  Only applied on the
+        fresh-venv creation path.
+    """
     pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
         # F-19: Guard against a partially-built venv skeleton that has the
         # directory but not bin/pip (e.g. venv creation crashed mid-way).
-        # If pip is missing, wipe the directory so the new-venv branch below
-        # recreates it cleanly.
         if not os.path.isfile(pip):
+            shutil.rmtree(venv_dir, ignore_errors=True)
+        elif _read_sentinel(venv_dir) != python_bin:
+            # Sentinel mismatch: the venv was created with a different Python
+            # binary.  Wipe and fall through to the fresh-create path.
             shutil.rmtree(venv_dir, ignore_errors=True)
         else:
             # Venv exists from a prior run. Re-run the editable install so that C
@@ -357,8 +418,9 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
             if _needs_jinja2_pin(repo_dir):
                 _pin_jinja2(pip)
             return
+    # Fresh venv creation path.
     subprocess.run(
-        ["python3.11", "-m", "venv", venv_dir],
+        [python_bin, "-m", "venv", venv_dir],
         check=True,
         capture_output=True,
     )
@@ -370,12 +432,30 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
         text=True,
         check=True,
     )
-    subprocess.run(
-        [pip, "install", "--quiet", "-e", repo_dir],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    if pre_install:
+        # Install pinned build dependencies before the editable install so the
+        # build backend sees the correct versions.  --no-build-isolation ensures
+        # the already-installed pins are used during the build (not re-resolved
+        # from scratch inside an isolated build env).
+        subprocess.run(
+            [pip, "install", "--quiet", *pre_install],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        subprocess.run(
+            [pip, "install", "--quiet", "-e", repo_dir, "--no-build-isolation"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    else:
+        subprocess.run(
+            [pip, "install", "--quiet", "-e", repo_dir],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
     # Try common test/dev extras; ignore failures (not all packages define them).
     for extra in ("test", "tests", "dev", "testing"):
         subprocess.run(
@@ -392,6 +472,8 @@ def setup_venv(venv_dir: str, repo_dir: str) -> None:
     )
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
+    # Write the sentinel last — only after a fully successful install.
+    Path(_venv_sentinel(venv_dir)).write_text(python_bin + "\n")
 
 
 def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
