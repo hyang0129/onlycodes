@@ -1,0 +1,22 @@
+instance_id: data_engineering__dedup_event_log_priority_hard
+category: data_engineering
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/events_canonical.csv
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.csv
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - data_engineering
+  - deduplication
+  - composite_key
+  - multi_file
+  - timestamp_normalization
+  - status_precedence
+  - supersedes_chain
+  - csv
