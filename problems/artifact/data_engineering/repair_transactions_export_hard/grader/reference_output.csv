@@ -1,0 +1,488 @@
+tx_id,account_id,amount,tx_type,status,is_disputed,is_refunded,channel,notes
+T-000001,ACCT-039,823.32,transfer,pending,true,true,api,duplicate charge flagged
+T-000002,ACCT-017,842.17,withdrawal,completed,true,false,mobile,
+T-000003,ACCT-042,247.06,fee,failed,true,true,api,
+T-000006,ACCT-026,858.84,deposit,pending,false,true,api,duplicate charge flagged
+T-000007,ACCT-040,394.09,fee,failed,true,false,mobile,transfer to savings
+T-000008,ACCT-042,-186317.65,fee,pending,true,false,web,refund approved by ops
+T-000009,ACCT-033,186.95,withdrawal,failed,true,true,web,duplicate charge flagged
+T-000010,ACCT-047,467.71,transfer,pending,true,true,web,fraud alert resolved
+T-000012,ACCT-029,245.99,fee,completed,true,false,mobile,
+T-000013,ACCT-015,168188.42,deposit,failed,true,true,mobile,monthly maintenance fee
+T-000014,ACCT-006,747.79,deposit,completed,true,false,web,manual review required
+T-000015,ACCT-018,832.95,withdrawal,pending,true,false,branch,fraud alert resolved
+T-000016,ACCT-037,48235.71,fee,pending,false,false,web,ATM withdrawal
+T-000017,ACCT-038,47277.26,deposit,failed,false,true,api,scheduled payment
+T-000018,ACCT-037,307.85,deposit,failed,true,false,mobile,
+T-000019,ACCT-035,186014.94,fee,pending,true,true,api,
+T-000020,ACCT-022,-78313.13,deposit,pending,true,false,web,ATM withdrawal
+T-000021,ACCT-017,93465.77,fee,completed,false,false,branch,manual review required
+T-000022,ACCT-012,454.11,transfer,failed,false,false,web,wire transfer to vendor
+T-000023,ACCT-043,64684.62,fee,completed,true,false,mobile,
+T-000024,ACCT-002,108813.50,fee,pending,false,true,branch,
+T-000025,ACCT-010,38472.37,withdrawal,failed,true,true,mobile,scheduled payment
+T-000026,ACCT-006,297.45,transfer,completed,false,true,branch,customer-requested refund
+T-000028,ACCT-005,429.26,transfer,failed,false,true,branch,monthly maintenance fee
+T-000032,ACCT-012,836.22,fee,pending,false,false,api,duplicate charge flagged
+T-000034,ACCT-046,870.44,transfer,pending,true,true,branch,scheduled payment
+T-000035,ACCT-006,200084.70,withdrawal,pending,false,true,api,ATM withdrawal
+T-000036,ACCT-020,57.37,fee,pending,true,true,web,
+T-000037,ACCT-002,90696.70,withdrawal,failed,false,true,branch,refund approved by ops
+T-000038,ACCT-025,682.19,withdrawal,failed,true,false,api,
+T-000039,ACCT-041,622.75,withdrawal,pending,false,false,mobile,scheduled payment
+T-000040,ACCT-044,900.74,withdrawal,completed,true,false,api,
+T-000041,ACCT-039,908.92,withdrawal,failed,false,true,web,
+T-000042,ACCT-001,190831.84,deposit,completed,false,false,mobile,scheduled payment
+T-000043,ACCT-045,609.76,withdrawal,failed,true,true,api,transfer to savings
+T-000044,ACCT-010,220.98,fee,completed,true,true,mobile,refund approved by ops
+T-000045,ACCT-006,151354.55,transfer,completed,false,false,mobile,
+T-000046,ACCT-049,86759.17,withdrawal,pending,true,true,api,
+T-000047,ACCT-015,132.46,fee,pending,true,true,branch,
+T-000049,ACCT-041,206358.74,fee,completed,true,true,mobile,transfer to savings
+T-000050,ACCT-033,986.99,deposit,pending,false,true,api,
+T-000051,ACCT-035,22629.17,withdrawal,failed,false,true,api,transfer to savings
+T-000053,ACCT-029,143.44,fee,completed,false,true,web,
+T-000055,ACCT-044,855.07,withdrawal,completed,false,false,branch,
+T-000056,ACCT-041,473.46,withdrawal,pending,true,true,mobile,transfer to savings
+T-000062,ACCT-017,620.96,deposit,failed,true,false,api,
+T-000063,ACCT-029,225679.58,transfer,pending,false,false,api,customer-requested refund
+T-000064,ACCT-007,334.98,deposit,failed,true,true,mobile,
+T-000065,ACCT-037,101.10,withdrawal,pending,false,true,branch,wire transfer to vendor
+T-000067,ACCT-027,277.61,deposit,failed,true,false,web,
+T-000068,ACCT-016,444.94,withdrawal,pending,false,false,api,manual review required
+T-000069,ACCT-013,858.45,withdrawal,pending,true,false,mobile,refund approved by ops
+T-000070,ACCT-036,694.40,fee,completed,true,true,api,ATM withdrawal
+T-000071,ACCT-038,30.24,fee,completed,false,true,web,ATM withdrawal
+T-000072,ACCT-005,128712.34,withdrawal,failed,true,false,branch,manual review required
+T-000075,ACCT-004,505.24,fee,completed,true,false,api,
+T-000076,ACCT-018,5410.35,deposit,pending,false,true,api,
+T-000077,ACCT-007,542.22,transfer,failed,true,false,api,fraud alert resolved
+T-000079,ACCT-017,450.59,withdrawal,pending,true,true,web,
+T-000080,ACCT-029,915.47,withdrawal,pending,true,true,web,transfer to savings
+T-000081,ACCT-040,695.14,withdrawal,completed,true,true,web,fraud alert resolved
+T-000082,ACCT-048,207603.09,deposit,failed,false,true,web,
+T-000083,ACCT-017,176.26,fee,failed,true,true,mobile,
+T-000086,ACCT-028,35027.71,withdrawal,completed,false,false,web,refund approved by ops
+T-000088,ACCT-003,788.43,transfer,completed,false,false,mobile,
+T-000089,ACCT-041,79337.96,fee,failed,false,true,api,scheduled payment
+T-000090,ACCT-049,50.54,deposit,failed,true,false,mobile,customer-requested refund
+T-000092,ACCT-050,474.14,fee,failed,true,false,mobile,
+T-000093,ACCT-036,21.50,deposit,failed,false,false,web,ATM withdrawal
+T-000094,ACCT-026,274.08,transfer,failed,true,false,mobile,
+T-000095,ACCT-041,615.58,transfer,pending,true,false,web,
+T-000096,ACCT-038,105189.53,deposit,completed,true,true,mobile,transfer to savings
+T-000097,ACCT-017,231998.63,fee,failed,true,false,api,duplicate charge flagged
+T-000098,ACCT-003,844.46,withdrawal,pending,false,false,api,
+T-000100,ACCT-004,38377.16,transfer,completed,false,false,branch,wire transfer to vendor
+T-000101,ACCT-049,-762.52,transfer,completed,true,true,api,
+T-000102,ACCT-038,130638.56,fee,failed,false,true,mobile,transfer to savings
+T-000104,ACCT-009,37614.68,withdrawal,completed,false,true,api,
+T-000105,ACCT-013,943.94,fee,failed,true,false,branch,duplicate charge flagged
+T-000106,ACCT-007,307.85,transfer,pending,true,false,mobile,wire transfer to vendor
+T-000107,ACCT-033,453.33,withdrawal,completed,true,true,mobile,refund approved by ops
+T-000108,ACCT-034,784.72,deposit,completed,true,false,web,
+T-000109,ACCT-016,80964.24,withdrawal,failed,true,false,mobile,
+T-000110,ACCT-031,-563.76,transfer,completed,true,true,api,
+T-000111,ACCT-005,-107202.23,withdrawal,completed,false,false,api,transfer to savings
+T-000112,ACCT-024,5.74,transfer,failed,false,true,api,
+T-000114,ACCT-029,146230.83,withdrawal,completed,true,false,mobile,
+T-000116,ACCT-041,-292.88,withdrawal,failed,false,false,api,
+T-000117,ACCT-024,643.56,deposit,pending,true,true,web,
+T-000118,ACCT-041,569.67,fee,completed,false,true,branch,monthly maintenance fee
+T-000119,ACCT-004,863.45,transfer,pending,true,false,web,
+T-000120,ACCT-004,893.70,fee,completed,false,false,web,ATM withdrawal
+T-000121,ACCT-034,413.97,withdrawal,pending,false,false,web,wire transfer to vendor
+T-000123,ACCT-017,-823.22,deposit,completed,true,true,branch,duplicate charge flagged
+T-000124,ACCT-020,532.03,transfer,completed,false,true,api,transfer to savings
+T-000125,ACCT-020,2353.33,fee,completed,true,false,api,scheduled payment
+T-000126,ACCT-049,192563.00,deposit,completed,false,true,api,
+T-000128,ACCT-001,888.63,fee,pending,false,true,mobile,manual review required
+T-000129,ACCT-010,189151.78,withdrawal,pending,true,true,mobile,scheduled payment
+T-000130,ACCT-020,697.36,withdrawal,failed,false,false,api,
+T-000131,ACCT-008,413.86,withdrawal,pending,true,true,mobile,
+T-000132,ACCT-017,94.45,deposit,pending,true,true,web,
+T-000133,ACCT-017,583.91,withdrawal,pending,false,false,api,
+T-000134,ACCT-014,376.03,fee,completed,false,false,branch,duplicate charge flagged
+T-000135,ACCT-005,224.48,deposit,completed,false,true,branch,scheduled payment
+T-000138,ACCT-036,-544.73,withdrawal,failed,true,true,web,manual review required
+T-000139,ACCT-010,787.68,withdrawal,failed,false,true,api,transfer to savings
+T-000140,ACCT-013,-61400.57,deposit,pending,false,true,branch,refund approved by ops
+T-000141,ACCT-032,68996.32,deposit,failed,true,true,api,manual review required
+T-000142,ACCT-038,395.92,transfer,pending,true,true,api,
+T-000144,ACCT-043,199326.89,deposit,completed,false,true,api,
+T-000145,ACCT-022,839.86,transfer,pending,true,false,mobile,
+T-000147,ACCT-050,83067.90,withdrawal,completed,true,true,web,customer-requested refund
+T-000148,ACCT-009,163.54,withdrawal,pending,true,false,web,fraud alert resolved
+T-000149,ACCT-029,230.07,withdrawal,failed,true,true,mobile,duplicate charge flagged
+T-000150,ACCT-033,134411.38,withdrawal,failed,false,true,mobile,customer-requested refund
+T-000152,ACCT-047,104.10,transfer,pending,false,false,api,manual review required
+T-000153,ACCT-015,381.39,transfer,failed,false,true,web,transfer to savings
+T-000154,ACCT-037,-58791.40,transfer,failed,true,true,web,
+T-000156,ACCT-048,21048.19,fee,completed,false,false,web,transfer to savings
+T-000157,ACCT-002,-617.55,withdrawal,pending,false,true,mobile,
+T-000158,ACCT-024,895.64,fee,completed,false,true,web,wire transfer to vendor
+T-000160,ACCT-017,654.09,withdrawal,failed,false,true,api,fraud alert resolved
+T-000161,ACCT-014,491.86,withdrawal,pending,true,true,web,scheduled payment
+T-000162,ACCT-023,52.23,withdrawal,pending,false,true,api,transfer to savings
+T-000164,ACCT-037,-179451.42,transfer,failed,true,false,api,scheduled payment
+T-000165,ACCT-019,418.59,transfer,failed,false,false,api,fraud alert resolved
+T-000166,ACCT-023,22228.65,deposit,failed,true,true,api,
+T-000167,ACCT-011,196702.98,transfer,pending,true,false,api,
+T-000168,ACCT-013,-27632.67,transfer,completed,false,true,mobile,wire transfer to vendor
+T-000170,ACCT-035,57.70,fee,pending,false,true,api,
+T-000171,ACCT-021,535.43,deposit,pending,false,true,api,customer-requested refund
+T-000172,ACCT-033,930.66,withdrawal,failed,false,false,branch,
+T-000173,ACCT-044,877.62,transfer,completed,false,true,mobile,scheduled payment
+T-000174,ACCT-040,272.97,transfer,failed,false,false,mobile,
+T-000177,ACCT-047,349.63,deposit,completed,true,false,mobile,duplicate charge flagged
+T-000178,ACCT-016,-131201.04,transfer,completed,false,false,web,
+T-000179,ACCT-025,161.32,withdrawal,pending,false,false,mobile,
+T-000180,ACCT-045,430.90,fee,completed,true,false,branch,
+T-000183,ACCT-048,806.19,transfer,completed,false,true,branch,
+T-000184,ACCT-040,128.85,withdrawal,failed,true,false,mobile,customer-requested refund
+T-000186,ACCT-013,622.66,fee,failed,true,false,mobile,
+T-000187,ACCT-009,119843.45,fee,completed,false,false,web,
+T-000188,ACCT-037,-680.06,transfer,pending,true,true,mobile,ATM withdrawal
+T-000189,ACCT-039,50386.96,transfer,completed,true,true,mobile,
+T-000191,ACCT-037,75642.57,transfer,pending,true,true,api,
+T-000192,ACCT-049,669.80,transfer,completed,false,true,mobile,
+T-000194,ACCT-042,390.19,transfer,failed,true,false,web,
+T-000195,ACCT-033,165895.68,transfer,failed,false,true,api,
+T-000196,ACCT-026,322.23,withdrawal,completed,true,true,branch,ATM withdrawal
+T-000197,ACCT-019,80.22,withdrawal,completed,true,true,web,refund approved by ops
+T-000198,ACCT-001,10.27,transfer,completed,true,true,branch,
+T-000199,ACCT-029,314.49,fee,completed,false,false,mobile,
+T-000201,ACCT-008,854.79,fee,pending,false,true,mobile,duplicate charge flagged
+T-000202,ACCT-029,0.00,fee,pending,true,false,web,customer-requested refund
+T-000203,ACCT-017,184641.41,deposit,failed,false,true,branch,
+T-000204,ACCT-006,361.61,fee,completed,true,true,branch,
+T-000205,ACCT-013,107672.59,deposit,completed,false,true,branch,fraud alert resolved
+T-000207,ACCT-040,605.58,withdrawal,completed,true,true,web,transfer to savings
+T-000208,ACCT-025,505.66,deposit,completed,true,true,branch,monthly maintenance fee
+T-000209,ACCT-021,681.19,transfer,failed,false,true,api,manual review required
+T-000210,ACCT-017,968.55,withdrawal,pending,false,false,web,ATM withdrawal
+T-000211,ACCT-037,930.50,transfer,pending,true,true,web,monthly maintenance fee
+T-000214,ACCT-039,407.70,transfer,pending,true,false,api,monthly maintenance fee
+T-000215,ACCT-022,34509.47,deposit,pending,false,true,branch,refund approved by ops
+T-000216,ACCT-010,11.28,transfer,failed,false,true,api,
+T-000217,ACCT-035,48912.54,deposit,pending,true,false,api,refund approved by ops
+T-000219,ACCT-023,-167.32,withdrawal,pending,false,true,web,manual review required
+T-000220,ACCT-041,245969.28,deposit,failed,false,true,api,monthly maintenance fee
+T-000221,ACCT-029,115854.75,deposit,pending,true,false,mobile,
+T-000223,ACCT-048,173.55,fee,failed,false,true,web,scheduled payment
+T-000225,ACCT-037,411.15,fee,pending,false,true,web,
+T-000226,ACCT-045,172.22,withdrawal,completed,true,true,api,
+T-000227,ACCT-028,937.01,fee,failed,false,true,api,
+T-000228,ACCT-019,716.40,deposit,completed,true,true,web,
+T-000229,ACCT-021,641.09,transfer,failed,true,false,api,transfer to savings
+T-000230,ACCT-020,689.91,fee,pending,false,false,api,
+T-000231,ACCT-044,15.55,deposit,completed,true,false,web,
+T-000232,ACCT-020,159.12,fee,completed,false,true,web,
+T-000233,ACCT-044,291.92,deposit,pending,false,true,web,
+T-000234,ACCT-040,446.65,transfer,failed,true,true,web,
+T-000235,ACCT-023,229.82,fee,completed,false,false,mobile,fraud alert resolved
+T-000236,ACCT-035,861.21,withdrawal,pending,true,false,mobile,
+T-000238,ACCT-013,9.21,deposit,failed,true,false,api,fraud alert resolved
+T-000239,ACCT-043,831.78,fee,completed,true,false,api,fraud alert resolved
+T-000240,ACCT-010,653.53,withdrawal,pending,false,false,mobile,
+T-000241,ACCT-040,362.08,transfer,pending,true,false,branch,
+T-000242,ACCT-036,455.59,deposit,pending,true,false,api,scheduled payment
+T-000243,ACCT-033,260.76,deposit,pending,true,true,api,fraud alert resolved
+T-000244,ACCT-039,0.00,fee,failed,false,true,web,
+T-000245,ACCT-030,3696.33,withdrawal,completed,false,false,api,
+T-000246,ACCT-032,567.77,fee,failed,false,false,branch,monthly maintenance fee
+T-000247,ACCT-018,210.35,deposit,failed,true,true,branch,
+T-000249,ACCT-040,215003.23,withdrawal,completed,false,false,mobile,refund approved by ops
+T-000250,ACCT-016,61138.04,deposit,failed,false,true,api,
+T-000251,ACCT-008,95.95,transfer,pending,false,false,web,
+T-000252,ACCT-011,14311.96,withdrawal,pending,true,false,api,
+T-000253,ACCT-016,172760.68,withdrawal,pending,true,true,web,duplicate charge flagged
+T-000254,ACCT-015,8215.33,withdrawal,failed,false,false,web,
+T-000255,ACCT-040,368.11,transfer,pending,false,false,mobile,
+T-000256,ACCT-029,631.88,withdrawal,pending,true,true,mobile,
+T-000257,ACCT-010,792.56,transfer,completed,false,false,web,monthly maintenance fee
+T-000258,ACCT-012,610.10,withdrawal,failed,true,true,api,manual review required
+T-000259,ACCT-035,224122.89,deposit,failed,false,true,web,ATM withdrawal
+T-000260,ACCT-044,374.37,withdrawal,completed,false,true,web,wire transfer to vendor
+T-000261,ACCT-026,49.17,fee,pending,false,false,web,
+T-000262,ACCT-038,222.41,fee,completed,false,true,api,ATM withdrawal
+T-000263,ACCT-022,471.51,withdrawal,pending,true,true,mobile,
+T-000264,ACCT-046,301.97,transfer,failed,true,false,web,scheduled payment
+T-000265,ACCT-017,42.07,withdrawal,failed,true,false,mobile,customer-requested refund
+T-000266,ACCT-042,767.87,transfer,failed,false,true,api,fraud alert resolved
+T-000268,ACCT-049,528.44,deposit,pending,false,false,web,customer-requested refund
+T-000269,ACCT-015,838.81,fee,failed,true,false,branch,transfer to savings
+T-000270,ACCT-011,34.95,deposit,failed,false,true,mobile,ATM withdrawal
+T-000271,ACCT-019,840.22,fee,completed,false,false,mobile,wire transfer to vendor
+T-000273,ACCT-039,121.64,withdrawal,completed,false,true,branch,scheduled payment
+T-000274,ACCT-039,19477.63,transfer,failed,false,false,web,refund approved by ops
+T-000276,ACCT-011,186601.56,withdrawal,completed,false,true,web,
+T-000278,ACCT-015,390.90,transfer,completed,true,true,branch,transfer to savings
+T-000279,ACCT-043,689.87,transfer,pending,true,true,web,customer-requested refund
+T-000280,ACCT-047,14754.22,deposit,completed,true,false,api,
+T-000281,ACCT-013,588.57,deposit,completed,true,false,branch,
+T-000282,ACCT-046,453.78,deposit,completed,false,true,mobile,wire transfer to vendor
+T-000283,ACCT-018,238055.79,deposit,failed,false,false,mobile,duplicate charge flagged
+T-000284,ACCT-028,431.72,fee,pending,false,true,branch,
+T-000285,ACCT-008,-28490.80,fee,failed,true,true,mobile,transfer to savings
+T-000287,ACCT-036,-639.29,fee,pending,true,false,api,
+T-000289,ACCT-034,-895.59,transfer,pending,false,true,mobile,
+T-000290,ACCT-026,865.72,transfer,pending,false,false,web,
+T-000291,ACCT-038,415.08,withdrawal,completed,true,true,mobile,
+T-000294,ACCT-005,16.05,deposit,completed,false,true,mobile,
+T-000295,ACCT-039,0.00,deposit,pending,true,false,web,
+T-000296,ACCT-015,134.73,deposit,pending,true,true,mobile,scheduled payment
+T-000297,ACCT-035,-33680.81,withdrawal,completed,false,false,api,
+T-000298,ACCT-044,726.96,deposit,pending,false,true,api,transfer to savings
+T-000299,ACCT-038,559.17,deposit,pending,false,false,api,
+T-000300,ACCT-005,270.95,fee,completed,true,true,api,
+T-000301,ACCT-048,79.67,deposit,failed,false,false,web,customer-requested refund
+T-000302,ACCT-023,-347.39,deposit,pending,true,true,web,customer-requested refund
+T-000303,ACCT-008,519.28,fee,failed,true,true,api,customer-requested refund
+T-000304,ACCT-004,-136391.14,deposit,completed,false,false,api,
+T-000305,ACCT-048,-142607.48,transfer,pending,true,false,mobile,
+T-000306,ACCT-001,210822.20,fee,pending,true,false,api,
+T-000307,ACCT-047,707.59,transfer,failed,false,false,api,fraud alert resolved
+T-000308,ACCT-025,158647.53,withdrawal,pending,false,true,api,transfer to savings
+T-000309,ACCT-014,541.12,transfer,completed,false,false,web,
+T-000310,ACCT-045,302.68,transfer,completed,true,false,web,ATM withdrawal
+T-000311,ACCT-041,186333.29,transfer,completed,true,true,web,monthly maintenance fee
+T-000314,ACCT-025,381.83,fee,completed,true,false,web,duplicate charge flagged
+T-000315,ACCT-050,341.55,withdrawal,failed,true,false,api,duplicate charge flagged
+T-000316,ACCT-017,659.51,withdrawal,failed,true,false,branch,ATM withdrawal
+T-000317,ACCT-006,259.20,fee,pending,false,true,branch,fraud alert resolved
+T-000318,ACCT-009,893.57,withdrawal,failed,true,false,api,manual review required
+T-000319,ACCT-003,946.57,fee,completed,true,false,web,scheduled payment
+T-000320,ACCT-037,231583.03,withdrawal,completed,false,true,mobile,refund approved by ops
+T-000321,ACCT-001,722.48,withdrawal,failed,true,false,mobile,monthly maintenance fee
+T-000322,ACCT-001,538.57,withdrawal,completed,false,true,web,wire transfer to vendor
+T-000324,ACCT-035,0.00,deposit,failed,false,true,branch,scheduled payment
+T-000325,ACCT-036,99521.55,fee,completed,false,false,branch,wire transfer to vendor
+T-000327,ACCT-030,163.67,fee,completed,false,true,mobile,
+T-000328,ACCT-009,939.66,transfer,completed,false,false,mobile,fraud alert resolved
+T-000329,ACCT-034,149632.98,fee,pending,true,true,api,customer-requested refund
+T-000330,ACCT-009,234.57,transfer,completed,true,false,branch,
+T-000331,ACCT-006,247845.08,deposit,pending,true,true,api,
+T-000332,ACCT-027,-8166.23,transfer,pending,true,false,web,refund approved by ops
+T-000333,ACCT-003,21318.93,deposit,failed,false,true,web,transfer to savings
+T-000334,ACCT-022,290.29,transfer,completed,true,true,mobile,scheduled payment
+T-000335,ACCT-015,220488.31,deposit,pending,false,true,branch,scheduled payment
+T-000336,ACCT-003,305.87,fee,completed,true,true,api,scheduled payment
+T-000337,ACCT-035,558.28,withdrawal,completed,false,true,branch,customer-requested refund
+T-000338,ACCT-003,0.00,withdrawal,failed,true,false,web,wire transfer to vendor
+T-000339,ACCT-030,811.66,fee,completed,false,false,web,duplicate charge flagged
+T-000340,ACCT-032,353.44,fee,completed,true,false,api,transfer to savings
+T-000341,ACCT-050,519.21,fee,completed,false,true,mobile,
+T-000344,ACCT-034,59472.41,deposit,completed,true,true,api,manual review required
+T-000345,ACCT-013,268.81,deposit,failed,false,true,api,manual review required
+T-000346,ACCT-043,308.51,fee,pending,true,true,mobile,ATM withdrawal
+T-000347,ACCT-024,421.37,transfer,completed,true,false,web,scheduled payment
+T-000349,ACCT-046,247.23,fee,completed,true,true,web,
+T-000350,ACCT-049,78783.83,withdrawal,failed,true,true,mobile,
+T-000351,ACCT-013,143083.60,withdrawal,pending,false,true,api,
+T-000352,ACCT-045,978.68,deposit,completed,false,true,mobile,
+T-000353,ACCT-045,761.38,deposit,completed,true,false,api,scheduled payment
+T-000354,ACCT-050,3984.92,deposit,failed,false,true,api,monthly maintenance fee
+T-000355,ACCT-028,471.45,deposit,pending,true,true,branch,wire transfer to vendor
+T-000357,ACCT-016,66.63,deposit,completed,true,true,web,manual review required
+T-000358,ACCT-005,221238.99,deposit,pending,false,false,branch,
+T-000359,ACCT-044,289.90,withdrawal,failed,true,true,web,fraud alert resolved
+T-000360,ACCT-043,932.95,transfer,pending,false,false,web,
+T-000361,ACCT-017,243.87,transfer,completed,true,true,mobile,wire transfer to vendor
+T-000362,ACCT-036,171.98,fee,pending,true,true,web,refund approved by ops
+T-000363,ACCT-009,304.46,transfer,pending,false,false,api,transfer to savings
+T-000364,ACCT-019,874.96,withdrawal,completed,false,false,mobile,manual review required
+T-000366,ACCT-010,-1655.45,transfer,pending,false,false,web,
+T-000367,ACCT-034,308.98,transfer,completed,true,true,branch,
+T-000368,ACCT-048,524.74,fee,failed,false,false,mobile,duplicate charge flagged
+T-000369,ACCT-033,324.05,withdrawal,pending,false,false,web,fraud alert resolved
+T-000371,ACCT-035,125623.10,withdrawal,pending,false,false,api,
+T-000372,ACCT-026,43.47,transfer,completed,true,false,mobile,
+T-000373,ACCT-035,1466.51,fee,pending,false,false,branch,
+T-000374,ACCT-045,891.92,withdrawal,failed,true,true,api,manual review required
+T-000375,ACCT-017,160022.42,deposit,failed,true,false,api,customer-requested refund
+T-000376,ACCT-004,153929.58,transfer,pending,false,true,web,refund approved by ops
+T-000377,ACCT-004,121.21,deposit,completed,true,true,web,transfer to savings
+T-000378,ACCT-029,68.26,withdrawal,completed,true,false,mobile,
+T-000379,ACCT-045,216.88,withdrawal,completed,false,true,branch,
+T-000380,ACCT-049,108293.00,withdrawal,failed,false,true,branch,customer-requested refund
+T-000381,ACCT-043,1249.43,withdrawal,pending,true,false,branch,
+T-000382,ACCT-042,340.54,deposit,pending,false,false,mobile,
+T-000383,ACCT-023,237467.37,deposit,pending,false,true,branch,
+T-000384,ACCT-017,7383.55,fee,failed,true,false,branch,
+T-000385,ACCT-049,61.17,deposit,pending,true,false,web,customer-requested refund
+T-000386,ACCT-013,233289.75,deposit,failed,false,true,api,manual review required
+T-000387,ACCT-032,239.80,fee,completed,false,true,api,customer-requested refund
+T-000388,ACCT-006,495.11,withdrawal,failed,false,true,web,scheduled payment
+T-000389,ACCT-009,131.77,deposit,pending,true,false,branch,transfer to savings
+T-000391,ACCT-017,19506.90,deposit,pending,false,false,web,manual review required
+T-000392,ACCT-020,720.95,transfer,completed,false,false,mobile,scheduled payment
+T-000393,ACCT-029,-231923.52,fee,pending,true,false,branch,manual review required
+T-000394,ACCT-006,837.17,transfer,pending,true,false,api,transfer to savings
+T-000395,ACCT-031,55.33,transfer,failed,true,true,api,
+T-000396,ACCT-031,210.36,transfer,pending,true,false,web,
+T-000399,ACCT-041,144.44,fee,completed,true,true,api,duplicate charge flagged
+T-000401,ACCT-016,-33177.16,deposit,completed,true,false,branch,
+T-000402,ACCT-047,-310.89,fee,pending,true,false,mobile,fraud alert resolved
+T-000403,ACCT-011,229228.84,fee,failed,false,true,mobile,manual review required
+T-000405,ACCT-022,213.64,withdrawal,completed,false,false,mobile,scheduled payment
+T-000406,ACCT-032,0.00,deposit,pending,true,true,branch,wire transfer to vendor
+T-000407,ACCT-029,-218877.74,fee,pending,false,false,api,
+T-000408,ACCT-026,932.37,transfer,pending,false,true,web,
+T-000409,ACCT-023,140300.23,fee,completed,false,false,web,manual review required
+T-000410,ACCT-011,67.10,withdrawal,completed,true,false,api,customer-requested refund
+T-000411,ACCT-036,218186.07,fee,completed,true,false,web,wire transfer to vendor
+T-000412,ACCT-010,784.46,fee,pending,true,false,branch,
+T-000413,ACCT-019,142484.87,transfer,failed,true,false,api,
+T-000414,ACCT-006,565.17,deposit,completed,false,true,api,refund approved by ops
+T-000416,ACCT-023,653.62,withdrawal,pending,false,true,web,ATM withdrawal
+T-000417,ACCT-046,619.15,fee,completed,true,false,api,ATM withdrawal
+T-000418,ACCT-044,76.67,deposit,failed,false,true,api,refund approved by ops
+T-000420,ACCT-043,902.41,deposit,completed,false,true,api,monthly maintenance fee
+T-000421,ACCT-035,500.56,fee,completed,true,false,branch,ATM withdrawal
+T-000422,ACCT-009,195.05,withdrawal,completed,false,true,api,
+T-000423,ACCT-033,905.15,deposit,pending,true,false,api,
+T-000424,ACCT-025,729.47,deposit,completed,false,true,mobile,
+T-000425,ACCT-003,-209901.92,deposit,pending,false,false,mobile,refund approved by ops
+T-000426,ACCT-047,486.16,withdrawal,failed,true,false,mobile,fraud alert resolved
+T-000427,ACCT-031,161846.38,transfer,completed,false,false,api,
+T-000430,ACCT-029,-858.23,transfer,pending,true,false,web,customer-requested refund
+T-000433,ACCT-008,211.84,deposit,completed,false,false,web,manual review required
+T-000434,ACCT-014,88406.39,withdrawal,failed,true,true,api,duplicate charge flagged
+T-000435,ACCT-020,850.88,transfer,completed,false,true,branch,customer-requested refund
+T-000439,ACCT-035,92945.22,fee,failed,true,false,branch,
+T-000440,ACCT-027,207.71,transfer,completed,false,false,branch,
+T-000441,ACCT-018,246746.34,fee,completed,true,false,web,manual review required
+T-000442,ACCT-044,303.44,transfer,completed,true,false,mobile,fraud alert resolved
+T-000443,ACCT-009,166273.17,deposit,completed,true,false,mobile,customer-requested refund
+T-000444,ACCT-046,285.91,transfer,pending,false,false,branch,customer-requested refund
+T-000445,ACCT-028,656.23,fee,completed,false,false,web,
+T-000446,ACCT-042,-291.69,fee,pending,true,false,api,scheduled payment
+T-000447,ACCT-031,123.58,deposit,failed,false,false,mobile,refund approved by ops
+T-000448,ACCT-011,470.06,withdrawal,failed,false,true,branch,wire transfer to vendor
+T-000449,ACCT-011,385.03,fee,pending,true,true,mobile,fraud alert resolved
+T-000453,ACCT-009,-664.66,withdrawal,completed,true,true,web,refund approved by ops
+T-000454,ACCT-044,822.31,deposit,failed,false,false,mobile,refund approved by ops
+T-000455,ACCT-031,929.16,transfer,completed,false,false,web,
+T-000456,ACCT-024,133531.83,withdrawal,pending,true,false,api,duplicate charge flagged
+T-000457,ACCT-023,255.57,withdrawal,completed,false,true,branch,wire transfer to vendor
+T-000458,ACCT-027,52599.74,deposit,completed,true,true,mobile,fraud alert resolved
+T-000459,ACCT-038,24114.06,deposit,pending,false,false,branch,transfer to savings
+T-000460,ACCT-044,141906.88,withdrawal,pending,false,false,branch,wire transfer to vendor
+T-000462,ACCT-031,416.47,transfer,pending,true,true,web,
+T-000463,ACCT-016,203.21,fee,completed,true,true,api,
+T-000464,ACCT-047,0.00,withdrawal,pending,false,true,branch,customer-requested refund
+T-000465,ACCT-031,186256.28,withdrawal,completed,true,false,mobile,monthly maintenance fee
+T-000466,ACCT-026,462.50,deposit,failed,false,false,mobile,transfer to savings
+T-000467,ACCT-044,904.54,deposit,completed,true,true,branch,wire transfer to vendor
+T-000469,ACCT-033,722.88,withdrawal,pending,true,false,mobile,
+T-000470,ACCT-006,-783.56,deposit,completed,true,false,branch,
+T-000471,ACCT-039,-695.83,transfer,pending,true,true,api,customer-requested refund
+T-000472,ACCT-046,806.82,fee,pending,true,false,mobile,wire transfer to vendor
+T-000473,ACCT-010,56418.33,withdrawal,pending,false,true,branch,
+T-000474,ACCT-042,107624.47,withdrawal,completed,false,true,mobile,wire transfer to vendor
+T-000475,ACCT-035,976.78,deposit,pending,false,true,api,duplicate charge flagged
+T-000476,ACCT-033,189753.70,deposit,completed,true,false,branch,wire transfer to vendor
+T-000477,ACCT-001,616.77,fee,pending,true,false,branch,
+T-000478,ACCT-007,448.38,transfer,completed,false,false,mobile,fraud alert resolved
+T-000479,ACCT-028,207189.84,deposit,pending,false,true,branch,wire transfer to vendor
+T-000480,ACCT-020,229617.53,withdrawal,pending,true,true,branch,
+T-000481,ACCT-004,165260.41,transfer,completed,true,false,branch,
+T-000482,ACCT-045,183130.11,fee,completed,true,false,branch,
+T-000483,ACCT-050,604.52,transfer,pending,true,true,branch,
+T-000484,ACCT-038,116.46,transfer,failed,true,false,api,manual review required
+T-000487,ACCT-017,312.96,transfer,pending,true,true,web,transfer to savings
+T-000488,ACCT-013,510.45,deposit,completed,true,false,api,transfer to savings
+T-000489,ACCT-033,126828.42,withdrawal,failed,false,true,web,
+T-000490,ACCT-034,580.55,deposit,pending,true,false,mobile,wire transfer to vendor
+T-000492,ACCT-004,578.89,fee,failed,true,false,api,customer-requested refund
+T-000493,ACCT-008,-31879.33,transfer,pending,true,false,web,ATM withdrawal
+T-000494,ACCT-041,705.40,deposit,pending,true,false,api,
+T-000495,ACCT-036,862.96,fee,failed,true,false,branch,duplicate charge flagged
+T-000496,ACCT-034,33690.41,withdrawal,failed,false,false,branch,
+T-000497,ACCT-024,192154.60,withdrawal,pending,true,false,web,duplicate charge flagged
+T-000498,ACCT-048,202023.41,fee,completed,false,false,api,transfer to savings
+T-000499,ACCT-043,25.18,deposit,completed,true,false,web,monthly maintenance fee
+T-000500,ACCT-026,898.47,withdrawal,pending,false,false,api,wire transfer to vendor
+T-000501,ACCT-029,49097.75,withdrawal,completed,true,false,mobile,monthly maintenance fee
+T-000502,ACCT-013,797.53,fee,completed,true,true,api,
+T-000503,ACCT-005,811.92,deposit,completed,true,true,api,fraud alert resolved
+T-000504,ACCT-048,-790.82,withdrawal,pending,false,true,web,
+T-000505,ACCT-017,301.46,deposit,completed,false,false,branch,manual review required
+T-000507,ACCT-031,98238.79,fee,completed,true,false,branch,customer-requested refund
+T-000508,ACCT-023,0.00,fee,completed,false,true,branch,
+T-000509,ACCT-031,204787.88,transfer,pending,false,false,mobile,
+T-000510,ACCT-033,88660.28,transfer,pending,true,true,api,
+T-000512,ACCT-014,129.88,transfer,pending,true,true,branch,duplicate charge flagged
+T-000513,ACCT-043,970.33,withdrawal,completed,false,false,mobile,duplicate charge flagged
+T-000514,ACCT-023,189159.46,fee,completed,false,false,branch,
+T-000516,ACCT-037,170.81,withdrawal,completed,false,false,mobile,refund approved by ops
+T-000517,ACCT-042,716.08,transfer,failed,false,false,web,customer-requested refund
+T-000518,ACCT-002,608.90,deposit,completed,true,true,branch,fraud alert resolved
+T-000519,ACCT-045,651.68,withdrawal,failed,false,true,branch,fraud alert resolved
+T-000520,ACCT-039,156.60,deposit,completed,false,true,mobile,ATM withdrawal
+T-000521,ACCT-026,-206.54,fee,completed,true,true,api,
+T-000523,ACCT-034,4087.80,withdrawal,failed,true,true,branch,transfer to savings
+T-000526,ACCT-040,877.36,deposit,pending,true,true,api,scheduled payment
+T-000527,ACCT-026,-160982.12,deposit,completed,false,false,api,
+T-000528,ACCT-035,161.36,withdrawal,completed,false,false,api,ATM withdrawal
+T-000529,ACCT-010,243.36,withdrawal,pending,true,false,api,refund approved by ops
+T-000530,ACCT-027,867.05,transfer,completed,true,false,branch,
+T-000531,ACCT-038,232070.80,transfer,completed,false,true,branch,ATM withdrawal
+T-000532,ACCT-005,955.87,deposit,completed,true,false,api,manual review required
+T-000533,ACCT-023,807.21,fee,pending,false,true,api,customer-requested refund
+T-000534,ACCT-012,-189.20,deposit,failed,false,true,api,
+T-000536,ACCT-021,118917.65,transfer,completed,true,false,branch,duplicate charge flagged
+T-000538,ACCT-005,-162188.41,transfer,pending,true,false,branch,transfer to savings
+T-000539,ACCT-025,136813.11,transfer,pending,true,true,api,
+T-000540,ACCT-018,150833.09,withdrawal,pending,true,false,web,transfer to savings
+T-000542,ACCT-030,336.93,withdrawal,pending,true,true,mobile,
+T-000543,ACCT-049,95.60,deposit,failed,false,true,web,customer-requested refund
+T-000544,ACCT-040,-334.04,deposit,failed,true,false,mobile,
+T-000545,ACCT-020,97991.82,transfer,pending,false,false,api,
+T-000546,ACCT-044,188.17,deposit,completed,true,false,mobile,
+T-000547,ACCT-007,340.67,withdrawal,failed,false,false,branch,duplicate charge flagged
+T-000549,ACCT-036,213915.58,transfer,pending,false,false,mobile,fraud alert resolved
+T-000550,ACCT-038,454.58,deposit,completed,true,false,api,
+T-000551,ACCT-031,220958.84,fee,pending,true,true,branch,scheduled payment
+T-000552,ACCT-032,173001.11,withdrawal,failed,true,true,branch,
+T-000554,ACCT-047,702.17,withdrawal,completed,true,true,api,manual review required
+T-000555,ACCT-038,56.90,fee,pending,true,true,branch,customer-requested refund
+T-000556,ACCT-021,87918.30,fee,pending,false,true,web,
+T-000557,ACCT-025,108310.17,withdrawal,completed,false,false,api,
+T-000558,ACCT-001,0.00,fee,pending,true,true,branch,
+T-000559,ACCT-017,597.98,withdrawal,failed,true,false,api,fraud alert resolved
+T-000560,ACCT-022,421.28,withdrawal,pending,true,true,api,duplicate charge flagged
+T-000561,ACCT-044,610.22,transfer,failed,false,false,branch,
+T-000562,ACCT-030,963.87,fee,pending,true,false,branch,
+T-000563,ACCT-030,906.01,deposit,pending,false,false,api,
+T-000565,ACCT-042,98649.80,deposit,completed,true,false,mobile,
+T-000566,ACCT-047,818.23,deposit,completed,true,false,branch,fraud alert resolved
+T-000567,ACCT-033,180873.21,deposit,completed,true,true,api,ATM withdrawal
+T-000568,ACCT-009,172348.05,transfer,pending,true,false,mobile,
+T-000569,ACCT-015,558.85,withdrawal,pending,false,true,branch,refund approved by ops
+T-000570,ACCT-003,725.96,transfer,completed,true,false,api,manual review required
+T-000573,ACCT-045,436.05,withdrawal,completed,true,false,web,monthly maintenance fee
+T-000574,ACCT-023,700.36,transfer,failed,true,true,web,
+T-000575,ACCT-037,201394.27,withdrawal,completed,true,true,mobile,
+T-000576,ACCT-048,739.21,deposit,completed,true,true,mobile,
+T-000579,ACCT-048,127301.52,fee,pending,false,true,branch,
+T-000580,ACCT-045,547.13,withdrawal,pending,true,true,mobile,customer-requested refund
+T-000581,ACCT-032,936.11,fee,pending,true,true,branch,refund approved by ops
+T-000582,ACCT-044,846.80,transfer,failed,true,false,branch,
+T-000583,ACCT-011,-50287.13,withdrawal,completed,true,false,mobile,
+T-000584,ACCT-016,586.52,withdrawal,completed,true,true,api,customer-requested refund
+T-000585,ACCT-022,783.35,withdrawal,pending,true,false,api,refund approved by ops
+T-000587,ACCT-024,4312.93,fee,completed,false,false,api,
+T-000588,ACCT-021,314.32,withdrawal,failed,true,false,web,
+T-000589,ACCT-033,172835.81,withdrawal,completed,true,false,api,
+T-000590,ACCT-012,220.69,fee,pending,false,true,branch,monthly maintenance fee
+T-000592,ACCT-002,-30211.93,withdrawal,pending,true,false,api,
+T-000593,ACCT-034,884.90,transfer,completed,true,false,web,scheduled payment
+T-000594,ACCT-027,884.45,withdrawal,pending,true,true,mobile,refund approved by ops
+T-000595,ACCT-003,-219268.90,deposit,completed,true,false,mobile,manual review required
+T-000596,ACCT-025,52688.15,transfer,failed,false,false,api,wire transfer to vendor
+T-000597,ACCT-023,205739.61,fee,failed,false,true,api,
+T-000598,ACCT-048,642.91,deposit,completed,true,true,branch,scheduled payment
+T-000599,ACCT-015,159747.35,deposit,pending,false,false,api,
+T-000600,ACCT-026,183249.72,withdrawal,completed,false,false,mobile,refund approved by ops
