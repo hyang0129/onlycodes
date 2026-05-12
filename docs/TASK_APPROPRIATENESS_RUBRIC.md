@@ -44,7 +44,7 @@ Each axis is scored 0, 1, 2, or 3. Anchors:
 
 Does the task look like a recognizable **slice** of a DS workflow — load / inspect / clean / transform / aggregate / model / summarize? A high score does not require the full pipeline; it requires that the slice is recognizable and substantive.
 
-- **0** — No data-shaped input at all. The "input" is an abstract mathematical object (a graph, a list of integers, a problem specification). Nothing to load, inspect, or shape.
+- **0** — No data-shaped input at all. The "input" is an abstract mathematical object (a graph, a list of integers, a problem specification). Nothing to load, inspect, or shape. *Note: loading from a JSON or CSV file does not by itself promote the score — what matters is whether the content is a domain-shaped record (rows with named columns representing real entities) or an abstract mathematical object (weights, values, adjacency lists, etc.).*
 - **1** — Trivially shaped input that goes straight into a single computation. Load + one-line compute + return. No reading, joining, reshaping, or aggregation worth the name.
 - **2** — Recognizable slice of a DS workflow: load + at least one shaping / aggregating / filtering / fitting step that a practitioner would describe as "the analysis". A scalar or small structured return is fine.
 - **3** — Same as 2, but the slice involves multiple coordinated steps (e.g. join across files, then aggregate, then rank; or clean + transform + fit) such that an analyst would naturally describe the work in stages.
@@ -62,7 +62,7 @@ How closely does the input data resemble data a practitioner sees on the job?
 
 How much execution judgment does the agent need to apply? Note that **delegation usually comes with a dictated approach** — the practitioner has already decided which method they want, and the agent's job is faithful execution under that spec. Score this axis on *execution-time* judgment, not methodological autonomy.
 
-- **0** — The "task" is so abstract that no judgment about real data is involved. Just implement an algorithm on synthetic inputs.
+- **0** — The "task" is so abstract that no judgment about real data is involved. Just implement an algorithm on abstract inputs (weights, values, graph edges, combinatorial objects). If A1 is 0, A3 is almost always 0.
 - **1** — Faithful execution of a specified method on specified data. The agent must read the spec carefully and translate it to code, including handling the schema correctly and respecting tolerances / edge-case rules stated in the prompt.
 - **2** — Specified method, but the agent has to handle real shaping decisions: which rows count, how to break ties, how to handle missing or malformed entries that the spec didn't fully pin down.
 - **3** — Multiple substantive decisions the prompt leaves open: choice of join strategy, fillna policy, model family, significance test, or scoping what "the answer" even means.
