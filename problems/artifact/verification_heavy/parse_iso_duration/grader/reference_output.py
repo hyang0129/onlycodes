@@ -1,4 +1,4 @@
-"""Reference implementation of parse_iso_duration for algorithmic__parse_iso_duration.
+"""Reference implementation of parse_iso_duration for verification_heavy__parse_iso_duration.
 
 This file is copied verbatim to output/solution.py by verify_graders.py and
 by the hidden grader when seeding the reference check.
