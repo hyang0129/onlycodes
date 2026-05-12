@@ -128,19 +128,19 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"row count mismatch: expected {len(expected)} rows, got {len(agent_rows)}",
+            f"row count mismatch: got {len(agent_rows)} rows",
         )
 
     for i, (row, exp) in enumerate(zip(agent_rows, expected), start=1):
         if len(row) != 5:
             return GradeResult(
-                False, 0.0, f"row {i}: expected 5 fields, got {len(row)}"
+                False, 0.0, f"row {i}: got {len(row)} fields, need 5"
             )
         if row != exp:
             return GradeResult(
                 False,
                 0.0,
-                f"row {i}: agent={row} expected={exp}",
+                f"row {i}: values disagree: got {row}",
             )
 
     return GradeResult(

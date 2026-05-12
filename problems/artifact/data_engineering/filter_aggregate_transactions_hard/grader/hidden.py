@@ -186,7 +186,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"row count mismatch: expected {len(expected)} rows (one per sector), got {len(agent_rows)}",
+            f"row count mismatch: got {len(agent_rows)} rows (one per sector is correct)",
         )
 
     for i, (row, exp) in enumerate(zip(agent_rows, expected), start=1):
@@ -200,7 +200,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"row {i}: sector {sector!r} does not match expected sort order (expected {exp['sector']!r})",
+                f"row {i}: sector {sector!r} is out of sort order",
             )
 
         try:

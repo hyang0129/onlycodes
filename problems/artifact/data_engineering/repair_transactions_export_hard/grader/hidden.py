@@ -179,13 +179,13 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"row count mismatch: expected {len(expected)} rows, got {len(agent_rows)}",
+            f"row count mismatch: got {len(agent_rows)} rows",
         )
 
     for i, (row, exp) in enumerate(zip(agent_rows, expected), start=1):
         if len(row) != 9:
             return GradeResult(
-                False, 0.0, f"row {i}: expected 9 fields, got {len(row)}"
+                False, 0.0, f"row {i}: got {len(row)} fields, need 9"
             )
 
         # Compare every field except amount as exact strings.
@@ -196,7 +196,7 @@ def grade(scratch_dir: Path) -> GradeResult:
                 return GradeResult(
                     False,
                     0.0,
-                    f"row {i} ({row[0]}): field {name} agent={row[j]!r} expected={exp[j]!r}",
+                    f"row {i} ({row[0]}): field {name!r} is wrong: got {row[j]!r}",
                 )
 
         # Amount: parse + tolerance, plus 2-decimal format check.
@@ -219,7 +219,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"row {i} ({row[0]}): amount disagrees agent={agent_amt_str} expected={exp_amt_str}",
+                f"row {i} ({row[0]}): amount {agent_amt_str!r} is wrong",
             )
 
     return GradeResult(

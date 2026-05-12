@@ -120,7 +120,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"row count mismatch: expected {len(expected)} rows (one per category), got {len(agent_rows)}",
+            f"row count mismatch: got {len(agent_rows)} rows (one per category is correct)",
         )
 
     for i, (row, exp) in enumerate(zip(agent_rows, expected), start=1):
@@ -134,7 +134,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"row {i}: category {cat!r} out of expected alphabetical order (expected {exp['category']!r})",
+                f"row {i}: category {cat!r} is out of alphabetical order",
             )
 
         try:
