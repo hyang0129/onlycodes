@@ -357,7 +357,7 @@ def _setup_problem(problem: Problem, clone_base: str) -> tuple[str, str]:
     # Strip history so the agent cannot recover the upstream fix via git log.
     # Safe to do here: this clone is thrown away after the run.
     strip_git_history(repo_dir)
-    setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem.repo_slug))
+    setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem))
     return repo_dir, venv_dir
 
 
@@ -411,7 +411,7 @@ def _setup_problem_cached(
         # setup_venv call that scrub_cache_dir later removed).
         git_reset(lower, problem.base_commit)
         shutil.rmtree(venv_dir, ignore_errors=True)
-        setup_venv(venv_dir, lower, **_venv_kwargs(problem.repo_slug))
+        setup_venv(venv_dir, lower, **_venv_kwargs(problem))
         scrub_cache_dir(lower)
         write_lockfile(venv_dir, lockfile)
 

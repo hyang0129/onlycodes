@@ -111,7 +111,7 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
         venv_dir = paths["venv"]
         if force and Path(venv_dir).exists():
             shutil.rmtree(venv_dir, ignore_errors=True)
-        setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem.repo_slug))
+        setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem))
 
         # 5. Scrub transient artifacts
         scrub_cache_dir(repo_dir)

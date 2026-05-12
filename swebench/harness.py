@@ -26,19 +26,71 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # scikit-learn 0.20–0.22: pins required before `pip install -e .`
     "scikit-learn/scikit-learn": ["setuptools<60", "numpy<1.24", "cython<3"],
     # matplotlib 3.1 era: numpy 2.x ABI break + old setuptools/cython
-    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3"],
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6"],
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance overrides (take precedence over repo-level entries above)
+# ---------------------------------------------------------------------------
+# Use instance_id as the key (format: <category>__<slug>).
+# An absent key → fall through to the repo-level table.
+# An explicit [] (empty list) → suppress the repo-level pin for this instance.
+
+_INSTANCE_PYTHON: dict[str, str] = {
+    # astropy 3.x era (2018): uses collections.MutableSequence removed in 3.10+
+    "astropy__astropy-6938": "python3.9",
+}
+
+_INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
+    # astropy 3.x era (2018): setuptools.dep_util removed in setuptools 71
+    "astropy__astropy-6938":  ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    # astropy 5.x era (2022): same issue
+    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
+    # repo-level setuptools<65 is too old for this version's pyproject.toml build.
+    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
+}
+
+# ---------------------------------------------------------------------------
+# Slug → top-level importable module name (for smoke-import checks)
+# ---------------------------------------------------------------------------
+# Only repos in datasci-mini are listed — unknown repos are silently skipped.
+
+_TOPLEVEL_MODULE: dict[str, str] = {
+    "scikit-learn/scikit-learn": "sklearn",
+    "matplotlib/matplotlib":     "matplotlib",
+    "astropy/astropy":           "astropy",
+    "pandas-dev/pandas":         "pandas",
+    "numpy/numpy":               "numpy",
+    "sympy/sympy":               "sympy",
 }
 
 
-def _venv_kwargs(repo_slug: str) -> dict:
-    """Per-repo overrides for ``setup_venv()``, suitable for ``**``-unpacking.
+def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
+    """Per-instance + per-repo overrides for ``setup_venv()``, ``**``-unpackable.
 
-    Centralised here so every caller of ``setup_venv`` (``run.py``,
-    ``cache_cli.py``, …) routes through the same lookup tables.
+    Lookup precedence (highest → lowest):
+      1. ``_INSTANCE_PRE_INSTALL`` / ``_INSTANCE_PYTHON`` keyed by ``instance_id``
+      2. ``_REPO_PRE_INSTALL`` / ``_REPO_PYTHON`` keyed by ``repo_slug``
+      3. Built-in defaults (``_DEFAULT_PYTHON``, no pre-install pins)
+
+    An explicit ``[]`` in an instance table suppresses the repo-level pin for
+    that instance (distinct from an absent key which falls through).
+
+    Also passes ``repo_slug`` through so ``setup_venv`` can call ``_smoke_import``.
     """
+    pre = _INSTANCE_PRE_INSTALL.get(problem.instance_id)
+    if pre is None:
+        pre = _REPO_PRE_INSTALL.get(problem.repo_slug)
+    python_bin = _INSTANCE_PYTHON.get(
+        problem.instance_id,
+        _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
+    )
     return {
-        "python_bin": _REPO_PYTHON.get(repo_slug, _DEFAULT_PYTHON),
-        "pre_install": _REPO_PRE_INSTALL.get(repo_slug),
+        "python_bin": python_bin,
+        "pre_install": pre,
+        "repo_slug": problem.repo_slug,
     }
 
 # Sentinel file written inside the venv dir to record which python binary
@@ -358,12 +410,41 @@ def _pin_jinja2(pip: str) -> None:
         )
 
 
+def _smoke_import(venv_dir: str, repo_slug: str) -> None:
+    """Confirm the installed package actually imports cleanly.
+
+    ``pip install -e .`` can return exit 0 even when C extensions silently bind
+    to the wrong numpy ABI (e.g. matplotlib 3.1 built against numpy 1.x, then
+    numpy 2 installed later).  The failure surfaces only at import time.
+
+    Only runs when ``repo_slug`` is in ``_TOPLEVEL_MODULE``; unknown repos are
+    silently skipped to avoid spurious failures.
+
+    Raises ``RuntimeError`` on a non-zero import exit so the sentinel is never
+    written and the next ``setup_venv`` call rebuilds from scratch.
+    """
+    module = _TOPLEVEL_MODULE.get(repo_slug)
+    if not module:
+        return  # unknown repo — skip rather than fail spuriously
+    python = os.path.join(venv_dir, "bin", "python")
+    result = subprocess.run(
+        [python, "-c", f"import {module}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"venv smoke-import of `{module}` failed:\n{result.stderr}"
+        )
+
+
 def setup_venv(
     venv_dir: str,
     repo_dir: str,
     *,
     python_bin: str = _DEFAULT_PYTHON,
     pre_install: list[str] | None = None,
+    repo_slug: str | None = None,
 ) -> None:
     """Create a venv and pip install the project in editable mode (if not already done).
 
@@ -383,6 +464,12 @@ def setup_venv(
         When non-empty, the editable install uses ``--no-build-isolation`` so
         the pinned packages are visible during the build.  Only applied on the
         fresh-venv creation path.
+    repo_slug:
+        Optional repo slug (e.g. ``"matplotlib/matplotlib"``).  When provided,
+        a smoke-import check is run on the fresh-venv path to catch ABI
+        mismatches that ``pip install`` silently ignores.  The check is skipped
+        for slugs not in ``_TOPLEVEL_MODULE`` and skipped entirely on the venv
+        reuse path (a reused venv has already imported cleanly at least once).
     """
     pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
@@ -484,6 +571,13 @@ def setup_venv(
     )
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
+    # Smoke-import: confirm the package actually imports before writing the
+    # sentinel.  A failed smoke-import leaves the venv unmarked so the next
+    # setup_venv call rebuilds from scratch rather than silently reusing a
+    # broken venv.  Only runs on known repos (_TOPLEVEL_MODULE); unknown
+    # repos are silently skipped to avoid spurious failures.
+    if repo_slug:
+        _smoke_import(venv_dir, repo_slug)
     # Write the sentinel last — only after a fully successful install.
     Path(_venv_sentinel(venv_dir)).write_text(python_bin + "\n")
 

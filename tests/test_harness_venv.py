@@ -20,12 +20,16 @@ import pytest
 
 from swebench.harness import (
     _DEFAULT_PYTHON,
+    _INSTANCE_PRE_INSTALL,
+    _INSTANCE_PYTHON,
     _REPO_PRE_INSTALL,
     _REPO_PYTHON,
     _read_sentinel,
+    _smoke_import,
     _venv_sentinel,
     setup_venv,
 )
+from swebench.models import Problem
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +261,7 @@ def test_matplotlib_pre_install_pins() -> None:
     assert any("numpy<2" in p for p in pins)
     assert any("cython<3" in p for p in pins)
     assert any("setuptools<65" in p for p in pins)
+    assert any("pybind11" in p for p in pins)
 
 
 def test_default_python_is_311() -> None:
@@ -266,3 +271,132 @@ def test_default_python_is_311() -> None:
 def test_unlisted_repo_uses_default() -> None:
     """A repo not in _REPO_PYTHON should fall back to _DEFAULT_PYTHON."""
     assert _REPO_PYTHON.get("some/other-repo", _DEFAULT_PYTHON) == _DEFAULT_PYTHON
+
+
+# ---------------------------------------------------------------------------
+# Tests 10–17: instance-level overrides + smoke-import (issue #204)
+# ---------------------------------------------------------------------------
+
+
+def _make_problem(instance_id: str, repo_slug: str) -> Problem:
+    """Build a minimal Problem for testing _venv_kwargs lookup."""
+    return Problem(
+        instance_id=instance_id,
+        repo_slug=repo_slug,
+        base_commit="abc123",
+        test_cmd="pytest",
+        problem_statement="test",
+        patch_file=None,
+        added_at="",
+        hf_split="test",
+    )
+
+
+def test_instance_pre_install_override_precedence() -> None:
+    """Test 10: instance-level pre_install takes precedence over repo-level."""
+    import swebench.harness as h
+
+    problem = _make_problem("foo__bar-1", "foo/bar")
+    with patch.dict(h._INSTANCE_PRE_INSTALL, {"foo__bar-1": ["x"]}), \
+         patch.dict(h._REPO_PRE_INSTALL, {"foo/bar": ["y"]}):
+        from swebench.harness import _venv_kwargs
+        result = _venv_kwargs(problem)
+        assert result["pre_install"] == ["x"], (
+            f"Expected instance-level pin ['x'], got {result['pre_install']!r}"
+        )
+
+
+def test_instance_pre_install_falls_through_when_absent() -> None:
+    """Test 11: absent instance entry falls through to repo-level pre_install."""
+    import swebench.harness as h
+
+    problem = _make_problem("foo__bar-2", "foo/bar")
+    # Ensure no instance entry exists for this id.
+    patched_instance = {k: v for k, v in h._INSTANCE_PRE_INSTALL.items() if k != "foo__bar-2"}
+    with patch.dict(h._INSTANCE_PRE_INSTALL, patched_instance, clear=True), \
+         patch.dict(h._REPO_PRE_INSTALL, {"foo/bar": ["y"]}):
+        from swebench.harness import _venv_kwargs
+        result = _venv_kwargs(problem)
+        assert result["pre_install"] == ["y"], (
+            f"Expected repo-level pin ['y'], got {result['pre_install']!r}"
+        )
+
+
+def test_instance_can_suppress_repo_pin() -> None:
+    """Test 12: instance entry of [] suppresses the repo-level pin (distinct from absent key)."""
+    import swebench.harness as h
+
+    problem = _make_problem("foo__bar-3", "foo/bar")
+    with patch.dict(h._INSTANCE_PRE_INSTALL, {"foo__bar-3": []}, clear=False), \
+         patch.dict(h._REPO_PRE_INSTALL, {"foo/bar": ["y"]}):
+        from swebench.harness import _venv_kwargs
+        result = _venv_kwargs(problem)
+        assert result["pre_install"] == [], (
+            f"Expected [] to suppress repo pin, got {result['pre_install']!r}"
+        )
+
+
+def test_instance_python_override_precedence() -> None:
+    """Test 13: instance-level python_bin takes precedence over repo-level."""
+    import swebench.harness as h
+
+    problem = _make_problem("foo__bar-4", "foo/bar")
+    with patch.dict(h._INSTANCE_PYTHON, {"foo__bar-4": "python3.9"}), \
+         patch.dict(h._REPO_PYTHON, {"foo/bar": "python3.10"}):
+        from swebench.harness import _venv_kwargs
+        result = _venv_kwargs(problem)
+        assert result["python_bin"] == "python3.9", (
+            f"Expected 'python3.9', got {result['python_bin']!r}"
+        )
+
+
+def test_astropy_6938_uses_python39() -> None:
+    """Test 14: astropy__astropy-6938 is configured to use Python 3.9."""
+    assert _INSTANCE_PYTHON.get("astropy__astropy-6938") == "python3.9", (
+        "astropy__astropy-6938 must use python3.9 (collections.MutableSequence removed in 3.10+)"
+    )
+
+
+def test_astropy_5x_pre_install_pins() -> None:
+    """Test 15: astropy 5.x instances have the required pre-install pins."""
+    for instance_id in ("astropy__astropy-12962", "astropy__astropy-13842"):
+        pins = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pins is not None, f"No instance pins for {instance_id}"
+        assert any("setuptools<69" in p for p in pins), f"Missing setuptools<69 in {instance_id}"
+        assert any("numpy<2" in p for p in pins), f"Missing numpy<2 in {instance_id}"
+        assert any("cython<3" in p for p in pins), f"Missing cython<3 in {instance_id}"
+        assert any("extension-helpers" in p for p in pins), f"Missing extension-helpers in {instance_id}"
+
+
+def test_matplotlib_26160_instance_pins() -> None:
+    """Test 18: matplotlib-26160 uses instance-level pins that drop setuptools<65."""
+    pins = _INSTANCE_PRE_INSTALL.get("matplotlib__matplotlib-26160")
+    assert pins is not None, "No instance pins for matplotlib__matplotlib-26160"
+    assert any("pybind11" in p for p in pins), "Missing pybind11"
+    assert any("certifi" in p for p in pins), "Missing certifi"
+    assert any("wheel" in p for p in pins), "Missing wheel"
+    # Must NOT carry the repo-level setuptools<65 (too old for this 2023 build)
+    assert not any("setuptools" in p for p in pins), (
+        "matplotlib__matplotlib-26160 should not pin setuptools"
+    )
+
+
+@pytest.mark.integration
+def test_smoke_import_raises_on_broken_venv(tmp_path: Path) -> None:
+    """Test 16: _smoke_import raises RuntimeError when the module cannot be imported."""
+    import subprocess as sp
+
+    venv_dir = str(tmp_path / "venv")
+    # Create a minimal venv (real subprocess — this is an integration test).
+    sp.run(["python3.11", "-m", "venv", venv_dir], check=True)
+    # matplotlib is NOT installed — import will fail.
+    with pytest.raises(RuntimeError, match="matplotlib"):
+        _smoke_import(venv_dir, "matplotlib/matplotlib")
+
+
+def test_smoke_import_skips_unknown_repo(tmp_path: Path) -> None:
+    """Test 17: _smoke_import returns silently for unknown repo slugs."""
+    # No real venv needed — the function should return before trying to run python.
+    venv_dir = str(tmp_path / "no-venv-needed")
+    # Should not raise even though the venv doesn't exist.
+    _smoke_import(venv_dir, "unknown/repo")  # must not raise
