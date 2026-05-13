@@ -43,6 +43,12 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "scikit-learn__scikit-learn-10427": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
+    # scikit-learn 0.18 era (2017): uses collections.abc removed in 3.10+
+    "scikit-learn__scikit-learn-3840": "python3.9",
+    # sympy 1.0–1.1 era (2016–2017): uses collections.abc removed in 3.10+
+    "sympy__sympy-11232": "python3.9",
+    "sympy__sympy-13259": "python3.9",
+    "sympy__sympy-14180": "python3.9",
 }
 
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
@@ -442,6 +448,19 @@ def _smoke_import(venv_dir: str, repo_slug: str) -> None:
         )
 
 
+def _pip_run_checked(pip: str, args: list[str]) -> None:
+    """Run pip with the given args; on failure, print captured stderr then raise."""
+    result = subprocess.run([pip, *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(
+            f"[harness] pip {args[0]} failed (rc={result.returncode}):\n{result.stderr}",
+            flush=True,
+        )
+        raise subprocess.CalledProcessError(
+            result.returncode, [pip, *args], result.stdout, result.stderr
+        )
+
+
 def setup_venv(
     venv_dir: str,
     repo_dir: str,
@@ -529,36 +548,16 @@ def setup_venv(
     )
     # Pre-install setuptools/wheel so old projects using setup.py + pkg_resources
     # can build under pip's build isolation without hitting ModuleNotFoundError.
-    subprocess.run(
-        [pip, "install", "--quiet", "setuptools", "wheel"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    _pip_run_checked(pip, ["install", "--quiet", "setuptools", "wheel"])
     if pre_install:
         # Install pinned build dependencies before the editable install so the
         # build backend sees the correct versions.  --no-build-isolation ensures
         # the already-installed pins are used during the build (not re-resolved
         # from scratch inside an isolated build env).
-        subprocess.run(
-            [pip, "install", "--quiet", *pre_install],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        subprocess.run(
-            [pip, "install", "--quiet", "-e", repo_dir, "--no-build-isolation"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        _pip_run_checked(pip, ["install", "--quiet", *pre_install])
+        _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir, "--no-build-isolation"])
     else:
-        subprocess.run(
-            [pip, "install", "--quiet", "-e", repo_dir],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir])
     # Try common test/dev extras; ignore failures (not all packages define them).
     for extra in ("test", "tests", "dev", "testing"):
         subprocess.run(
@@ -567,12 +566,7 @@ def setup_venv(
             text=True,
         )
     # Always ensure pytest is present as a final fallback.
-    subprocess.run(
-        [pip, "install", "--quiet", "pytest"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    _pip_run_checked(pip, ["install", "--quiet", "pytest"])
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
     # Smoke-import: confirm the package actually imports before writing the
