@@ -429,6 +429,51 @@ def _pin_jinja2(pip: str) -> None:
         )
 
 
+_VENDORED_CLOUDPICKLE_REL = (
+    "sklearn/externals/joblib/externals/cloudpickle/cloudpickle.py"
+)
+
+_CLOUDPICKLE_OLD_BLOCK = (
+    "        return types.CodeType(\n"
+    "            co.co_argcount,\n"
+    "            co.co_kwonlyargcount,\n"
+)
+
+_CLOUDPICKLE_NEW_BLOCK = (
+    "        return types.CodeType(\n"
+    "            co.co_argcount,\n"
+    "            co.co_posonlyargcount,\n"
+    "            co.co_kwonlyargcount,\n"
+)
+
+
+def _patch_vendored_cloudpickle(repo_dir: str) -> bool:
+    """Make scikit-learn's vendored cloudpickle import-safe on Python 3.8+.
+
+    The vendored copy in sklearn 0.20-era checkouts calls ``types.CodeType``
+    with the pre-3.8 13-argument signature in ``_make_cell_set_template_code``.
+    Python 3.8 added ``co_posonlyargcount`` as the 2nd parameter, so importing
+    sklearn raises ``TypeError: 'bytes' object cannot be interpreted as an
+    integer`` on every interpreter available in this devcontainer (3.9+).
+
+    The fix inserts ``co.co_posonlyargcount`` into the PY3 branch — the same
+    change cloudpickle upstream shipped in v1.3. Idempotent and a no-op when
+    the file is missing or already patched.
+
+    Returns True when the file was modified (useful for logging/tests).
+    """
+    path = Path(repo_dir) / _VENDORED_CLOUDPICKLE_REL
+    if not path.is_file():
+        return False
+    text = path.read_text()
+    if "co.co_posonlyargcount" in text:
+        return False
+    if _CLOUDPICKLE_OLD_BLOCK not in text:
+        return False
+    path.write_text(text.replace(_CLOUDPICKLE_OLD_BLOCK, _CLOUDPICKLE_NEW_BLOCK, 1))
+    return True
+
+
 def _smoke_import(venv_dir: str, repo_slug: str) -> None:
     """Confirm the installed package actually imports cleanly.
 
@@ -517,6 +562,9 @@ def setup_venv(
             # Venv exists from a prior run. Re-run the editable install so that C
             # extension .so files are recompiled if git clean removed them (fast no-op
             # when they already exist). Also ensure pytest is present.
+            # Patch vendored cloudpickle if needed (overlay refresh restored the
+            # unpatched file from the cached lowerdir).
+            _patch_vendored_cloudpickle(repo_dir)
             # F-1: capture stderr and surface failures rather than silently continuing.
             result = subprocess.run(
                 [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
@@ -558,6 +606,10 @@ def setup_venv(
     # Pre-install setuptools/wheel so old projects using setup.py + pkg_resources
     # can build under pip's build isolation without hitting ModuleNotFoundError.
     _pip_run_checked(pip, ["install", "--quiet", "setuptools", "wheel"])
+    # Patch vendored cloudpickle (sklearn 0.20-era) before any import of the
+    # repo. No-op when the file is missing or already patched — see
+    # _patch_vendored_cloudpickle for the rationale.
+    _patch_vendored_cloudpickle(repo_dir)
     if pre_install:
         # Install pinned build dependencies before the editable install so the
         # build backend sees the correct versions.  --no-build-isolation ensures
