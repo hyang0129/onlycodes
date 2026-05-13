@@ -12,3 +12,7 @@ node_modules/
 exec_server/dist/
 results*/
 
+# Root-level copies of exec_server helper modules (staged at runtime by exec-server.js from exec_server/)
+/codebox.py
+/mcp_bridge.py
+
