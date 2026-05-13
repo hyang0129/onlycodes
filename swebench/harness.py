@@ -25,8 +25,11 @@ _REPO_PYTHON: dict[str, str] = {
 _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # scikit-learn 0.20–0.22: pins required before `pip install -e .`
     "scikit-learn/scikit-learn": ["setuptools<60", "numpy<1.24", "cython<3"],
-    # matplotlib 3.1 era: numpy 2.x ABI break + old setuptools/cython
-    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6"],
+    # matplotlib 3.1 era: numpy 2.x ABI break + old setuptools/cython.
+    # certifi is required: matplotlib's build downloads freetype/qhull tarballs
+    # over HTTPS and imports certifi for the CA bundle.  Without it, build
+    # fails with "ImportError: `certifi` is unavailable" before any C compile.
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi"],
 }
 
 # ---------------------------------------------------------------------------
@@ -60,6 +63,12 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
     "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
+    # scikit-learn 1.2–1.3 era: setup.py's check_package_status() imports scipy
+    # at metadata-generation time, before any editable install. Without scipy
+    # pre-installed, build fails with "scikit-learn requires scipy >= 1.3.2".
+    # scipy<1.12 keeps compatibility with the repo-level numpy<1.24 pin.
+    "scikit-learn__scikit-learn-24677": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
+    "scikit-learn__scikit-learn-25694": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
 }
 
 # ---------------------------------------------------------------------------
