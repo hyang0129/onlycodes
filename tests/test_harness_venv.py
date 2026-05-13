@@ -22,10 +22,13 @@ from swebench.harness import (
     _DEFAULT_PYTHON,
     _INSTANCE_PRE_INSTALL,
     _INSTANCE_PYTHON,
+    _N_BUILD_JOBS,
+    _REPO_PRE_BUILD,
     _REPO_PRE_INSTALL,
     _REPO_PYTHON,
     _read_sentinel,
     _smoke_import,
+    _venv_kwargs,
     _venv_sentinel,
     setup_venv,
 )
@@ -400,3 +403,114 @@ def test_smoke_import_skips_unknown_repo(tmp_path: Path) -> None:
     venv_dir = str(tmp_path / "no-venv-needed")
     # Should not raise even though the venv doesn't exist.
     _smoke_import(venv_dir, "unknown/repo")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Tests for parallel pre-build (issue: sklearn-24677 / sklearn-25694 timeout)
+# ---------------------------------------------------------------------------
+
+
+def test_sklearn_has_pre_build_command() -> None:
+    """scikit-learn must have a parallel pre-build command configured."""
+    cmd = _REPO_PRE_BUILD.get("scikit-learn/scikit-learn")
+    assert cmd is not None, "No pre-build command for scikit-learn/scikit-learn"
+    assert "setup.py" in cmd, "Pre-build must invoke setup.py"
+    assert "build_ext" in cmd, "Pre-build must call build_ext"
+    assert "--inplace" in cmd, "Pre-build must use --inplace"
+    assert any(tok.startswith("-j") for tok in cmd), "Pre-build must pass -j N for parallel build"
+
+
+def test_pre_build_job_count_uses_cpu_count() -> None:
+    """_N_BUILD_JOBS must be at least 1 and match os.cpu_count()."""
+    import os as _os
+    assert _N_BUILD_JOBS >= 1
+    assert _N_BUILD_JOBS == max(1, _os.cpu_count() or 1)
+
+
+def test_venv_kwargs_includes_pre_build_cmd_for_sklearn() -> None:
+    """_venv_kwargs for scikit-learn must include pre_build_cmd."""
+    problem = _make_problem(
+        instance_id="scikit-learn__scikit-learn-24677",
+        repo_slug="scikit-learn/scikit-learn",
+    )
+    result = _venv_kwargs(problem)
+    assert "pre_build_cmd" in result, "_venv_kwargs must return pre_build_cmd key"
+    assert result["pre_build_cmd"] is not None, (
+        "pre_build_cmd must be set for scikit-learn/scikit-learn"
+    )
+    assert "build_ext" in result["pre_build_cmd"]
+
+
+def test_venv_kwargs_pre_build_cmd_none_for_unknown_repo() -> None:
+    """_venv_kwargs for an unknown repo must have pre_build_cmd=None."""
+    problem = _make_problem(instance_id="some__other-1", repo_slug="some/other")
+    result = _venv_kwargs(problem)
+    assert result.get("pre_build_cmd") is None, (
+        f"Unknown repo must have pre_build_cmd=None, got {result.get('pre_build_cmd')!r}"
+    )
+
+
+def test_setup_venv_runs_pre_build_cmd_before_editable_install(tmp_path: Path) -> None:
+    """setup_venv must invoke pre_build_cmd between pre_install and pip install -e."""
+    venv_dir = str(tmp_path / "venv")
+    repo_dir = str(tmp_path / "repo")
+    os.makedirs(repo_dir)
+
+    call_log: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        if "-m" in cmd and "venv" in cmd:
+            pip_dir = os.path.join(venv_dir, "bin")
+            os.makedirs(pip_dir, exist_ok=True)
+            for name in ("pip", "python"):
+                Path(os.path.join(pip_dir, name)).touch()
+        label = " ".join(str(t) for t in cmd)
+        call_log.append(label)
+        return _make_success(cmd)
+
+    pre_build = ["python", "setup.py", "build_ext", "--inplace", "-j8"]
+    with patch("subprocess.run", side_effect=fake_run):
+        setup_venv(
+            venv_dir,
+            repo_dir,
+            python_bin="python3.11",
+            pre_install=["cython<3"],
+            pre_build_cmd=pre_build,
+        )
+
+    # Verify pre-build ran
+    pre_build_calls = [c for c in call_log if "build_ext" in c]
+    assert pre_build_calls, "Pre-build command was not invoked"
+
+    # Verify ordering: pre-build before editable install
+    editable_calls = [c for c in call_log if "-e" in c and repo_dir in c]
+    assert editable_calls, "No editable install call found"
+    pre_build_idx = next(i for i, c in enumerate(call_log) if "build_ext" in c)
+    editable_idx = next(i for i, c in enumerate(call_log) if "-e" in c and repo_dir in c)
+    assert pre_build_idx < editable_idx, (
+        f"Pre-build (idx={pre_build_idx}) must run before editable install (idx={editable_idx})"
+    )
+
+
+def test_setup_venv_skips_pre_build_cmd_when_none(tmp_path: Path) -> None:
+    """setup_venv must not invoke any build_ext when pre_build_cmd is None."""
+    venv_dir = str(tmp_path / "venv")
+    repo_dir = str(tmp_path / "repo")
+    os.makedirs(repo_dir)
+
+    call_log: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        if "-m" in cmd and "venv" in cmd:
+            pip_dir = os.path.join(venv_dir, "bin")
+            os.makedirs(pip_dir, exist_ok=True)
+            Path(os.path.join(pip_dir, "pip")).touch()
+        call_log.append(" ".join(str(t) for t in cmd))
+        return _make_success(cmd)
+
+    with patch("subprocess.run", side_effect=fake_run):
+        setup_venv(venv_dir, repo_dir, python_bin="python3.11", pre_install=["cython<3"])
+
+    assert not any("build_ext" in c for c in call_log), (
+        f"build_ext should not be called when pre_build_cmd=None; calls: {call_log}"
+    )

@@ -72,6 +72,25 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Per-repo parallel pre-build commands
+# ---------------------------------------------------------------------------
+# Repos with large Cython extension sets take 20+ minutes to compile serially
+# via ``pip install -e .``.  Running ``build_ext --inplace -j N`` first lets
+# setuptools reuse the already-compiled ``.so`` files during the subsequent
+# editable install, cutting total setup time by ~8x on 8-core machines.
+# Only runs on the fresh-venv path; the reuse path skips it.
+
+_N_BUILD_JOBS: int = max(1, os.cpu_count() or 1)
+
+_REPO_PRE_BUILD: dict[str, list[str]] = {
+    # sklearn 1.x uses setup.py build_ext which supports -j since Python 3.8.
+    # On an 8-core machine this cuts ~25 min → ~3 min.
+    "scikit-learn/scikit-learn": [
+        "python", "setup.py", "build_ext", "--inplace", f"-j{_N_BUILD_JOBS}",
+    ],
+}
+
+# ---------------------------------------------------------------------------
 # Slug → top-level importable module name (for smoke-import checks)
 # ---------------------------------------------------------------------------
 # Only repos in datasci-mini are listed — unknown repos are silently skipped.
@@ -106,9 +125,11 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
         problem.instance_id,
         _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
     )
+    pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
     return {
         "python_bin": python_bin,
         "pre_install": pre,
+        "pre_build_cmd": pre_build_cmd,
         "repo_slug": problem.repo_slug,
     }
 
@@ -521,6 +542,7 @@ def setup_venv(
     *,
     python_bin: str = _DEFAULT_PYTHON,
     pre_install: list[str] | None = None,
+    pre_build_cmd: list[str] | None = None,
     repo_slug: str | None = None,
 ) -> None:
     """Create a venv and pip install the project in editable mode (if not already done).
@@ -540,6 +562,14 @@ def setup_venv(
         editable install (e.g. ``["setuptools<60", "numpy<1.24", "cython<3"]``).
         When non-empty, the editable install uses ``--no-build-isolation`` so
         the pinned packages are visible during the build.  Only applied on the
+        fresh-venv creation path.
+    pre_build_cmd:
+        Optional command (list of strings) to run after pre_install but before
+        the editable install, executed with the venv's Python as the interpreter
+        (``"python"`` in the list is substituted with the venv python path).
+        Intended for repos with large Cython extension sets (e.g. scikit-learn)
+        where running ``build_ext --inplace -j N`` in parallel first lets the
+        subsequent ``pip install -e .`` skip recompilation.  Only runs on the
         fresh-venv creation path.
     repo_slug:
         Optional repo slug (e.g. ``"matplotlib/matplotlib"``).  When provided,
@@ -616,6 +646,22 @@ def setup_venv(
         # the already-installed pins are used during the build (not re-resolved
         # from scratch inside an isolated build env).
         _pip_run_checked(pip, ["install", "--quiet", *pre_install])
+        if pre_build_cmd:
+            # Compile C/Cython extensions in parallel before the editable install.
+            # When .so files are already present and newer than .pyx sources,
+            # the subsequent pip install -e . skips recompilation (~seconds vs ~25 min).
+            venv_python = os.path.join(venv_dir, "bin", "python")
+            cmd = [venv_python if tok == "python" else tok for tok in pre_build_cmd]
+            result = subprocess.run(cmd, cwd=repo_dir, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(
+                    f"[harness] pre-build command failed (rc={result.returncode}):\n"
+                    f"{result.stderr}",
+                    flush=True,
+                )
+                raise subprocess.CalledProcessError(
+                    result.returncode, cmd, result.stdout, result.stderr
+                )
         _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir, "--no-build-isolation"])
     else:
         _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir])
