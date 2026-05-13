@@ -2,59 +2,32 @@
 
 ## Background
 
-You have a tabular regression dataset with ten candidate features and one
-target. Most features are weakly correlated with the target (noise); a few
-are informative (signal). Your job is to pick the informative features by
-correlation, fit a linear regression using only those features, and report
-the in-sample RMSE alongside the selected feature names.
+You have a tabular regression dataset with ten candidate features and
+one target. Most features are weakly correlated with the target
+(noise); a few are informative (signal). Pick the informative features
+by Pearson correlation, fit a linear regression on just those
+features, and report the in-sample RMSE alongside the selected feature
+names.
 
 The workspace contains:
 
-- `signals.csv` — a CSV with columns `x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, y`.
-  All columns are numeric (floats). There are no missing values.
+- `signals.csv` — a CSV with columns
+  `x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, y`. All columns are
+  numeric (floats), no missing values.
 
 ## Your task
 
-Perform the pipeline below exactly as specified, then write
-`output/result.json`.
+Select the features whose **absolute Pearson correlation with `y` is
+at least 0.30**, fit a linear regression using only those features
+against `y`, and report the in-sample RMSE on the full dataset along
+with the selected feature names. Then write `output/result.json`.
 
-### Pipeline (run these steps in order)
-
-1. **Load** `signals.csv` with `pandas.read_csv`. The ten feature columns are
-   `x1, x2, …, x10`; the target column is `y`.
-2. **Compute the Pearson correlation** between each feature and the target.
-   The Pearson correlation between two vectors `u` and `v` is:
-
-   ```
-   r(u, v) = cov(u, v) / (std(u) * std(v))
-   ```
-
-   You may use `pandas.DataFrame.corr(method="pearson")`,
-   `numpy.corrcoef`, or `scipy.stats.pearsonr` — all three produce the same
-   number to within floating-point noise. Use the unbiased estimator (the
-   default for all three).
-3. **Select the features** whose absolute Pearson correlation with `y` is at
-   least `0.30`. Formally: include feature `xi` if and only if
-   `|r(xi, y)| >= 0.30`. The dataset is constructed so that every feature
-   has `|r|` either above `0.40` (signal) or below `0.20` (noise) — no
-   feature lands in the borderline band `(0.20, 0.40)` — so the threshold
-   is unambiguous regardless of which Pearson implementation you use.
-4. **Fit** a linear regression using only the selected features as
-   predictors and `y` as the target, using
-   `sklearn.linear_model.LinearRegression` with its default constructor.
-   Fit on **all rows** of the dataset (no train/test split).
-5. **Predict** `y` on the same rows the model was fit on (in-sample
-   predictions).
-6. **Compute the in-sample RMSE** of the predictions against the true `y`.
-   Define RMSE explicitly as:
-
-   ```
-   RMSE = sqrt( mean( (y_pred - y_true) ** 2 ) )
-   ```
+The dataset is engineered for wide separation: every feature has
+`|r|` either above 0.40 (signal) or below 0.20 (noise) — nothing
+lands in the borderline band — so the 0.30 threshold is unambiguous
+regardless of which Pearson implementation you reach for.
 
 ### Output
-
-Write `output/result.json` containing **exactly these two fields**:
 
 ```json
 {
@@ -63,26 +36,23 @@ Write `output/result.json` containing **exactly these two fields**:
 }
 ```
 
-Rules:
+`selected_features` must be **sorted in ascending lexicographic
+order** on disk (so `"x10"` comes after `"x1"` and before `"x2"` by
+string comparison; the grader checks both set-equality and on-disk
+sort order). Extra fields and missing fields are both rejected.
 
-- `selected_features` — a JSON array of strings, the feature column names
-  selected in step 3, **sorted in ascending lexicographic order** (so
-  `"x10"` comes after `"x1"` and before `"x2"`, by string comparison).
-- `rmse` — the in-sample RMSE computed in step 6, as a JSON number. Do not
-  round; emit full precision. The grader tolerates floating-point noise
-  within `±1e-4`.
-- Extra fields are not allowed. Missing fields are not allowed.
-- UTF-8 encoded. Trailing newline optional.
+### Pinned details (load-bearing for grading)
 
-### What the grader checks
+1. **Selection rule**: include feature `xi` if and only if
+   `|pearson_r(xi, y)| >= 0.30`. Use the unbiased estimator (the
+   default for `pandas.DataFrame.corr`, `numpy.corrcoef`, and
+   `scipy.stats.pearsonr` — all three agree to floating-point noise
+   on this dataset).
+2. **Regressor**: `sklearn.linear_model.LinearRegression()` with its
+   default constructor.
+3. **Fit scope**: all rows of the dataset — no train/test split.
+4. **Metric**: in-sample RMSE on the same rows the model was fit on,
+   defined as `sqrt(mean((y_pred - y_true) ** 2))`.
 
-The grader re-runs the same pipeline on `signals.csv` and compares your
-`result.json`:
-
-- `selected_features` must equal the grader's selection as a set
-  (order-insensitive — but it must still be lexicographically sorted on
-  disk to make diffs deterministic; the grader checks both).
-- `rmse` must be within `±1e-4` of the grader's value.
-
-Scoring is all-or-nothing: any field failing yields score 0.0. Both
-matching yields score 1.0.
+Tolerance: `selected_features` is checked as a set (exact match);
+`rmse` is checked within ±1e-4. Scoring is all-or-nothing.
