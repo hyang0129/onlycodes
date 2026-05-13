@@ -1,0 +1,35 @@
+{
+  "per_cohort": [
+    {
+      "cohort": "north",
+      "n_pairs": 50,
+      "mean_diff": 1.6221096110399997,
+      "statistic": 7.161849886867618,
+      "pvalue": 3.725678210806736e-09,
+      "reject_null": true
+    },
+    {
+      "cohort": "south",
+      "n_pairs": 50,
+      "mean_diff": -0.14034053796600063,
+      "statistic": -0.5967822281595253,
+      "pvalue": 0.5534003030859024,
+      "reject_null": false
+    },
+    {
+      "cohort": "west",
+      "n_pairs": 50,
+      "mean_diff": -1.9790329026619995,
+      "statistic": -10.10682402244434,
+      "pvalue": 1.4130856946992912e-13,
+      "reject_null": true
+    }
+  ],
+  "overall": {
+    "n_pairs": 150,
+    "mean_diff": -0.16575460986266685,
+    "statistic": -0.9507216111533278,
+    "pvalue": 0.3432853110440022,
+    "reject_null": false
+  }
+}
