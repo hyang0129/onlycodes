@@ -39,6 +39,10 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
 _INSTANCE_PYTHON: dict[str, str] = {
     # astropy 3.x era (2018): uses collections.MutableSequence removed in 3.10+
     "astropy__astropy-6938": "python3.9",
+    # scikit-learn 0.19–0.20 era (2018): uses collections.Sequence removed in 3.10+
+    "scikit-learn__scikit-learn-10427": "python3.9",
+    "scikit-learn__scikit-learn-10803": "python3.9",
+    "scikit-learn__scikit-learn-11206": "python3.9",
 }
 
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
