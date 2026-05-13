@@ -2,7 +2,7 @@
 
 ## What this category tests
 
-Data science tasks represent the analytical and statistical work that sits between raw data and a decision: compute a metric, detect an anomaly, characterize a distribution, or produce a structured summary. The agent receives a dataset and a problem statement that specifies the analytical question and — critically — the method to apply. The output is a number, a flagged row set, a classification decision, or a structured report file.
+Data science tasks represent the analytical and statistical work that sits between raw data and a decision: compute a metric, detect an anomaly, characterize a distribution, or chain a few analytical steps into a pipeline. The agent receives a dataset and a problem statement that specifies the analytical question and — critically — the method to apply. The output is a number, a flagged row set, a classification decision, or a small structured record summarizing pipeline results.
 
 ## Why these tasks belong in the benchmark
 
@@ -20,11 +20,11 @@ The work is authentically delegable when the method is specified. "Compute the 7
 
 **Rolling or window aggregation.** Given a time-indexed dataset, compute a rolling or expanding aggregate (mean, median, sum, percentile) at a specified window size and output the annotated series. Grader checks values within floating-point tolerance.
 
-**Structured summary report.** Given a dataset, produce a JSON or CSV summary with specified fields (per-group row counts, null rates, value distributions). The output schema is fully specified in the problem statement. Grader checks schema compliance and spot-checks values.
+**Multi-step analytical pipeline.** Given a dataset, chain three or more sequential analytical steps where each step depends on the previous result (e.g. split → fit → evaluate; correlate → select → fit; fit → flag outliers → refit). The problem statement names every step, parameter, and stopping condition. Output is a small structured JSON record (coefficients, selected feature list, iteration count, final metric). Grader recomputes the pipeline and compares field-by-field. This archetype was chosen — over an earlier "structured summary report" — because its iterative variants stress the persistent-kernel mechanism: code that keeps a working DataFrame hot across many small computations gains over arms that pay per-call overhead.
 
 ## Grading approach
 
-Tasks grade a numeric value, a flagged row set, or a structured file. For numeric outputs: tolerance is ±1e-4 unless the task involves percentile or rank statistics, where ±0.01 is appropriate. For flagged row sets: grader checks exact match against the reference set (the problem statement specifies the method, so there is only one correct answer). For structured files: grader checks schema and spot-checks values.
+Tasks grade a numeric value, a flagged row set, or a small structured record. For numeric outputs: tolerance is ±1e-4 unless the task involves percentile or rank statistics, where ±0.01 is appropriate. For flagged row sets: grader checks exact match against the reference set (the problem statement specifies the method, so there is only one correct answer). For structured records (multi-step pipeline outputs): the grader recomputes the full pipeline and compares each field with its appropriate check (exact int, exact set, float ±1e-4). Scoring is all-or-nothing — score = 1.0 iff every field passes, else 0.0 — consistent with the category's "method fully specified → one correct answer" principle.
 
 The grader must handle the case where the agent applies the right method but on a subtly wrong column or at a wrong aggregation level — these should fail rather than pass approximately.
 
