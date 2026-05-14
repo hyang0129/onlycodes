@@ -30,6 +30,29 @@
 ```bash
 cd /workspaces/hub_1/onlycodes
 source .venv/bin/activate
+export SWEBENCH_CACHE_ROOT=/tmp/swebench-cache
+```
+
+## Cache setup (one-time per machine)
+
+`--use-cache` is on by default. Instances not in the cache fall back to a fresh
+clone automatically, but the two heavy sklearn instances (24677, 25694) take
+~18 min each to compile from scratch — warm them up before running D2.
+
+```bash
+# Already done on this machine (skip if /tmp/swebench-cache exists with both entries):
+python -m swebench cache setup \
+  --filter "scikit-learn__scikit-learn-24677,scikit-learn__scikit-learn-25694" \
+  --concurrency 1
+```
+
+All other instances (Django, Sphinx, matplotlib, xarray, sympy, seaborn, astropy)
+compile in under 2 min each and can be cached opportunistically or left to fall
+back to the clone path:
+
+```bash
+# Optional — caches everything else for faster arm-to-arm resets:
+python -m swebench cache setup --concurrency 4
 ```
 
 ---
