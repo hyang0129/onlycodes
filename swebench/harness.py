@@ -80,11 +80,12 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
 # editable install, cutting total setup time by ~8x on 8-core machines.
 # Only runs on the fresh-venv path; the reuse path skips it.
 
-_N_BUILD_JOBS: int = max(1, os.cpu_count() or 1)
+_N_BUILD_JOBS: int = min(4, max(1, os.cpu_count() or 1))
 
 _REPO_PRE_BUILD: dict[str, list[str]] = {
     # sklearn 1.x uses setup.py build_ext which supports -j since Python 3.8.
-    # On an 8-core machine this cuts ~25 min → ~3 min.
+    # Capped at 4: sklearn's generated C files are large (some ~1-2 GB RAM each
+    # during compilation), so running more than 4 in parallel causes OOM kills.
     "scikit-learn/scikit-learn": [
         "python", "setup.py", "build_ext", "--inplace", f"-j{_N_BUILD_JOBS}",
     ],

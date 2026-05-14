@@ -420,11 +420,12 @@ def test_sklearn_has_pre_build_command() -> None:
     assert any(tok.startswith("-j") for tok in cmd), "Pre-build must pass -j N for parallel build"
 
 
-def test_pre_build_job_count_uses_cpu_count() -> None:
-    """_N_BUILD_JOBS must be at least 1 and match os.cpu_count()."""
+def test_pre_build_job_count_is_bounded() -> None:
+    """_N_BUILD_JOBS must be between 1 and 4 (capped to avoid OOM on large C files)."""
     import os as _os
     assert _N_BUILD_JOBS >= 1
-    assert _N_BUILD_JOBS == max(1, _os.cpu_count() or 1)
+    assert _N_BUILD_JOBS <= 4
+    assert _N_BUILD_JOBS == min(4, max(1, _os.cpu_count() or 1))
 
 
 def test_venv_kwargs_includes_pre_build_cmd_for_sklearn() -> None:
