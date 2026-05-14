@@ -246,7 +246,8 @@ def _write_result_json(
         "cost_usd": cost_usd,
         "num_turns": num_turns,
         "wall_secs": wall_secs,
-        "claude_version": "test",
+        "agent_version": "test",
+        "agent_surface": "claude_code",
         "agent_jsonl_path": str(run_dir / "agent.jsonl"),
     }
     (run_dir / "result.json").write_text(json.dumps(payload))
