@@ -6,7 +6,6 @@ import io
 import json
 import os
 import random
-import re
 import shutil
 import time
 import traceback
@@ -44,6 +43,7 @@ from swebench.harness import (
     strip_git_history,
 )
 from swebench.models import Problem
+from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner
 
 
 def _mcp_config_without_persistent_kernel(
@@ -147,6 +147,7 @@ def _run_arm(
     persistent_kernel: bool = True,
     log_buffer: io.StringIO | None = None,
     needs_editable_reinstall: bool = False,
+    runner: AgentRunner | None = None,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
@@ -248,66 +249,46 @@ def _run_arm(
 
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
-    # Build tools flags based on arm
-    _BLOCKED_BUILTINS = (
-        "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
-        "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
-        "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
-        "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
-        "RemoteTrigger,SendMessage,Skill,"
-        "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
-        "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
-    )
-    tools_flags: list[str] = []
-    if is_onlycode:
-        # --tools whitelists MCP tools but does not reliably block built-ins
-        # like Monitor (added v2.1.98). --disallowedTools explicitly removes
-        # every built-in so the agent can only use the two codebox MCP tools.
-        # The default mcp-config.json enables the persistent kernel via
-        # ONLYCODES_PERSISTENT_KERNEL=1. When --no-persistent-kernel is passed
-        # we emit a per-run temp config with that env scrubbed.
-        effective_mcp_config = mcp_config_path
-        if not persistent_kernel:
-            effective_mcp_config = _mcp_config_without_persistent_kernel(
-                mcp_config_path, results_dir, problem.instance_id, run_idx
-            )
-        tools_flags = [
-            "--mcp-config", effective_mcp_config,
-            "--strict-mcp-config",
-            "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
-            "--disallowedTools", _BLOCKED_BUILTINS,
-        ]
-    elif arm == "bash_only":
-        # Allow only Bash; block every other built-in tool.
-        blocked_no_bash = ",".join(t for t in _BLOCKED_BUILTINS.split(",") if t.strip() != "Bash")
-        tools_flags = ["--tools", "Bash", "--disallowedTools", blocked_no_bash]
+    _runner = runner if runner is not None else ClaudeRunner()
+
+    # For the onlycode arm, honour persistent_kernel by stripping the env var
+    # from the MCP config when disabled. This is Claude-specific; CodexRunner
+    # handles persistent_kernel via the ONLYCODES_PERSISTENT_KERNEL env var
+    # that it reads inside invoke().
+    effective_mcp_config = mcp_config_path
+    if is_onlycode and not persistent_kernel and isinstance(_runner, ClaudeRunner):
+        effective_mcp_config = _mcp_config_without_persistent_kernel(
+            mcp_config_path, results_dir, problem.instance_id, run_idx
+        )
+
+    tools_flags = _runner.build_tools_flags(arm, effective_mcp_config)
 
     start_time = time.time()
 
-    # Prepend a metadata record so every JSONL is self-describing.
-    claude_version = get_claude_version(claude_binary)
+    agent_version = _runner.get_version(claude_binary)
     with open(result_file, "w") as _meta_f:
         _meta_f.write(json.dumps({
             "type": "meta",
             "instance_id": problem.instance_id,
             "arm": arm,
             "run": run_idx,
-            "claude_binary": claude_binary,
-            "claude_version": claude_version,
+            "agent_surface": _runner.surface,
+            "agent_binary": claude_binary,
+            "agent_version": agent_version,
         }) + "\n")
 
-    run_claude(
+    _runner.invoke(
         prompt=prompt,
-        repo_dir=repo_dir,
+        cwd=repo_dir,
         system_prompt="You are a helpful assistant.",
         tools_flags=tools_flags,
         result_file=result_file,
-        claude_binary=claude_binary,
+        binary=claude_binary,
+        mcp_config_path=effective_mcp_config,
     )
 
     wall_secs = int(time.time() - start_time)
 
-    # Run tests
     test_result_file = os.path.join(
         results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
     )
@@ -323,20 +304,9 @@ def _run_arm(
 
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
 
-    # Extract cost and turns from stream-json output
-    cost = "N/A"
-    turns = "N/A"
-    try:
-        with open(result_file) as f:
-            content = f.read()
-        cost_matches = re.findall(r'"total_cost_usd":\s*([\d.]+)', content)
-        turns_matches = re.findall(r'"num_turns":\s*(\d+)', content)
-        if cost_matches:
-            cost = f"${cost_matches[-1]}"
-        if turns_matches:
-            turns = turns_matches[-1]
-    except (OSError, ValueError):
-        pass
+    cost_usd, num_turns = _runner.extract_metadata(Path(result_file))
+    cost = f"${cost_usd}" if cost_usd is not None else "N/A"
+    turns = str(num_turns) if num_turns is not None else "N/A"
 
     _echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
     return verdict

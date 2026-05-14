@@ -11,6 +11,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from swebench.runner import ClaudeRunner as _ClaudeRunner
+
 # ---------------------------------------------------------------------------
 # Per-repo Python interpreter and pre-install pin tables
 # ---------------------------------------------------------------------------
@@ -135,44 +137,13 @@ _bare_clone_locks_mu = threading.Lock()
 
 
 def get_claude_version(claude_binary: str) -> str:
-    """Return the version string reported by `claude --version`, or 'unknown'."""
-    try:
-        proc = subprocess.run(
-            [claude_binary, "--version"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return proc.stdout.strip() or proc.stderr.strip() or "unknown"
-    except Exception:
-        return "unknown"
+    """Shim — delegates to ClaudeRunner.get_version()."""
+    return _ClaudeRunner().get_version(claude_binary)
 
 
 def find_claude_binary() -> str:
-    """Locate the claude binary — PATH first, then VS Code extension glob.
-
-    Returns the path to the claude binary, or raises FileNotFoundError.
-    """
-    # Check CLAUDE env var first
-    claude_env = os.environ.get("CLAUDE")
-    if claude_env and os.path.isfile(claude_env) and os.access(claude_env, os.X_OK):
-        return claude_env
-
-    # Check PATH
-    claude_path = shutil.which("claude")
-    if claude_path:
-        return claude_path
-
-    # Try VS Code extension path
-    for ext_dir in sorted(
-        glob.glob("/home/vscode/.vscode-server/extensions/anthropic.claude-code-*-linux-x64"),
-        reverse=True,
-    ):
-        candidate = os.path.join(ext_dir, "resources", "native-binary", "claude")
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-
-    raise FileNotFoundError(
-        "claude binary not found. Set CLAUDE= or install Claude Code."
-    )
+    """Shim — delegates to ClaudeRunner.find_binary()."""
+    return _ClaudeRunner().find_binary()
 
 
 def git_reset(repo_dir: str, commit: str) -> None:
@@ -601,7 +572,7 @@ def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
 
 
 def make_isolated_claude_config() -> str:
-    """Create an isolated Claude config directory with only credentials.
+    """Shim — creates an isolated Claude config dir with only credentials.
 
     Returns the path to the temp directory. Caller must clean up.
     """
@@ -649,29 +620,15 @@ def run_claude(
     result_file: str,
     claude_binary: str,
 ) -> None:
-    """Run the claude binary with isolated config. Non-zero exit does not raise."""
-    cfg_dir = make_isolated_claude_config()
-    try:
-        cmd = [
-            claude_binary,
-            "-p", prompt,
-            "--model", "claude-sonnet-4-6",
-            "--system-prompt", system_prompt,
-            *tools_flags,
-            "--dangerously-skip-permissions",
-            "--no-session-persistence",
-            "--output-format", "stream-json",
-            "--verbose",
-        ]
-
-        env = os.environ.copy()
-        env["CLAUDE_CONFIG_DIR"] = cfg_dir
-        env["FORCE_PROMPT_CACHING_5M"] = "1"
-
-        with open(result_file, "w") as out:
-            subprocess.run(cmd, cwd=repo_dir, stdout=out, stderr=subprocess.STDOUT, env=env)
-    finally:
-        shutil.rmtree(cfg_dir, ignore_errors=True)
+    """Shim — delegates to ClaudeRunner.invoke(). Non-zero exit does not raise."""
+    _ClaudeRunner().invoke(
+        prompt=prompt,
+        cwd=repo_dir,
+        system_prompt=system_prompt,
+        tools_flags=tools_flags,
+        result_file=result_file,
+        binary=claude_binary,
+    )
 
 
 def run_tests(

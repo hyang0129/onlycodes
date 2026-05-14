@@ -59,11 +59,12 @@ class ArmResult:
     """Result of running one arm on one instance."""
 
     instance_id: str
-    arm: str  # "baseline" | "onlycode"
+    arm: str            # "baseline" | "onlycode"
     run_idx: int
-    verdict: str  # "PASS" | "FAIL" | "ERROR"
+    verdict: str        # "PASS" | "FAIL" | "ERROR"
     cost_usd: float | None
     num_turns: int | None
     wall_secs: int
     jsonl_path: str
     test_txt_path: str
+    agent_surface: str = "claude_code"  # default for backward compat with old result files
