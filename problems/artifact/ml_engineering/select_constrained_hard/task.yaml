@@ -1,0 +1,19 @@
+instance_id: ml_engineering__select_constrained_hard
+category: ml_engineering
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/selected.csv
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.csv
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - ml_engineering
+  - experiment_selection
+  - computation_control
+  - csv
+  - continuous_f1
