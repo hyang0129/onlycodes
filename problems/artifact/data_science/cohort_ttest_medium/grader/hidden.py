@@ -173,8 +173,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"per_cohort[{cname}].n_pairs mismatch: got {got_entry['n_pairs']}, "
-                f"expected {exp_entry['n_pairs']}",
+                f"per_cohort[{cname}].n_pairs mismatch: got {got_entry['n_pairs']} (incorrect)",
             )
         if abs(float(got_entry["mean_diff"]) - exp_entry["mean_diff"]) > MEAN_TOL:
             return GradeResult(
@@ -195,20 +194,20 @@ def grade(scratch_dir: Path) -> GradeResult:
                 False,
                 0.0,
                 f"per_cohort[{cname}].pvalue not close to scipy.stats.ttest_rel(after, before).pvalue "
-                f"(expected ≈ {exp_entry['pvalue']:.3e}, got {got_entry['pvalue']:.3e})",
+                f"(got {got_entry['pvalue']:.3e})",
             )
         if bool(got_entry["reject_null"]) != exp_entry["reject_null"]:
             return GradeResult(
                 False,
                 0.0,
-                f"per_cohort[{cname}].reject_null mismatch: got {got_entry['reject_null']}, "
-                f"expected {exp_entry['reject_null']} (rule: pvalue < {ALPHA})",
+                f"per_cohort[{cname}].reject_null mismatch: got {got_entry['reject_null']} "
+                f"(rule: pvalue < {ALPHA})",
             )
 
     eov = expected["overall"]
     if ov["n_pairs"] != eov["n_pairs"]:
         return GradeResult(
-            False, 0.0, f"overall.n_pairs mismatch: got {ov['n_pairs']}, expected {eov['n_pairs']}"
+            False, 0.0, f"overall.n_pairs mismatch: got {ov['n_pairs']} (incorrect)"
         )
     if abs(float(ov["mean_diff"]) - eov["mean_diff"]) > MEAN_TOL:
         return GradeResult(
@@ -225,13 +224,13 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False, 0.0,
             f"overall.pvalue not close to scipy.stats.ttest_rel(after, before).pvalue "
-            f"(expected ≈ {eov['pvalue']:.3e}, got {ov['pvalue']:.3e})",
+            f"(got {ov['pvalue']:.3e})",
         )
     if bool(ov["reject_null"]) != eov["reject_null"]:
         return GradeResult(
             False, 0.0,
-            f"overall.reject_null mismatch: got {ov['reject_null']}, "
-            f"expected {eov['reject_null']} (rule: pvalue < {ALPHA})",
+            f"overall.reject_null mismatch: got {ov['reject_null']} "
+            f"(rule: pvalue < {ALPHA})",
         )
 
     return GradeResult(

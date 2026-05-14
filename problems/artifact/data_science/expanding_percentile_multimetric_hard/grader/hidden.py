@@ -156,8 +156,8 @@ def grade(scratch_dir: Path) -> GradeResult:
         if got_cp["n_observations"] != exp_cp["n_observations"]:
             return GradeResult(
                 False, 0.0,
-                f"checkpoints[t={T}].n_observations mismatch: got {got_cp['n_observations']}, "
-                f"expected {exp_cp['n_observations']} (= T + 1 for expanding window through T inclusive)",
+                f"checkpoints[t={T}].n_observations mismatch: got {got_cp['n_observations']} "
+                "(check: n_observations = T + 1 for expanding window through T inclusive)",
             )
         got_mnames = [m["metric"] for m in got_cp["metrics"]]
         exp_mnames = [m["metric"] for m in exp_cp["metrics"]]

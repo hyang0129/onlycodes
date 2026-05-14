@@ -166,7 +166,7 @@ def grade(scratch_dir: Path) -> GradeResult:
     try:
         expected = _run_pipeline(scratch_dir)
     except Exception as exc:
-        return GradeResult(False, 0.0, f"reference pipeline failed: {exc}")
+        return GradeResult(False, 0.0, f"grading pipeline failed: {exc}")
 
     if set(oi) != set(expected["outlier_indices"]):
         got = set(oi)
@@ -188,7 +188,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"n_iterations mismatch: got {n_it}, expected {expected['n_iterations']} "
+            f"n_iterations mismatch: got {n_it} "
             "(check: comparison starts at iteration 2, sigma uses ddof=0 on included "
             "rows only, threshold is strict abs(z) > 3.0)",
         )

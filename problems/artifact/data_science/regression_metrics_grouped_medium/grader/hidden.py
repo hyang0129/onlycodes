@@ -150,8 +150,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"per_group[{gname}].n mismatch: got {got_entry['n']}, "
-                f"expected {exp_entry['n']}",
+                f"per_group[{gname}].n mismatch: got {got_entry['n']} (incorrect)",
             )
         for fld in ("rmse", "mae", "r2"):
             if abs(float(got_entry[fld]) - exp_entry[fld]) > FLOAT_TOL:
@@ -168,7 +167,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"overall.n mismatch: got {ov['n']}, expected {expected['overall']['n']}",
+            f"overall.n mismatch: got {ov['n']} (incorrect)",
         )
     for fld in ("rmse", "mae", "r2"):
         if abs(float(ov[fld]) - expected["overall"][fld]) > FLOAT_TOL:

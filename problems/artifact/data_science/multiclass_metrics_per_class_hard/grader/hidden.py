@@ -180,8 +180,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False,
                 0.0,
-                f"per_class[class={c}].support mismatch: got {got_entry['support']}, "
-                f"expected {exp_entry['support']}",
+                f"per_class[class={c}].support mismatch: got {got_entry['support']} (incorrect)",
             )
         for fld in ("precision", "recall", "f1"):
             if abs(float(got_entry[fld]) - exp_entry[fld]) > FLOAT_TOL:

@@ -164,8 +164,8 @@ def grade(scratch_dir: Path) -> GradeResult:
     if data["n_pairs"] != expected["n_pairs"]:
         return GradeResult(
             False, 0.0,
-            f"n_pairs mismatch: got {data['n_pairs']}, expected {expected['n_pairs']} "
-            f"(C(k,2) for k={int(math.sqrt(2 * expected['n_pairs'] + 0.25) + 0.5)} groups)",
+            f"n_pairs mismatch: got {data['n_pairs']} "
+            "(check: C(k,2) for all groups in the data)",
         )
 
     exp_keys = [(e["group_a"], e["group_b"]) for e in expected["pairs"]]
@@ -189,8 +189,7 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False, 0.0,
                 f"pairs[{key}] sample size mismatch: "
-                f"got n_a={got_e['n_a']}, n_b={got_e['n_b']}; "
-                f"expected n_a={exp_e['n_a']}, n_b={exp_e['n_b']}",
+                f"got n_a={got_e['n_a']}, n_b={got_e['n_b']} (incorrect)",
             )
         if abs(float(got_e["U"]) - exp_e["U"]) > U_TOL:
             return GradeResult(
@@ -203,13 +202,12 @@ def grade(scratch_dir: Path) -> GradeResult:
             return GradeResult(
                 False, 0.0,
                 f"pairs[{key}].pvalue not close to scipy's mannwhitneyu pvalue "
-                f"(expected ≈ {exp_e['pvalue']:.3e}, got {got_e['pvalue']:.3e})",
+                f"(got {got_e['pvalue']:.3e})",
             )
         if bool(got_e["reject_null"]) != exp_e["reject_null"]:
             return GradeResult(
                 False, 0.0,
-                f"pairs[{key}].reject_null mismatch: got {got_e['reject_null']}, "
-                f"expected {exp_e['reject_null']} "
+                f"pairs[{key}].reject_null mismatch: got {got_e['reject_null']} "
                 f"(rule: pvalue < alpha_corrected = {expected['alpha_corrected']})",
             )
 

@@ -100,15 +100,15 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"n_control mismatch: got {data['n_control']}, "
-            f"expected {expected['n_control']} (count of rows where group=='control')",
+            f"n_control mismatch: got {data['n_control']} "
+            "(count of rows where group=='control')",
         )
     if data["n_treatment"] != expected["n_treatment"]:
         return GradeResult(
             False,
             0.0,
-            f"n_treatment mismatch: got {data['n_treatment']}, "
-            f"expected {expected['n_treatment']} (count of rows where group=='treatment')",
+            f"n_treatment mismatch: got {data['n_treatment']} "
+            "(count of rows where group=='treatment')",
         )
     for f, tol in (
         ("mean_control", MEAN_TOL),
@@ -133,8 +133,7 @@ def grade(scratch_dir: Path) -> GradeResult:
         return GradeResult(
             False,
             0.0,
-            f"reject_null mismatch: got {data['reject_null']}, "
-            f"expected {expected['reject_null']} (rule: pvalue < {ALPHA})",
+            f"reject_null mismatch: got {data['reject_null']} (rule: pvalue < {ALPHA})",
         )
 
     return GradeResult(
