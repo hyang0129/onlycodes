@@ -1,0 +1,61 @@
+{
+  "alpha": 0.05,
+  "alpha_corrected": 0.008333333333333333,
+  "n_pairs": 6,
+  "pairs": [
+    {
+      "group_a": "A",
+      "group_b": "B",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 1251.0,
+      "pvalue": 0.997249769224211,
+      "reject_null": false
+    },
+    {
+      "group_a": "A",
+      "group_b": "C",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 0.0,
+      "pvalue": 7.066071930388932e-18,
+      "reject_null": true
+    },
+    {
+      "group_a": "A",
+      "group_b": "D",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 0.0,
+      "pvalue": 7.066071930388932e-18,
+      "reject_null": true
+    },
+    {
+      "group_a": "B",
+      "group_b": "C",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 0.0,
+      "pvalue": 7.066071930388932e-18,
+      "reject_null": true
+    },
+    {
+      "group_a": "B",
+      "group_b": "D",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 1.0,
+      "pvalue": 7.504054797180572e-18,
+      "reject_null": true
+    },
+    {
+      "group_a": "C",
+      "group_b": "D",
+      "n_a": 50,
+      "n_b": 50,
+      "U": 1231.0,
+      "pvalue": 0.8985164449208333,
+      "reject_null": false
+    }
+  ]
+}

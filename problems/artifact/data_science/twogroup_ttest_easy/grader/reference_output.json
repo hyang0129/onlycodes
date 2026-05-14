@@ -1,0 +1,9 @@
+{
+  "n_control": 120,
+  "n_treatment": 120,
+  "mean_control": 9.8400350613675,
+  "mean_treatment": 11.118017321901084,
+  "statistic": 4.17869962886359,
+  "pvalue": 4.1572170474029825e-05,
+  "reject_null": true
+}

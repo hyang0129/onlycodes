@@ -19,6 +19,7 @@ _INSTANCE_ID_RE = re.compile(r"^[a-z][a-z0-9_]*__[a-z0-9_]+$")
 _CATEGORIES = frozenset({
     "data_processing",
     "data_engineering",
+    "data_science",
     "algorithmic",
     "verification_heavy",
     "enumeration",
