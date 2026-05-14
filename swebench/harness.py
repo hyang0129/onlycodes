@@ -613,8 +613,12 @@ def setup_venv(
             # unpatched file from the cached lowerdir).
             _patch_vendored_cloudpickle(repo_dir)
             # F-1: capture stderr and surface failures rather than silently continuing.
+            # --no-build-isolation matches the fresh-venv install (line 682): build deps
+            # were pinned during initial pre_install and remain in the venv. Without it,
+            # pip pulls latest setuptools into an isolated build env, breaking old repos
+            # (e.g. astropy 5.x fails to build under setuptools >= 71).
             result = subprocess.run(
-                [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+                [pip, "install", "--quiet", "--no-deps", "--no-build-isolation", "-e", repo_dir],
                 capture_output=True,
                 text=True,
             )
