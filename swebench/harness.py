@@ -42,12 +42,16 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
 _INSTANCE_PYTHON: dict[str, str] = {
     # astropy 3.x era (2018): uses collections.MutableSequence removed in 3.10+
     "astropy__astropy-6938": "python3.9",
-    # scikit-learn 0.19–0.21.dev era (2018–2019): Cython .pyx files incompatible with Cython 3.x on Python 3.10+
+    # scikit-learn 0.19–0.22.dev era (2018–2019): Cython .pyx files incompatible with Cython 3.x on Python 3.10+
     "scikit-learn__scikit-learn-10427": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
     "scikit-learn__scikit-learn-13283": "python3.9",
     "scikit-learn__scikit-learn-13496": "python3.9",
+    "scikit-learn__scikit-learn-13864": "python3.9",
+    "scikit-learn__scikit-learn-14125": "python3.9",
+    "scikit-learn__scikit-learn-14710": "python3.9",
+    "scikit-learn__scikit-learn-15094": "python3.9",
     # scikit-learn 0.18 era (2017): uses collections.abc removed in 3.10+
     "scikit-learn__scikit-learn-3840": "python3.9",
     # sympy 1.0–1.1 era (2016–2017): uses collections.abc removed in 3.10+
@@ -65,12 +69,16 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
     "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
-    # scikit-learn 0.21.dev era (2019): _cython_blas.pyx imports scipy.linalg.cython_blas
+    # scikit-learn 0.21.dev–0.22.dev era (2019): _cython_blas.pyx imports scipy.linalg.cython_blas
     # at pre-build time. Without scipy pre-installed, Cython can't resolve the BLAS function
     # pointers and the build fails with "Converting to Python object not allowed without gil".
     # scipy<1.6 is the last release supporting Python 3.9 with old numpy.
     "scikit-learn__scikit-learn-13283": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     "scikit-learn__scikit-learn-13496": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-13864": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-14125": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-14710": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-15094": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     # scikit-learn 1.2–1.3 era: setup.py's check_package_status() imports scipy
     # at metadata-generation time, before any editable install. Without scipy
     # pre-installed, build fails with "scikit-learn requires scipy >= 1.3.2".
