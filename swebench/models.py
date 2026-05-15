@@ -59,9 +59,15 @@ class ArmResult:
     """Result of running one arm on one instance."""
 
     instance_id: str
-    arm: str            # "baseline" | "onlycode"
+    arm: str            # "baseline" | "onlycode" | "bash_only"
     run_idx: int
-    verdict: str        # "PASS" | "FAIL" | "ERROR"
+    verdict: str        # "PASS" | "FAIL" | "ERROR" | "env_fail"
+    #
+    # ``env_fail`` (Issue #238) signals that pre-flight ``pytest --collect-only``
+    # collected zero items, meaning no tests could possibly run.  The agent is
+    # not invoked in this state.  Downstream callers MUST exclude ``env_fail``
+    # from pass-rate numerators *and* denominators — counting it as ``FAIL``
+    # silently corrupts aggregates.
     cost_usd: float | None
     num_turns: int | None
     wall_secs: int

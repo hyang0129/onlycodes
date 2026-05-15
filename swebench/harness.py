@@ -792,20 +792,210 @@ def run_claude(
     )
 
 
+# ---------------------------------------------------------------------------
+# Per-repo test-node resolvers (Issue #238 / #227)
+# ---------------------------------------------------------------------------
+# Some SWE-bench instances store *bare* test function names (e.g.
+# ``test_issue_12420``) in ``test_cmd``.  Pytest treats a bare argument as a
+# path-or-node-id; when neither resolves it collects 0 items and the run
+# scores FAIL spuriously.  See issue #227 for the canonical sympy case.
+#
+# The resolver below runs ``pytest --collect-only -q <bare>`` inside the
+# instance's venv, parses any ``<path>::<bare>`` node IDs out of stdout, and
+# rewrites the test command to pass those node IDs explicitly.  On 0 results
+# it returns the original command unchanged — the pre-flight ``--collect-only``
+# check in ``run.py`` then catches the env failure and records ``env_fail``
+# instead of silently corrupting pass-rate aggregates.
+
+# Regex for a single pytest node-ID line as emitted by ``--collect-only -q``.
+# Matches forms like ``sympy/printing/tests/test_latex.py::test_latex_log``.
+import re as _re
+
+_NODE_ID_LINE_RE = _re.compile(
+    r"^(?P<path>[\w./\-]+\.py)::(?P<name>[\w\[\]\-]+)\s*$",
+    _re.MULTILINE,
+)
+
+
+def _looks_like_bare_test_name(token: str) -> bool:
+    """Return True if *token* is a bare pytest test name (no ``::``, no path).
+
+    Used to decide whether a pytest argument needs node-ID resolution.  A
+    token containing ``/`` or ``::`` is already a path or a node-ID and is
+    passed through untouched.  Flags (``-x``, ``--foo``) and ``.py`` paths
+    are also passed through.  Only ``test_*``-prefixed identifiers are
+    treated as bare names — this avoids accidentally rewriting positional
+    args that happen to be legitimate keyword expressions.
+    """
+    if not token or token.startswith("-"):
+        return False
+    if "/" in token or "::" in token:
+        return False
+    if token.endswith(".py"):
+        return False
+    return token.startswith("test_")
+
+
+def _collect_node_ids(repo_dir: str, venv_python: str, bare_name: str) -> list[str]:
+    """Run ``pytest --collect-only -q <bare_name>`` and return matching node IDs.
+
+    Returns an empty list if pytest collects nothing or errors out — callers
+    decide whether to fall back to the original command (resolver path) or
+    record ``env_fail`` (pre-flight path).
+    """
+    proc = subprocess.run(
+        [venv_python, "-m", "pytest", "--collect-only", "-q", bare_name],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    # pytest returns exit 5 when no items collected; both 0 and 5 may still
+    # contain partial output worth parsing.  Anything else is a hard error
+    # and yields no node IDs.
+    if proc.returncode not in (0, 5):
+        return []
+    node_ids: list[str] = []
+    for m in _NODE_ID_LINE_RE.finditer(proc.stdout):
+        if m.group("name") == bare_name:
+            node_ids.append(f"{m.group('path')}::{bare_name}")
+    return node_ids
+
+
+# Repos whose ``test_cmd`` may carry bare test names that require resolution.
+# Keep this allow-list narrow so unrelated repos are never touched.
+_REPOS_WITH_BARE_TEST_NAMES: tuple[str, ...] = (
+    "sympy/sympy",
+)
+
+
+def resolve_test_node_ids(
+    test_cmd: str,
+    *,
+    repo_dir: str,
+    venv_dir: str,
+    repo_slug: str | None,
+) -> str:
+    """Rewrite a ``pytest`` test command, expanding bare test names to node IDs.
+
+    The rewrite is gated by ``repo_slug`` — only repos in
+    :data:`_REPOS_WITH_BARE_TEST_NAMES` are inspected.  Tokens that already
+    look like a path, node-ID, or pytest flag are passed through.
+
+    On a 0-result resolution the bare token is left in place so the caller's
+    pre-flight ``--collect-only`` check can detect the env failure and record
+    ``env_fail`` rather than silently corrupting the run.
+
+    Returns the (possibly unchanged) test command.
+    """
+    if not repo_slug or repo_slug not in _REPOS_WITH_BARE_TEST_NAMES:
+        return test_cmd
+    if "pytest" not in test_cmd:
+        return test_cmd
+
+    venv_python = os.path.join(venv_dir, "bin", "python")
+    parts = test_cmd.split()
+    rewritten: list[str] = []
+    changed = False
+    for tok in parts:
+        if not _looks_like_bare_test_name(tok):
+            rewritten.append(tok)
+            continue
+        node_ids = _collect_node_ids(repo_dir, venv_python, tok)
+        if node_ids:
+            rewritten.extend(node_ids)
+            changed = True
+        else:
+            # Resolution failed (0 collected).  Leave the bare token so the
+            # pre-flight check in run.py sees the same 0-items state and
+            # records env_fail.  Logging stays informational — never raise.
+            rewritten.append(tok)
+            print(
+                f"[harness] resolve_test_node_ids: 0 node IDs for {tok!r} in "
+                f"{repo_slug}; leaving bare name in command.",
+                flush=True,
+            )
+    if not changed:
+        return test_cmd
+    return " ".join(rewritten)
+
+
+def run_preflight_collect(
+    *,
+    repo_dir: str,
+    test_cmd: str,
+    venv_dir: str,
+) -> tuple[bool, str]:
+    """Run ``pytest --collect-only -q`` for *test_cmd* and report collection.
+
+    Returns ``(items_collected_gt_zero, raw_output)``.  The pre-flight check
+    is independent of the resolver: it operates on whatever final command
+    will be passed to pytest, so a bare-name command that the resolver could
+    not expand will still be caught here as 0-items.
+
+    Behaviour by exit code:
+
+    * **0** with at least one ``<path>::<name>`` node ID → ``(True, ...)``.
+    * **5** (pytest's "no tests collected") → ``(False, ...)``.
+    * Any other non-zero exit → ``(False, ...)`` — the pre-flight cannot
+      prove that tests would have run.
+
+    Non-pytest invocations (anything that isn't ``python -m pytest …`` or
+    ``python -m unittest …``) return ``(True, "")`` — the pre-flight does
+    not apply, so the agent runs normally and downstream PASS/FAIL parsing
+    captures reality.
+    """
+    venv_python = os.path.join(venv_dir, "bin", "python")
+    cmd_str = test_cmd
+    if cmd_str.startswith("python "):
+        cmd_str = cmd_str[len("python "):]
+    tokens = cmd_str.split()
+    if (
+        len(tokens) < 2
+        or tokens[0] != "-m"
+        or tokens[1] != "pytest"
+    ):
+        # Non-pytest invocation — pre-flight does not apply.
+        return True, ""
+    pytest_args = tokens[2:]
+    proc = subprocess.run(
+        [venv_python, "-m", "pytest", "--collect-only", "-q", *pytest_args],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    has_node = bool(_NODE_ID_LINE_RE.search(proc.stdout))
+    if proc.returncode == 0 and has_node:
+        return True, proc.stdout
+    return False, proc.stdout + (("\n" + proc.stderr) if proc.stderr else "")
+
+
 def run_tests(
     *,
     repo_dir: str,
     test_cmd: str,
     venv_dir: str,
     result_file: str,
+    repo_slug: str | None = None,
 ) -> str:
-    """Run the test suite and write results. Returns 'PASS' or 'FAIL'."""
+    """Run the test suite and write results. Returns 'PASS' or 'FAIL'.
+
+    When *repo_slug* is supplied and matches a repo with known bare-test-name
+    instances (currently only ``sympy/sympy``), the command is first passed
+    through :func:`resolve_test_node_ids` to expand bare names like
+    ``test_issue_12420`` to ``<path>::test_issue_12420`` node IDs.  This is
+    required because pytest treats bare arguments as paths and collects 0
+    items, scoring legitimate fixes as FAIL (Issue #227/#238).
+    """
     # Replace leading 'python' with venv python
     venv_python = os.path.join(venv_dir, "bin", "python")
-    if test_cmd.startswith("python "):
-        effective_cmd = venv_python + test_cmd[len("python"):]
-    else:
-        effective_cmd = test_cmd
+    effective_cmd = resolve_test_node_ids(
+        test_cmd,
+        repo_dir=repo_dir,
+        venv_dir=venv_dir,
+        repo_slug=repo_slug,
+    )
+    if effective_cmd.startswith("python "):
+        effective_cmd = venv_python + effective_cmd[len("python"):]
 
     with open(result_file, "w") as out:
         proc = subprocess.run(

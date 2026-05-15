@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from swebench.analyze.backfill import _register as _register_backfill
 from swebench.analyze.run import register_pathology_command
 from swebench.analyze.summary import _register
 
@@ -15,5 +16,6 @@ def analyze_command() -> None:
 
 _register(analyze_command)
 register_pathology_command(analyze_command)
+_register_backfill(analyze_command)
 
 __all__ = ["analyze_command"]

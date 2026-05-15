@@ -135,5 +135,24 @@ def test_missing_results_dir_errors_out(tmp_path: Path):
     assert result.exit_code != 0
 
 
+# ---------------------------------------------------------------------------
+# env_fail (Issue #238) — verdict surfaces as its own row and is excluded
+# from the per-arm pass-rate aggregate.
+# ---------------------------------------------------------------------------
+
+
+def test_env_fail_appears_in_table_and_excluded_from_pass_rate():
+    fixture_dir = FIXTURES_DIR / "env_fail_arm"
+    result = _run(fixture_dir)
+    assert result.exit_code == 0, result.output
+    # env_fail verdict shows up in the per-row table.
+    assert "env_fail" in result.output
+    # The aggregate footer is emitted and pass_rate is n/a (denominator excludes env_fail).
+    assert "Per-arm aggregates" in result.output
+    assert "env_fail=1" in result.output
+    assert "denominator=0" in result.output
+    assert "pass_rate=n/a" in result.output
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
