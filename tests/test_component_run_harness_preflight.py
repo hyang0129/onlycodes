@@ -138,7 +138,7 @@ class TestRunArmPrefailViaRealHarness:
             repo_dir=repo_dir,
             venv_dir=venv_dir,
             results_dir=results_dir,
-            claude_binary="/usr/bin/claude",
+            agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
         )
@@ -185,7 +185,7 @@ class TestRunArmPrefailViaRealHarness:
             repo_dir=repo_dir,
             venv_dir=venv_dir,
             results_dir=results_dir,
-            claude_binary="/usr/bin/claude",
+            agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
         )
@@ -223,7 +223,7 @@ class TestRunArmPrefailViaRealHarness:
             repo_dir=repo_dir,
             venv_dir=venv_dir,
             results_dir=results_dir,
-            claude_binary="/usr/bin/claude",
+            agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
         )
@@ -232,6 +232,93 @@ class TestRunArmPrefailViaRealHarness:
         body = test_txt.read_text()
         assert "no tests ran" in body, (
             f"Preflight output not embedded in _test.txt:\n{body}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Boundary 1b: agent_binary parameter propagates into env_fail .jsonl record
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.component
+class TestRunArmEnvFailAgentBinaryPropagation:
+    """
+    Regression test for the rename bug (Issue #248):
+    _run_arm must write the agent_binary *argument value* into the env_fail
+    meta record — not a stale local name that no longer exists.
+
+    Uses a direct monkeypatch of run_preflight_collect (not subprocess.run)
+    so this test drives the dict-literal path with known argument values and
+    would have caught the claude_binary → agent_binary rename miss.
+    """
+
+    def test_agent_binary_value_written_to_jsonl(self, monkeypatch, tmp_path: Path):
+        """agent_binary argument must appear verbatim in the env_fail .jsonl record."""
+        repo_dir, venv_dir, results_dir = _make_dirs(tmp_path)
+
+        monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
+        monkeypatch.setattr(run_mod, "resolve_test_node_ids", lambda cmd, **kw: cmd)
+        monkeypatch.setattr(
+            run_mod, "run_preflight_collect", lambda **kw: (False, "0 items collected")
+        )
+
+        def _boom_run_claude(**kw):  # pragma: no cover
+            raise AssertionError("run_claude must not be called when preflight fails")
+
+        monkeypatch.setattr(run_mod, "run_claude", _boom_run_claude)
+
+        problem = _make_problem(tmp_path)
+        verdict = run_mod._run_arm(
+            problem=problem,
+            arm=ARM,
+            run_idx=RUN_IDX,
+            repo_dir=repo_dir,
+            venv_dir=venv_dir,
+            results_dir=results_dir,
+            agent_binary="/fake/binary",
+            mcp_config_path=str(tmp_path / "mcp.json"),
+            root=tmp_path,
+        )
+
+        assert verdict == "env_fail"
+
+        jsonl = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
+        assert jsonl.exists(), ".jsonl was not written"
+        record = json.loads(jsonl.read_text().splitlines()[0])
+        assert record["verdict"] == "env_fail"
+        assert record["agent_binary"] == "/fake/binary", (
+            f"agent_binary not propagated correctly into meta record: {record}"
+        )
+
+    def test_test_txt_ends_with_env_fail(self, monkeypatch, tmp_path: Path):
+        """_test.txt must exist and its last non-empty line must be 'env_fail'."""
+        repo_dir, venv_dir, results_dir = _make_dirs(tmp_path)
+
+        monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
+        monkeypatch.setattr(run_mod, "resolve_test_node_ids", lambda cmd, **kw: cmd)
+        monkeypatch.setattr(
+            run_mod, "run_preflight_collect", lambda **kw: (False, "no tests ran\n")
+        )
+        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+
+        problem = _make_problem(tmp_path)
+        run_mod._run_arm(
+            problem=problem,
+            arm=ARM,
+            run_idx=RUN_IDX,
+            repo_dir=repo_dir,
+            venv_dir=venv_dir,
+            results_dir=results_dir,
+            agent_binary="/fake/binary",
+            mcp_config_path=str(tmp_path / "mcp.json"),
+            root=tmp_path,
+        )
+
+        test_txt = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
+        assert test_txt.exists(), "_test.txt was not written"
+        last_line = [ln for ln in test_txt.read_text().splitlines() if ln.strip()][-1]
+        assert last_line.strip() == "env_fail", (
+            f"Expected last non-empty line 'env_fail'; got {last_line!r}"
         )
 
 
@@ -287,7 +374,7 @@ class TestRunArmResolverFeedsIntoPreflightViaRealHarness:
             repo_dir=repo_dir,
             venv_dir=venv_dir,
             results_dir=results_dir,
-            claude_binary="/usr/bin/claude",
+            agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
         )
@@ -381,7 +468,7 @@ class TestRunArmResolverFeedsIntoPreflightViaRealHarness:
             repo_dir=repo_dir,
             venv_dir=venv_dir,
             results_dir=results_dir,
-            claude_binary="/usr/bin/claude",
+            agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
             runner=_StubRunner(),
