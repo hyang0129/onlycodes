@@ -259,13 +259,11 @@ def test_codex_resolve_bundle_from_json_config(tmp_path):
     assert resolved == str(bundle)
 
 
-def test_codex_resolve_bundle_raises_when_not_found(tmp_path):
-    # Pass a nonexistent mcp config and point to a tmp dir with no bundle.
-    # The default bundle exists in this repo so we can't easily test the fallback
-    # without a real file; instead confirm the happy path from JSON config works
-    # and the error path raises.
+def test_codex_resolve_bundle_raises_when_not_found(tmp_path, monkeypatch):
+    # The default bundle exists in the repo, so patch Path.is_file to make the
+    # fallback candidate also appear missing.
+    monkeypatch.setattr("pathlib.Path.is_file", lambda self: False)
+    mcp = tmp_path / "mcp.json"
+    mcp.write_text(json.dumps({"mcpServers": {"codebox": {"args": ["/no/such/bundle.mjs"]}}}))
     with pytest.raises(FileNotFoundError, match="exec-server bundle not found"):
-        # Give it a valid JSON file that points to a nonexistent bundle.
-        mcp = tmp_path / "mcp.json"
-        mcp.write_text(json.dumps({"mcpServers": {"codebox": {"args": ["/no/such/bundle.mjs"]}}}))
         CodexRunner()._resolve_bundle(str(mcp))
