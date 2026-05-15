@@ -56,14 +56,14 @@ def test_pin_jinja2_calls_correct_constraint() -> None:
         mock_run.return_value = MagicMock(returncode=0)
         _pin_jinja2("/venv/bin/pip")
     args = mock_run.call_args[0][0]
-    assert args == ["/venv/bin/pip", "install", "--quiet", "jinja2<3.0,>=2.11"]
+    assert args == ["/venv/bin/pip", "install", "--quiet", "jinja2<3.0,>=2.11", "markupsafe<2.1"]
 
 
 def test_pin_jinja2_raises_on_failure() -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
             returncode=1,
-            args=["/venv/bin/pip", "install", "--quiet", "jinja2<3.0,>=2.11"],
+            args=["/venv/bin/pip", "install", "--quiet", "jinja2<3.0,>=2.11", "markupsafe<2.1"],
             stdout="",
             stderr="Could not find a version",
         )
