@@ -33,6 +33,7 @@ from swebench.cache import (
 from swebench.harness import (
     _venv_kwargs,
     _INSTANCE_ENV,
+    _INSTANCE_EXTRA_PYTEST_ARGS,
     _INSTANCE_SOURCE_SEEDS,
     _patch_vendored_cloudpickle,
     apply_test_patch,
@@ -238,6 +239,8 @@ def _run_arm(
         repo_dir=repo_dir,
         test_cmd=resolved_test_cmd,
         venv_dir=venv_dir,
+        extra_env=_INSTANCE_ENV.get(problem.instance_id),
+        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
     )
     if not collected_ok:
         _echo(
@@ -385,6 +388,7 @@ def _run_arm(
         result_file=test_result_file,
         repo_slug=problem.repo_slug,
         extra_env=_INSTANCE_ENV.get(problem.instance_id),
+        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
     )
 
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")

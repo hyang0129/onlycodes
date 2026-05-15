@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 import swebench.harness as _harness_mod
-from swebench.harness import _INSTANCE_ENV, run_tests
+from swebench.harness import _INSTANCE_ENV, _INSTANCE_EXTRA_PYTEST_ARGS, run_tests, run_preflight_collect
 from swebench import run as run_mod
 from swebench.models import Problem
 
@@ -154,12 +154,6 @@ class TestRunTestsExtraEnv:
 
 
 class TestInstanceEnvTable:
-    def test_astropy_6938_has_pytest_cache_dir(self):
-        entry = _INSTANCE_ENV.get("astropy__astropy-6938")
-        assert entry is not None, "_INSTANCE_ENV missing astropy__astropy-6938"
-        assert "PYTEST_CACHE_DIR" in entry, "PYTEST_CACHE_DIR must be set for astropy-6938"
-        assert entry["PYTEST_CACHE_DIR"], "PYTEST_CACHE_DIR value must be non-empty"
-
     def test_all_values_are_non_empty_strings(self):
         for instance_id, env_dict in _INSTANCE_ENV.items():
             for key, val in env_dict.items():
@@ -168,9 +162,58 @@ class TestInstanceEnvTable:
                 )
 
 
+class TestInstanceExtraPytestArgsTable:
+    def test_astropy_6938_disables_cacheprovider(self):
+        args = _INSTANCE_EXTRA_PYTEST_ARGS.get("astropy__astropy-6938")
+        assert args is not None, "_INSTANCE_EXTRA_PYTEST_ARGS missing astropy__astropy-6938"
+        assert "-p" in args and "no:cacheprovider" in args, (
+            "astropy-6938 must disable cacheprovider to avoid addini conflict (Issue #246)"
+        )
+
+    def test_all_entries_are_lists_of_strings(self):
+        for instance_id, args in _INSTANCE_EXTRA_PYTEST_ARGS.items():
+            assert isinstance(args, list) and all(isinstance(a, str) for a in args), (
+                f"_INSTANCE_EXTRA_PYTEST_ARGS[{instance_id!r}] must be list[str]"
+            )
+
+
 # ---------------------------------------------------------------------------
 # Component test: _run_arm passes _INSTANCE_ENV to run_tests
 # ---------------------------------------------------------------------------
+
+
+class TestRunPreflightExtraPytestArgs:
+    """run_preflight_collect prepends extra_pytest_args before the test args."""
+
+    def test_extra_args_appear_before_test_args(self, monkeypatch, tmp_path: Path):
+        calls: list[list] = []
+
+        def _recording_run(cmd, **kw):
+            calls.append(list(cmd))
+            return SimpleNamespace(returncode=5, stdout="", stderr="")
+
+        monkeypatch.setattr(_harness_mod.subprocess, "run", _recording_run)
+
+        venv_dir = str(tmp_path / "venv")
+        (tmp_path / "venv" / "bin").mkdir(parents=True)
+        (tmp_path / "venv" / "bin" / "python").write_text("#!/bin/sh\n")
+
+        run_preflight_collect(
+            repo_dir=str(tmp_path),
+            test_cmd="python -m pytest tests/test_foo.py",
+            venv_dir=venv_dir,
+            extra_pytest_args=["-p", "no:cacheprovider"],
+        )
+
+        assert len(calls) == 1
+        cmd = calls[0]
+        # Must be: [..., "--collect-only", "-q", "-p", "no:cacheprovider", "tests/test_foo.py"]
+        assert "-p" in cmd and "no:cacheprovider" in cmd
+        no_cache_idx = cmd.index("no:cacheprovider")
+        test_file_idx = cmd.index("tests/test_foo.py")
+        assert no_cache_idx < test_file_idx, (
+            "extra_pytest_args must come before test file args"
+        )
 
 
 class TestRunArmPassesInstanceEnv:
@@ -199,15 +242,15 @@ class TestRunArmPassesInstanceEnv:
         return str(repo_dir), str(venv_dir), str(results_dir)
 
     @pytest.mark.component
-    def test_instance_env_forwarded_to_run_tests(
+    def test_instance_extra_pytest_args_forwarded_to_run_tests(
         self, monkeypatch, tmp_path: Path
     ):
-        """_run_arm must pass _INSTANCE_ENV[instance_id] as extra_env to run_tests."""
+        """_run_arm must pass _INSTANCE_EXTRA_PYTEST_ARGS[instance_id] as extra_pytest_args to run_tests."""
         repo_dir, venv_dir, results_dir = self._make_dirs(tmp_path)
-        captured_extra_env: list = []
+        captured: list = []
 
         def _stub_run_tests(**kw):
-            captured_extra_env.append(kw.get("extra_env"))
+            captured.append(kw.get("extra_pytest_args"))
             Path(kw["result_file"]).write_text("PASS\n")
             return "PASS"
 
@@ -216,7 +259,6 @@ class TestRunArmPassesInstanceEnv:
         monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
         monkeypatch.setattr(run_mod, "run_tests", _stub_run_tests)
 
-        # Stub the runner so _run_arm doesn't need a real agent binary
         class _StubRunner:
             surface = "claude_code"
 
@@ -249,25 +291,25 @@ class TestRunArmPassesInstanceEnv:
             runner=_StubRunner(),
         )
 
-        assert len(captured_extra_env) == 1, "run_tests must have been called once"
-        extra = captured_extra_env[0]
-        assert extra is not None, (
-            "extra_env must be a dict for astropy__astropy-6938, not None"
+        assert len(captured) == 1, "run_tests must have been called once"
+        args = captured[0]
+        assert args is not None, (
+            "extra_pytest_args must be set for astropy__astropy-6938"
         )
-        assert extra.get("PYTEST_CACHE_DIR"), (
-            f"PYTEST_CACHE_DIR must be set in extra_env; got {extra!r}"
+        assert "-p" in args and "no:cacheprovider" in args, (
+            f"cacheprovider must be disabled for astropy-6938; got {args!r}"
         )
 
     @pytest.mark.component
-    def test_instance_without_env_entry_passes_none(
+    def test_instance_without_overrides_passes_none(
         self, monkeypatch, tmp_path: Path
     ):
-        """For instances not in _INSTANCE_ENV, extra_env must be None."""
+        """For instances not in _INSTANCE_EXTRA_PYTEST_ARGS, extra_pytest_args must be None."""
         repo_dir, venv_dir, results_dir = self._make_dirs(tmp_path)
-        captured_extra_env: list = []
+        captured: list = []
 
         def _stub_run_tests(**kw):
-            captured_extra_env.append(kw.get("extra_env"))
+            captured.append(kw.get("extra_pytest_args"))
             Path(kw["result_file"]).write_text("PASS\n")
             return "PASS"
 
@@ -318,7 +360,7 @@ class TestRunArmPassesInstanceEnv:
             runner=_StubRunner(),
         )
 
-        assert len(captured_extra_env) == 1
-        assert captured_extra_env[0] is None, (
-            "extra_env must be None for instances not in _INSTANCE_ENV"
+        assert len(captured) == 1
+        assert captured[0] is None, (
+            "extra_pytest_args must be None for instances not in _INSTANCE_EXTRA_PYTEST_ARGS"
         )
