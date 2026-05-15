@@ -284,3 +284,62 @@ def test_preflight_non_pytest_command_passes(monkeypatch, tmp_path: Path):
     )
     assert ok is True
     assert output == ""
+
+
+# ---------------------------------------------------------------------------
+# Real-pytest integration: _collect_node_ids against an actual pytest run
+# ---------------------------------------------------------------------------
+# These tests do NOT monkeypatch subprocess. They exercise the resolver
+# against a real pytest invocation on a minimal pytest tree. Without ``-k``,
+# pytest treats a bare name as a path and exits 4 ("file or directory not
+# found"), and the resolver returns []. With ``-k``, pytest walks the
+# collection tree and emits node IDs whose name *contains* the bare token;
+# the resolver's post-filter on exact-name equality narrows to the right one.
+
+
+def _write_pytest_tree(root: Path) -> None:
+    """Create a minimal two-file pytest tree under *root*.
+
+    test_alpha.py contains two tests whose names both contain the resolver
+    target — this verifies the exact-name post-filter discards ``-k`` over-
+    matches. test_beta.py contains an unrelated test.
+    """
+    (root / "tests").mkdir()
+    (root / "tests" / "__init__.py").write_text("")
+    (root / "tests" / "test_alpha.py").write_text(
+        "def test_resolver_target_xyz():\n"
+        "    assert True\n"
+        "\n"
+        "def test_resolver_target_xyz_extra():\n"
+        "    assert True\n"
+    )
+    (root / "tests" / "test_beta.py").write_text(
+        "def test_unrelated():\n"
+        "    assert True\n"
+    )
+    # Empty conftest avoids pytest discovering an unrelated parent project.
+    (root / "conftest.py").write_text("")
+
+
+def test_collect_node_ids_real_pytest_finds_bare_name(tmp_path: Path):
+    """Real pytest run: bare name resolves to its node ID via -k."""
+    import sys as _sys
+    _write_pytest_tree(tmp_path)
+    node_ids = harness._collect_node_ids(
+        str(tmp_path), _sys.executable, "test_resolver_target_xyz",
+    )
+    assert node_ids == ["tests/test_alpha.py::test_resolver_target_xyz"], (
+        f"Expected exact-match node ID, got {node_ids!r}.  If this returned "
+        f"[], the resolver is not using -k and pytest is exiting 4 on the "
+        f"bare positional arg (Issue #238 regression)."
+    )
+
+
+def test_collect_node_ids_real_pytest_missing_name_returns_empty(tmp_path: Path):
+    """Real pytest run: a bare name with no matching test yields []."""
+    import sys as _sys
+    _write_pytest_tree(tmp_path)
+    node_ids = harness._collect_node_ids(
+        str(tmp_path), _sys.executable, "test_no_such_function_anywhere",
+    )
+    assert node_ids == []

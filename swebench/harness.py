@@ -837,14 +837,22 @@ def _looks_like_bare_test_name(token: str) -> bool:
 
 
 def _collect_node_ids(repo_dir: str, venv_python: str, bare_name: str) -> list[str]:
-    """Run ``pytest --collect-only -q <bare_name>`` and return matching node IDs.
+    """Run ``pytest --collect-only -q -k <bare_name>`` and return matching node IDs.
+
+    ``-k`` is required (not a positional arg): pytest treats positionals as
+    path-or-node-IDs and exits 4 ("file or directory not found") on a bare
+    function name, yielding zero collected items.  The ``-k`` keyword filter
+    walks the entire collection tree and emits any test whose name *contains*
+    ``bare_name``.  The post-filter on ``m.group("name") == bare_name`` keeps
+    only exact matches, so over-collection from substring matches is safely
+    discarded.
 
     Returns an empty list if pytest collects nothing or errors out — callers
     decide whether to fall back to the original command (resolver path) or
     record ``env_fail`` (pre-flight path).
     """
     proc = subprocess.run(
-        [venv_python, "-m", "pytest", "--collect-only", "-q", bare_name],
+        [venv_python, "-m", "pytest", "--collect-only", "-q", "-k", bare_name],
         cwd=repo_dir,
         capture_output=True,
         text=True,
