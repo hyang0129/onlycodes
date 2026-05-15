@@ -1,0 +1,7 @@
+# pre-flight pytest --collect-only — 0 items collected; agent was not invoked.
+
+--- pytest --collect-only output ---
+no tests ran in 0.05s
+--- end ---
+
+env_fail

@@ -37,7 +37,9 @@ from swebench.harness import (
     find_claude_binary,
     get_claude_version,
     git_reset,
+    resolve_test_node_ids,
     run_claude,
+    run_preflight_collect,
     run_tests,
     setup_venv,
     strip_git_history,
@@ -100,7 +102,12 @@ def _is_triple_complete(
     - ``<results_dir>/<instance_id>_<arm>_run<N>.jsonl`` exists, AND
     - ``<results_dir>/<instance_id>_<arm>_run<N>_test.txt`` exists, AND
     - the test file's last non-empty line (stripped of trailing whitespace) is
-      exactly ``PASS`` or ``FAIL``.
+      one of ``PASS``, ``FAIL``, or ``env_fail``.
+
+    ``env_fail`` (Issue #238) is the verdict written by the pre-flight
+    ``pytest --collect-only`` check when zero items are collected — the agent
+    is never invoked in that case, so the jsonl will contain only the meta
+    record.  We still treat it as complete so ``--resume`` skips it.
 
     If any of those conditions fail (missing file, no verdict, empty file,
     mid-run kill leaving partial output), the triple is **incomplete** and the
@@ -125,7 +132,7 @@ def _is_triple_complete(
         line = raw.strip()
         if not line:
             continue
-        if line == "PASS" or line == "FAIL":
+        if line in ("PASS", "FAIL", "env_fail"):
             return line
         return None
 
@@ -151,7 +158,11 @@ def _run_arm(
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
-    Returns the verdict string ("PASS", "FAIL", or "ERROR").
+    Returns the verdict string ("PASS", "FAIL", "ERROR", or "env_fail").
+    ``env_fail`` is returned when the pre-flight ``pytest --collect-only``
+    check collects zero items (Issue #238): the agent is not invoked and the
+    run is excluded from pass-rate aggregates downstream.
+
     When *log_buffer* is provided, all output is written there instead of
     directly to stdout so that parallel runs don't interleave.
 
@@ -192,6 +203,62 @@ def _run_arm(
             _echo(f"  [{arm} run {run_idx}] Applied test patch.")
         else:
             _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
+
+    # ------------------------------------------------------------------
+    # Pre-flight: pytest --collect-only (Issue #238 / #234)
+    # ------------------------------------------------------------------
+    # Resolve the test command first (sympy bare-name → file::test node IDs)
+    # so the collection check sees the same final command the test run will
+    # use.  If zero items collect, record env_fail and skip the agent
+    # entirely — there is nothing for the agent to fix, and counting this
+    # as FAIL silently corrupts pass-rate aggregates.
+    resolved_test_cmd = resolve_test_node_ids(
+        problem.test_cmd,
+        repo_dir=repo_dir,
+        venv_dir=venv_dir,
+        repo_slug=problem.repo_slug,
+    )
+    collected_ok, preflight_output = run_preflight_collect(
+        repo_dir=repo_dir,
+        test_cmd=resolved_test_cmd,
+        venv_dir=venv_dir,
+    )
+    if not collected_ok:
+        _echo(
+            f"  [{arm} run {run_idx}] Pre-flight collect FAILED — recording env_fail "
+            f"(0 items collected; skipping agent)."
+        )
+        result_file = os.path.join(
+            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl"
+        )
+        # Write a minimal meta record so downstream tools (analyze, summary,
+        # _is_triple_complete) see a properly-shaped jsonl file.
+        with open(result_file, "w") as _meta_f:
+            _meta_f.write(json.dumps({
+                "type": "meta",
+                "instance_id": problem.instance_id,
+                "arm": arm,
+                "run": run_idx,
+                "agent_surface": (runner.surface if runner is not None else "claude_code"),
+                "agent_binary": claude_binary,
+                "verdict": "env_fail",
+                "reason": "pytest --collect-only returned 0 items",
+            }) + "\n")
+        test_result_file = os.path.join(
+            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
+        )
+        with open(test_result_file, "w") as out:
+            out.write(
+                "# pre-flight pytest --collect-only (Issue #238) — "
+                "0 items collected; agent was not invoked.\n"
+            )
+            if preflight_output:
+                out.write("\n--- pytest --collect-only output ---\n")
+                out.write(preflight_output)
+                out.write("\n--- end ---\n")
+            out.write("\nenv_fail\n")
+        _echo(f"  [{arm} run {run_idx}] Verdict: env_fail")
+        return "env_fail"
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     venv_python = os.path.join(venv_dir, "bin", "python")
@@ -300,6 +367,7 @@ def _run_arm(
         test_cmd=problem.test_cmd,
         venv_dir=venv_dir,
         result_file=test_result_file,
+        repo_slug=problem.repo_slug,
     )
 
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")

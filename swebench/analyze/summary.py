@@ -26,8 +26,8 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
             continue
         name = name[: -len("_test")]  # django__django-16379_baseline_run1
 
-        # Extract run index
-        match = re.match(r"^(.+)_(baseline|onlycode)_run(\d+)$", name)
+        # Extract run index (supports baseline | onlycode | bash_only arms).
+        match = re.match(r"^(.+)_(baseline|onlycode|bash_only)_run(\d+)$", name)
         if not match:
             continue
 
@@ -35,13 +35,15 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
         arm = match.group(2)
         run_idx = int(match.group(3))
 
-        # Read verdict from last non-empty line
+        # Read verdict from last non-empty line.  ``env_fail`` (Issue #238) is
+        # treated as a first-class verdict here so it can be displayed as its
+        # own column and excluded from pass-rate aggregates.
         verdict = "ERROR"
         try:
             lines = test_file.read_text().strip().splitlines()
             if lines:
                 last_line = lines[-1].strip()
-                if last_line in ("PASS", "FAIL"):
+                if last_line in ("PASS", "FAIL", "env_fail"):
                     verdict = last_line
         except OSError:
             pass
@@ -81,6 +83,46 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
         )
 
     return results
+
+
+def _emit_arm_aggregates(results: list[ArmResult]) -> None:
+    """Print a per-arm aggregate footer with pass/fail/env_fail counts.
+
+    The pass-rate excludes ``env_fail`` (Issue #238): runs that never had any
+    tests to collect are not counted in either the numerator or the denominator.
+    ``ERROR`` rows are likewise excluded from the rate but reported separately.
+    The aggregate line is intentionally appended to stdout below the per-row
+    table so existing golden fixtures that pin the table format continue to
+    match prefix-wise; new fixtures should pin the aggregate too.
+    """
+    per_arm: dict[str, dict[str, int]] = {}
+    for r in results:
+        bucket = per_arm.setdefault(
+            r.arm, {"PASS": 0, "FAIL": 0, "env_fail": 0, "ERROR": 0}
+        )
+        if r.verdict in bucket:
+            bucket[r.verdict] += 1
+        else:
+            bucket["ERROR"] += 1
+
+    if not per_arm:
+        return
+
+    click.echo("")
+    click.echo("Per-arm aggregates (env_fail excluded from pass rate):")
+    for arm in sorted(per_arm):
+        counts = per_arm[arm]
+        passes = counts["PASS"]
+        fails = counts["FAIL"]
+        env_fails = counts["env_fail"]
+        errors = counts["ERROR"]
+        denom = passes + fails  # excludes env_fail AND ERROR
+        rate = f"{(passes / denom * 100):.1f}%" if denom > 0 else "n/a"
+        click.echo(
+            f"  {arm:<12} pass={passes:<3} fail={fails:<3} "
+            f"env_fail={env_fails:<3} error={errors:<3} "
+            f"pass_rate={rate} (denominator={denom})"
+        )
 
 
 def _register(analyze_command: click.Group) -> None:
@@ -146,6 +188,15 @@ def _register(analyze_command: click.Group) -> None:
                     f"{r.instance_id:<30} {r.arm:<12} {r.run_idx:<5} {r.verdict:<8} "
                     f"{cost_str:<10} {turns_str:<7}"
                 )
+
+        # ----------------------------------------------------------------
+        # Per-arm aggregate footer (Issue #238)
+        # ----------------------------------------------------------------
+        # env_fail is excluded from the pass-rate numerator *and* denominator
+        # — those runs never had any tests to pass or fail.  ERROR rows
+        # (missing/incomplete verdict) are likewise excluded from the rate
+        # but still surfaced for visibility.
+        _emit_arm_aggregates(results)
 
         # Optional CSV output
         if out_path:
