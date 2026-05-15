@@ -29,7 +29,13 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # certifi is required: matplotlib's build downloads freetype/qhull tarballs
     # over HTTPS and imports certifi for the CA bundle.  Without it, build
     # fails with "ImportError: `certifi` is unavailable" before any C compile.
-    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi"],
+    # pyparsing<3 is required: matplotlib 3.3–3.7 registers
+    # `error::PyparsingDeprecationWarning` as a pytest warning filter, and
+    # pyparsing 3.x emits that warning on legacy camelCase APIs (setParseAction,
+    # parseString, enablePackrat, ...) used throughout matplotlib's
+    # fontconfig_pattern/mathtext modules, causing test collection to ERROR
+    # before any test runs.
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3"],
 }
 
 # ---------------------------------------------------------------------------
@@ -42,10 +48,16 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
 _INSTANCE_PYTHON: dict[str, str] = {
     # astropy 3.x era (2018): uses collections.MutableSequence removed in 3.10+
     "astropy__astropy-6938": "python3.9",
-    # scikit-learn 0.19–0.20 era (2018): uses collections.Sequence removed in 3.10+
+    # scikit-learn 0.19–0.22.dev era (2018–2019): Cython .pyx files incompatible with Cython 3.x on Python 3.10+
     "scikit-learn__scikit-learn-10427": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
+    "scikit-learn__scikit-learn-13283": "python3.9",
+    "scikit-learn__scikit-learn-13496": "python3.9",
+    "scikit-learn__scikit-learn-13864": "python3.9",
+    "scikit-learn__scikit-learn-14125": "python3.9",
+    "scikit-learn__scikit-learn-14710": "python3.9",
+    "scikit-learn__scikit-learn-15094": "python3.9",
     # scikit-learn 0.18 era (2017): uses collections.abc removed in 3.10+
     "scikit-learn__scikit-learn-3840": "python3.9",
     # sympy 1.0–1.1 era (2016–2017): uses collections.abc removed in 3.10+
@@ -57,18 +69,58 @@ _INSTANCE_PYTHON: dict[str, str] = {
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # astropy 3.x era (2018): setuptools.dep_util removed in setuptools 71
     "astropy__astropy-6938":  ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
-    # astropy 5.x era (2022): same issue
-    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
-    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    # astropy 5.x era (2022): same issue. setuptools_scm is required at test-import
+    # time because astropy/version.py calls scm_version.get_version() during
+    # `import astropy`. Without it, every test errors with "No module named 'setuptools_scm'".
+    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
+    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
-    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
+    # pyparsing<3 mirrors the repo-level pin (instance override fully replaces it).
+    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel", "pyparsing<3"],
+    # xarray 0.12–2022.x (pre-numpy-2): xarray/core/dtypes.py references np.unicode_
+    # which was removed in NumPy 2.0. Without a numpy<2 pin, every test errors with
+    # "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release".
+    # pytz is required at test-module import time (xarray/tests/test_variable.py).
+    "pydata__xarray-2905": ["numpy<2", "pytz"],
+    "pydata__xarray-6601": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
+    "pydata__xarray-7003": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
+    # scikit-learn 0.21.dev–0.22.dev era (2019): _cython_blas.pyx imports scipy.linalg.cython_blas
+    # at pre-build time. Without scipy pre-installed, Cython can't resolve the BLAS function
+    # pointers and the build fails with "Converting to Python object not allowed without gil".
+    # scipy<1.6 is the last release supporting Python 3.9 with old numpy.
+    "scikit-learn__scikit-learn-13283": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-13496": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-13864": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-14125": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-14710": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    "scikit-learn__scikit-learn-15094": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     # scikit-learn 1.2–1.3 era: setup.py's check_package_status() imports scipy
     # at metadata-generation time, before any editable install. Without scipy
     # pre-installed, build fails with "scikit-learn requires scipy >= 1.3.2".
     # scipy<1.12 keeps compatibility with the repo-level numpy<1.24 pin.
     "scikit-learn__scikit-learn-24677": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
     "scikit-learn__scikit-learn-25694": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
+}
+
+# ---------------------------------------------------------------------------
+# Per-repo parallel pre-build commands
+# ---------------------------------------------------------------------------
+# Repos with large Cython extension sets take 20+ minutes to compile serially
+# via ``pip install -e .``.  Running ``build_ext --inplace -j N`` first lets
+# setuptools reuse the already-compiled ``.so`` files during the subsequent
+# editable install, cutting total setup time by ~8x on 8-core machines.
+# Only runs on the fresh-venv path; the reuse path skips it.
+
+_N_BUILD_JOBS: int = min(4, max(1, os.cpu_count() or 1))
+
+_REPO_PRE_BUILD: dict[str, list[str]] = {
+    # sklearn 1.x uses setup.py build_ext which supports -j since Python 3.8.
+    # Capped at 4: sklearn's generated C files are large (some ~1-2 GB RAM each
+    # during compilation), so running more than 4 in parallel causes OOM kills.
+    "scikit-learn/scikit-learn": [
+        "python", "setup.py", "build_ext", "--inplace", f"-j{_N_BUILD_JOBS}",
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -106,9 +158,11 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
         problem.instance_id,
         _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
     )
+    pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
     return {
         "python_bin": python_bin,
         "pre_install": pre,
+        "pre_build_cmd": pre_build_cmd,
         "repo_slug": problem.repo_slug,
     }
 
@@ -429,6 +483,51 @@ def _pin_jinja2(pip: str) -> None:
         )
 
 
+_VENDORED_CLOUDPICKLE_REL = (
+    "sklearn/externals/joblib/externals/cloudpickle/cloudpickle.py"
+)
+
+_CLOUDPICKLE_OLD_BLOCK = (
+    "        return types.CodeType(\n"
+    "            co.co_argcount,\n"
+    "            co.co_kwonlyargcount,\n"
+)
+
+_CLOUDPICKLE_NEW_BLOCK = (
+    "        return types.CodeType(\n"
+    "            co.co_argcount,\n"
+    "            co.co_posonlyargcount,\n"
+    "            co.co_kwonlyargcount,\n"
+)
+
+
+def _patch_vendored_cloudpickle(repo_dir: str) -> bool:
+    """Make scikit-learn's vendored cloudpickle import-safe on Python 3.8+.
+
+    The vendored copy in sklearn 0.20-era checkouts calls ``types.CodeType``
+    with the pre-3.8 13-argument signature in ``_make_cell_set_template_code``.
+    Python 3.8 added ``co_posonlyargcount`` as the 2nd parameter, so importing
+    sklearn raises ``TypeError: 'bytes' object cannot be interpreted as an
+    integer`` on every interpreter available in this devcontainer (3.9+).
+
+    The fix inserts ``co.co_posonlyargcount`` into the PY3 branch — the same
+    change cloudpickle upstream shipped in v1.3. Idempotent and a no-op when
+    the file is missing or already patched.
+
+    Returns True when the file was modified (useful for logging/tests).
+    """
+    path = Path(repo_dir) / _VENDORED_CLOUDPICKLE_REL
+    if not path.is_file():
+        return False
+    text = path.read_text()
+    if "co.co_posonlyargcount" in text:
+        return False
+    if _CLOUDPICKLE_OLD_BLOCK not in text:
+        return False
+    path.write_text(text.replace(_CLOUDPICKLE_OLD_BLOCK, _CLOUDPICKLE_NEW_BLOCK, 1))
+    return True
+
+
 def _smoke_import(venv_dir: str, repo_slug: str) -> None:
     """Confirm the installed package actually imports cleanly.
 
@@ -476,6 +575,7 @@ def setup_venv(
     *,
     python_bin: str = _DEFAULT_PYTHON,
     pre_install: list[str] | None = None,
+    pre_build_cmd: list[str] | None = None,
     repo_slug: str | None = None,
 ) -> None:
     """Create a venv and pip install the project in editable mode (if not already done).
@@ -495,6 +595,14 @@ def setup_venv(
         editable install (e.g. ``["setuptools<60", "numpy<1.24", "cython<3"]``).
         When non-empty, the editable install uses ``--no-build-isolation`` so
         the pinned packages are visible during the build.  Only applied on the
+        fresh-venv creation path.
+    pre_build_cmd:
+        Optional command (list of strings) to run after pre_install but before
+        the editable install, executed with the venv's Python as the interpreter
+        (``"python"`` in the list is substituted with the venv python path).
+        Intended for repos with large Cython extension sets (e.g. scikit-learn)
+        where running ``build_ext --inplace -j N`` in parallel first lets the
+        subsequent ``pip install -e .`` skip recompilation.  Only runs on the
         fresh-venv creation path.
     repo_slug:
         Optional repo slug (e.g. ``"matplotlib/matplotlib"``).  When provided,
@@ -517,9 +625,16 @@ def setup_venv(
             # Venv exists from a prior run. Re-run the editable install so that C
             # extension .so files are recompiled if git clean removed them (fast no-op
             # when they already exist). Also ensure pytest is present.
+            # Patch vendored cloudpickle if needed (overlay refresh restored the
+            # unpatched file from the cached lowerdir).
+            _patch_vendored_cloudpickle(repo_dir)
             # F-1: capture stderr and surface failures rather than silently continuing.
+            # --no-build-isolation matches the fresh-venv install (line 682): build deps
+            # were pinned during initial pre_install and remain in the venv. Without it,
+            # pip pulls latest setuptools into an isolated build env, breaking old repos
+            # (e.g. astropy 5.x fails to build under setuptools >= 71).
             result = subprocess.run(
-                [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+                [pip, "install", "--quiet", "--no-deps", "--no-build-isolation", "-e", repo_dir],
                 capture_output=True,
                 text=True,
             )
@@ -558,12 +673,32 @@ def setup_venv(
     # Pre-install setuptools/wheel so old projects using setup.py + pkg_resources
     # can build under pip's build isolation without hitting ModuleNotFoundError.
     _pip_run_checked(pip, ["install", "--quiet", "setuptools", "wheel"])
+    # Patch vendored cloudpickle (sklearn 0.20-era) before any import of the
+    # repo. No-op when the file is missing or already patched — see
+    # _patch_vendored_cloudpickle for the rationale.
+    _patch_vendored_cloudpickle(repo_dir)
     if pre_install:
         # Install pinned build dependencies before the editable install so the
         # build backend sees the correct versions.  --no-build-isolation ensures
         # the already-installed pins are used during the build (not re-resolved
         # from scratch inside an isolated build env).
         _pip_run_checked(pip, ["install", "--quiet", *pre_install])
+        if pre_build_cmd:
+            # Compile C/Cython extensions in parallel before the editable install.
+            # When .so files are already present and newer than .pyx sources,
+            # the subsequent pip install -e . skips recompilation (~seconds vs ~25 min).
+            venv_python = os.path.join(venv_dir, "bin", "python")
+            cmd = [venv_python if tok == "python" else tok for tok in pre_build_cmd]
+            result = subprocess.run(cmd, cwd=repo_dir, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(
+                    f"[harness] pre-build command failed (rc={result.returncode}):\n"
+                    f"{result.stderr}",
+                    flush=True,
+                )
+                raise subprocess.CalledProcessError(
+                    result.returncode, cmd, result.stdout, result.stderr
+                )
         _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir, "--no-build-isolation"])
     else:
         _pip_run_checked(pip, ["install", "--quiet", "-e", repo_dir])
