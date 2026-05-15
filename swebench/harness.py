@@ -41,7 +41,7 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # seaborn ≤0.12 era: seaborn/cm.py calls matplotlib.cm.register_cmap at import,
     # removed in matplotlib 3.9 (deprecated 3.7). Without this pin, conftest crashes
     # and 0 tests collect → automatic FAIL.
-    "mwaskom/seaborn": ["matplotlib<3.7"],
+    "mwaskom/seaborn": ["matplotlib<3.7", "numpy<2"],
 }
 
 # ---------------------------------------------------------------------------
@@ -56,6 +56,7 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "astropy__astropy-6938": "python3.9",
     # scikit-learn 0.19–0.22.dev era (2018–2019): Cython .pyx files incompatible with Cython 3.x on Python 3.10+
     "scikit-learn__scikit-learn-10427": "python3.9",
+    "scikit-learn__scikit-learn-13013": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
     "scikit-learn__scikit-learn-13283": "python3.9",
@@ -121,10 +122,44 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # sphinx 2.x era: sphinx/writers/latex.py imports the `roman` package
     # unconditionally; without it conftest crashes before any test collects.
     "sphinx-doc__sphinx-8056": ["roman"],
-    # sphinx 4.3 era: the installed sphinxcontrib.applehelp requires Sphinx ≥5.0
-    # and fails the version check during fixture setup. Pin to a pre-1.0.5
-    # release so the check passes against this instance's Sphinx 4.3.0.
-    "sphinx-doc__sphinx-9698": ["sphinxcontrib.applehelp<1.0.5"],
+    # sphinx 4.3 era: applehelp and devhelp both enforce Sphinx ≥5.0 in their
+    # version checks during fixture setup; markupsafe 2.1+ removed soft_unicode
+    # breaking jinja2 2.x import. All three pins required for collection.
+    "sphinx-doc__sphinx-9698": ["sphinxcontrib.applehelp<1.0.5", "sphinxcontrib-devhelp<1.0.6", "markupsafe<2.1"],
+    # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
+    # flit_core is required at build time for this instance's pyproject.toml.
+    "mwaskom__seaborn-2946": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance source seed patches
+# ---------------------------------------------------------------------------
+# Paths are relative to the problems root (same convention as patch_file in
+# YAML). Applied to the repo BEFORE the test patch so that test-patch imports
+# of agent-created modules succeed at pre-flight collection time.
+_INSTANCE_SOURCE_SEEDS: dict[str, str] = {
+    # sklearn 0.20-era: the test patch imports sklearn.externals._pilutil which
+    # the agent is expected to create as its fix. Without a stub the pre-flight
+    # --collect-only fails before the agent ever runs.
+    "scikit-learn__scikit-learn-10427": "patches/scikit-learn__scikit-learn-10427_source_seed.patch",
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance post-install pins
+# ---------------------------------------------------------------------------
+# Applied AFTER ``pip install -e .`` to re-pin packages that the editable
+# install would otherwise upgrade (e.g. Sphinx pulls its sphinxcontrib-*
+# extensions as runtime deps, overriding pre-install pins).
+_INSTANCE_POST_INSTALL: dict[str, list[str]] = {
+    # sphinx 4.3 era: pip install -e . resolves Sphinx's runtime deps and
+    # upgrades devhelp / qthelp / htmlhelp / serializinghtml to 2.x releases
+    # that require Sphinx ≥5.0. Force them back down after the editable install.
+    "sphinx-doc__sphinx-9698": [
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -183,9 +218,11 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
         _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
     )
     pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
+    post = _INSTANCE_POST_INSTALL.get(problem.instance_id)
     return {
         "python_bin": python_bin,
         "pre_install": pre,
+        "post_install": post,
         "pre_build_cmd": pre_build_cmd,
         "repo_slug": problem.repo_slug,
     }
@@ -571,6 +608,7 @@ def setup_venv(
     *,
     python_bin: str = _DEFAULT_PYTHON,
     pre_install: list[str] | None = None,
+    post_install: list[str] | None = None,
     pre_build_cmd: list[str] | None = None,
     repo_slug: str | None = None,
 ) -> None:
@@ -709,6 +747,10 @@ def setup_venv(
     _pip_run_checked(pip, ["install", "--quiet", "pytest"])
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
+    if post_install:
+        # Re-pin runtime deps after all other installs (including extras) so
+        # nothing downstream can upgrade them back.
+        _pip_run_checked(pip, ["install", "--quiet", *post_install])
     # Smoke-import: confirm the package actually imports before writing the
     # sentinel.  A failed smoke-import leaves the venv unmarked so the next
     # setup_venv call rebuilds from scratch rather than silently reusing a
