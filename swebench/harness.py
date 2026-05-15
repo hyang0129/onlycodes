@@ -151,6 +151,13 @@ _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
     # the agent is expected to create as its fix. Without a stub the pre-flight
     # --collect-only fails before the agent ever runs.
     "scikit-learn__scikit-learn-10427": "patches/scikit-learn__scikit-learn-10427_source_seed.patch",
+    # astropy 3.x / Python 3.9: conftest.py calls enable_deprecations_as_exceptions()
+    # which turns all DeprecationWarnings into errors. On Python 3.9, the
+    # collections ABCs (e.g. collections.MutableSequence) and pkg_resources both
+    # issue DeprecationWarnings not covered by the 3.5/3.6 ignore lists in
+    # astropy/tests/helper.py, causing collection to ERROR before any test runs.
+    # This patch adds Python 3.9 to the ignore list.  (Issue #246)
+    "astropy__astropy-6938": "patches/astropy__astropy-6938_py39_compat.patch",
 }
 
 # ---------------------------------------------------------------------------
@@ -169,6 +176,30 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance test-environment overrides
+# ---------------------------------------------------------------------------
+# Extra env vars merged into the subprocess environment for ``run_tests()``.
+# Use sparingly — only for instances where the test suite crashes at collection
+# time due to a missing env var that is unrelated to the fix under test.
+_INSTANCE_ENV: dict[str, dict[str, str]] = {}
+
+# ---------------------------------------------------------------------------
+# Per-instance extra pytest CLI arguments
+# ---------------------------------------------------------------------------
+# Appended to every pytest invocation (both pre-flight collect and run_tests).
+# Use sparingly — only for instances where the default pytest invocation fails
+# at startup due to plugin conflicts or environment issues unrelated to the fix.
+_INSTANCE_EXTRA_PYTEST_ARGS: dict[str, list[str]] = {
+    # astropy/tests/plugins/config.py calls parser.addini("cache_dir", default=None)
+    # which overwrites pytest's own cacheprovider default (".pytest_cache").  On
+    # pytest 8.x both registrations of the same key are silently accepted but the
+    # last one wins, so config.getini("cache_dir") returns None → INTERNALERROR in
+    # cacheprovider.pytest_configure before any test is collected.  Disabling the
+    # cacheprovider plugin sidesteps the conflict entirely.  (Issue #246)
+    "astropy__astropy-6938": ["-p", "no:cacheprovider"],
 }
 
 # ---------------------------------------------------------------------------
@@ -888,11 +919,13 @@ def run_claude(
 # instead of silently corrupting pass-rate aggregates.
 
 # Regex for a single pytest node-ID line as emitted by ``--collect-only -q``.
-# Matches forms like ``sympy/printing/tests/test_latex.py::test_latex_log``.
+# Matches both function-level IDs (``file.py::test_fn``) and class-level IDs
+# (``file.py::TestClass::test_method``) as well as parametrized variants
+# (``file.py::TestClass::test_method[param]``).
 import re as _re
 
 _NODE_ID_LINE_RE = _re.compile(
-    r"^(?P<path>[\w./\-]+\.py)::(?P<name>[\w\[\]\-]+)\s*$",
+    r"^(?P<path>[\w./\-]+\.py)::(?P<name>[\w\[\]\-:]+)\s*$",
     _re.MULTILINE,
 )
 
@@ -1012,6 +1045,8 @@ def run_preflight_collect(
     repo_dir: str,
     test_cmd: str,
     venv_dir: str,
+    extra_env: dict[str, str] | None = None,
+    extra_pytest_args: list[str] | None = None,
 ) -> tuple[bool, str]:
     """Run ``pytest --collect-only -q`` for *test_cmd* and report collection.
 
@@ -1045,11 +1080,18 @@ def run_preflight_collect(
         # Non-pytest invocation — pre-flight does not apply.
         return True, ""
     pytest_args = tokens[2:]
+    if extra_pytest_args:
+        pytest_args = list(extra_pytest_args) + pytest_args
+    env: dict[str, str] | None = None
+    if extra_env:
+        env = os.environ.copy()
+        env.update(extra_env)
     proc = subprocess.run(
         [venv_python, "-m", "pytest", "--collect-only", "-q", *pytest_args],
         cwd=repo_dir,
         capture_output=True,
         text=True,
+        env=env,
     )
     has_node = bool(_NODE_ID_LINE_RE.search(proc.stdout))
     if proc.returncode == 0 and has_node:
@@ -1064,6 +1106,8 @@ def run_tests(
     venv_dir: str,
     result_file: str,
     repo_slug: str | None = None,
+    extra_env: dict[str, str] | None = None,
+    extra_pytest_args: list[str] | None = None,
 ) -> str:
     """Run the test suite and write results. Returns 'PASS' or 'FAIL'.
 
@@ -1073,6 +1117,11 @@ def run_tests(
     ``test_issue_12420`` to ``<path>::test_issue_12420`` node IDs.  This is
     required because pytest treats bare arguments as paths and collects 0
     items, scoring legitimate fixes as FAIL (Issue #227/#238).
+
+    When *extra_env* is supplied its entries are merged (with override) into a
+    copy of ``os.environ`` before the subprocess is launched.  Use this for
+    per-instance env vars that prevent test collection (e.g. ``PYTEST_CACHE_DIR``
+    when fuse-overlayfs leaves ``HOME`` unresolvable — Issue #246).
     """
     # Replace leading 'python' with venv python
     venv_python = os.path.join(venv_dir, "bin", "python")
@@ -1085,6 +1134,24 @@ def run_tests(
     if effective_cmd.startswith("python "):
         effective_cmd = venv_python + effective_cmd[len("python"):]
 
+    if extra_pytest_args:
+        import shlex
+        # Inject extra args right after "python -m pytest" / venv_python + " -m pytest"
+        pytest_marker = " -m pytest "
+        idx = effective_cmd.find(pytest_marker)
+        if idx != -1:
+            insert_at = idx + len(pytest_marker)
+            effective_cmd = (
+                effective_cmd[:insert_at]
+                + shlex.join(extra_pytest_args) + " "
+                + effective_cmd[insert_at:]
+            )
+
+    env: dict[str, str] | None = None
+    if extra_env:
+        env = os.environ.copy()
+        env.update(extra_env)
+
     with open(result_file, "w") as out:
         proc = subprocess.run(
             effective_cmd,
@@ -1092,6 +1159,7 @@ def run_tests(
             cwd=repo_dir,
             stdout=out,
             stderr=subprocess.STDOUT,
+            env=env,
         )
 
     verdict = "PASS" if proc.returncode == 0 else "FAIL"
