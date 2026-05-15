@@ -32,6 +32,8 @@ from swebench.cache import (
 )
 from swebench.harness import (
     _venv_kwargs,
+    _INSTANCE_SOURCE_SEEDS,
+    _patch_vendored_cloudpickle,
     apply_test_patch,
     clone_repo,
     git_reset,
@@ -186,6 +188,11 @@ def _run_arm(
     # "discard agent edits, clean untracked" semantics without needing the
     # original SHA that no longer exists in the object graph.
     git_reset(repo_dir, "HEAD")
+    # Re-apply the vendored cloudpickle patch after git_reset: the patch is an
+    # unstaged modification that git_reset (git clean -fd + checkout) discards.
+    # Applying it here ensures every arm sees the patched file before the test
+    # patch is applied (and git-add-A commits it alongside the test changes).
+    _patch_vendored_cloudpickle(repo_dir)
 
     # The git_reset above runs `git clean -fd`, which wipes the untracked
     # .egg-info/ directory that reinstall_editable placed in the overlay
@@ -193,6 +200,16 @@ def _run_arm(
     # imports (entry_points, console scripts) keep working.
     if needs_editable_reinstall:
         reinstall_editable(venv_dir, repo_dir)
+
+    # Apply source seed patch (if any) before the test patch so that
+    # test-patch imports of agent-created modules succeed at pre-flight time.
+    seed_rel = _INSTANCE_SOURCE_SEEDS.get(problem.instance_id)
+    if seed_rel:
+        seed_path = str(root / seed_rel)
+        if apply_test_patch(repo_dir, seed_path):
+            _echo(f"  [{arm} run {run_idx}] Applied source seed patch.")
+        else:
+            _echo(f"  [{arm} run {run_idx}] WARNING: source seed patch failed to apply.")
 
     # Apply test patch
     if problem.patch_file:

@@ -38,6 +38,10 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # fontconfig_pattern/mathtext modules, causing test collection to ERROR
     # before any test runs.
     "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3"],
+    # seaborn ≤0.12 era: seaborn/cm.py calls matplotlib.cm.register_cmap at import,
+    # removed in matplotlib 3.9 (deprecated 3.7). Without this pin, conftest crashes
+    # and 0 tests collect → automatic FAIL.
+    "mwaskom/seaborn": ["matplotlib<3.7", "numpy<2"],
 }
 
 # ---------------------------------------------------------------------------
@@ -52,6 +56,7 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "astropy__astropy-6938": "python3.9",
     # scikit-learn 0.19–0.22.dev era (2018–2019): Cython .pyx files incompatible with Cython 3.x on Python 3.10+
     "scikit-learn__scikit-learn-10427": "python3.9",
+    "scikit-learn__scikit-learn-13013": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
     "scikit-learn__scikit-learn-13283": "python3.9",
@@ -85,8 +90,19 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release".
     # pytz is required at test-module import time (xarray/tests/test_variable.py).
     "pydata__xarray-2905": ["numpy<2", "pytz"],
+    "pydata__xarray-4075": ["numpy<2"],
+    "pydata__xarray-4629": ["numpy<2"],
+    "pydata__xarray-4911": ["numpy<2"],
     "pydata__xarray-6601": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
     "pydata__xarray-7003": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
+    # scikit-learn 0.20-era: tests import sklearn.externals._pilutil (a vendored
+    # copy of scipy.misc.pilutil) which requires Pillow at import time. Without
+    # Pillow pre-installed, collection fails with ModuleNotFoundError.
+    "scikit-learn__scikit-learn-10427": ["setuptools<60", "numpy<1.24", "cython<3", "Pillow"],
+    # scikit-learn 0.20–0.21.dev era: pinned scipy needed at runtime because
+    # scipy.optimize.linesearch.line_search_wolfe2 was removed in scipy 1.8.
+    # scipy<1.6 matches the adjacent 0.21.dev entries below.
+    "scikit-learn__scikit-learn-13013": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     # scikit-learn 0.21.dev–0.22.dev era (2019): _cython_blas.pyx imports scipy.linalg.cython_blas
     # at pre-build time. Without scipy pre-installed, Cython can't resolve the BLAS function
     # pointers and the build fails with "Converting to Python object not allowed without gil".
@@ -103,6 +119,47 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # scipy<1.12 keeps compatibility with the repo-level numpy<1.24 pin.
     "scikit-learn__scikit-learn-24677": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
     "scikit-learn__scikit-learn-25694": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
+    # sphinx 2.x era: sphinx/writers/latex.py imports the `roman` package
+    # unconditionally; without it conftest crashes before any test collects.
+    "sphinx-doc__sphinx-8056": ["roman"],
+    # sphinx 4.3 era: applehelp and devhelp both enforce Sphinx ≥5.0 in their
+    # version checks during fixture setup; markupsafe 2.1+ removed soft_unicode
+    # breaking jinja2 2.x import. All three pins required for collection.
+    "sphinx-doc__sphinx-9698": ["sphinxcontrib.applehelp<1.0.5", "sphinxcontrib-devhelp<1.0.6", "markupsafe<2.1"],
+    # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
+    # flit_core is required at build time for this instance's pyproject.toml.
+    "mwaskom__seaborn-2946": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance source seed patches
+# ---------------------------------------------------------------------------
+# Paths are relative to the problems root (same convention as patch_file in
+# YAML). Applied to the repo BEFORE the test patch so that test-patch imports
+# of agent-created modules succeed at pre-flight collection time.
+_INSTANCE_SOURCE_SEEDS: dict[str, str] = {
+    # sklearn 0.20-era: the test patch imports sklearn.externals._pilutil which
+    # the agent is expected to create as its fix. Without a stub the pre-flight
+    # --collect-only fails before the agent ever runs.
+    "scikit-learn__scikit-learn-10427": "patches/scikit-learn__scikit-learn-10427_source_seed.patch",
+}
+
+# ---------------------------------------------------------------------------
+# Per-instance post-install pins
+# ---------------------------------------------------------------------------
+# Applied AFTER ``pip install -e .`` to re-pin packages that the editable
+# install would otherwise upgrade (e.g. Sphinx pulls its sphinxcontrib-*
+# extensions as runtime deps, overriding pre-install pins).
+_INSTANCE_POST_INSTALL: dict[str, list[str]] = {
+    # sphinx 4.3 era: pip install -e . resolves Sphinx's runtime deps and
+    # upgrades devhelp / qthelp / htmlhelp / serializinghtml to 2.x releases
+    # that require Sphinx ≥5.0. Force them back down after the editable install.
+    "sphinx-doc__sphinx-9698": [
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -161,9 +218,11 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
         _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
     )
     pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
+    post = _INSTANCE_POST_INSTALL.get(problem.instance_id)
     return {
         "python_bin": python_bin,
         "pre_install": pre,
+        "post_install": post,
         "pre_build_cmd": pre_build_cmd,
         "repo_slug": problem.repo_slug,
     }
@@ -482,8 +541,11 @@ def _patch_vendored_cloudpickle(repo_dir: str) -> bool:
     integer`` on every interpreter available in this devcontainer (3.9+).
 
     The fix inserts ``co.co_posonlyargcount`` into the PY3 branch — the same
-    change cloudpickle upstream shipped in v1.3. Idempotent and a no-op when
-    the file is missing or already patched.
+    change cloudpickle upstream shipped in v1.3. Adjacent sklearn versions
+    have multiple ``types.CodeType()`` callsites with the same pre-3.8 shape
+    (e.g. ``_make_skel_func`` alongside ``_make_cell_set_template_code``), so
+    we replace every matching block in the file, not just the first.
+    Idempotent and a no-op when the file is missing or already patched.
 
     Returns True when the file was modified (useful for logging/tests).
     """
@@ -495,7 +557,7 @@ def _patch_vendored_cloudpickle(repo_dir: str) -> bool:
         return False
     if _CLOUDPICKLE_OLD_BLOCK not in text:
         return False
-    path.write_text(text.replace(_CLOUDPICKLE_OLD_BLOCK, _CLOUDPICKLE_NEW_BLOCK, 1))
+    path.write_text(text.replace(_CLOUDPICKLE_OLD_BLOCK, _CLOUDPICKLE_NEW_BLOCK))
     return True
 
 
@@ -546,6 +608,7 @@ def setup_venv(
     *,
     python_bin: str = _DEFAULT_PYTHON,
     pre_install: list[str] | None = None,
+    post_install: list[str] | None = None,
     pre_build_cmd: list[str] | None = None,
     repo_slug: str | None = None,
 ) -> None:
@@ -684,6 +747,10 @@ def setup_venv(
     _pip_run_checked(pip, ["install", "--quiet", "pytest"])
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
+    if post_install:
+        # Re-pin runtime deps after all other installs (including extras) so
+        # nothing downstream can upgrade them back.
+        _pip_run_checked(pip, ["install", "--quiet", *post_install])
     # Smoke-import: confirm the package actually imports before writing the
     # sentinel.  A failed smoke-import leaves the venv unmarked so the next
     # setup_venv call rebuilds from scratch rather than silently reusing a

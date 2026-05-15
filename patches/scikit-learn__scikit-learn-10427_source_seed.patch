@@ -1,0 +1,23 @@
+diff --git a/sklearn/externals/_pilutil.py b/sklearn/externals/_pilutil.py
+new file mode 100644
+--- /dev/null
++++ b/sklearn/externals/_pilutil.py
+@@ -0,0 +1,18 @@
++"""Stub _pilutil module for pre-flight test collection.
++
++The test patch imports this module to check whether Pillow is available.
++The agent is expected to replace this stub with a full implementation that
++properly vendors the required image utilities from scipy/Pillow.
++"""
++try:
++    from PIL import Image as _Image
++    pillow_installed = True
++
++    def imsave(fname, arr, **kwargs):
++        _Image.fromarray(arr).save(fname, **kwargs)
++
++except ImportError:
++    pillow_installed = False
++
++    def imsave(fname, arr, **kwargs):
++        raise ImportError("Pillow is not installed")
