@@ -32,6 +32,7 @@ from swebench.cache import (
 )
 from swebench.harness import (
     _venv_kwargs,
+    _INSTANCE_ENV,
     _INSTANCE_SOURCE_SEEDS,
     _patch_vendored_cloudpickle,
     apply_test_patch,
@@ -383,6 +384,7 @@ def _run_arm(
         venv_dir=venv_dir,
         result_file=test_result_file,
         repo_slug=problem.repo_slug,
+        extra_env=_INSTANCE_ENV.get(problem.instance_id),
     )
 
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")

@@ -172,6 +172,20 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Per-instance test-environment overrides
+# ---------------------------------------------------------------------------
+# Extra env vars merged into the subprocess environment for ``run_tests()``.
+# Use sparingly — only for instances where the test suite crashes at collection
+# time due to a missing env var that is unrelated to the fix under test.
+_INSTANCE_ENV: dict[str, dict[str, str]] = {
+    # fuse-overlayfs leaves HOME unset (or the overlay's copy-up hasn't created
+    # ~/.cache yet), so pytest's cache plugin calls os.path.expanduser("~/.cache")
+    # and gets None → INTERNALERROR before any test is collected.  Redirect the
+    # pytest cache to a known-writable tmp path for this instance (Issue #246).
+    "astropy__astropy-6938": {"PYTEST_CACHE_DIR": "/tmp/pytest_cache_astropy_6938"},
+}
+
+# ---------------------------------------------------------------------------
 # Per-repo parallel pre-build commands
 # ---------------------------------------------------------------------------
 # Repos with large Cython extension sets take 20+ minutes to compile serially
@@ -1064,6 +1078,7 @@ def run_tests(
     venv_dir: str,
     result_file: str,
     repo_slug: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> str:
     """Run the test suite and write results. Returns 'PASS' or 'FAIL'.
 
@@ -1073,6 +1088,11 @@ def run_tests(
     ``test_issue_12420`` to ``<path>::test_issue_12420`` node IDs.  This is
     required because pytest treats bare arguments as paths and collects 0
     items, scoring legitimate fixes as FAIL (Issue #227/#238).
+
+    When *extra_env* is supplied its entries are merged (with override) into a
+    copy of ``os.environ`` before the subprocess is launched.  Use this for
+    per-instance env vars that prevent test collection (e.g. ``PYTEST_CACHE_DIR``
+    when fuse-overlayfs leaves ``HOME`` unresolvable — Issue #246).
     """
     # Replace leading 'python' with venv python
     venv_python = os.path.join(venv_dir, "bin", "python")
@@ -1085,6 +1105,11 @@ def run_tests(
     if effective_cmd.startswith("python "):
         effective_cmd = venv_python + effective_cmd[len("python"):]
 
+    env: dict[str, str] | None = None
+    if extra_env:
+        env = os.environ.copy()
+        env.update(extra_env)
+
     with open(result_file, "w") as out:
         proc = subprocess.run(
             effective_cmd,
@@ -1092,6 +1117,7 @@ def run_tests(
             cwd=repo_dir,
             stdout=out,
             stderr=subprocess.STDOUT,
+            env=env,
         )
 
     verdict = "PASS" if proc.returncode == 0 else "FAIL"
