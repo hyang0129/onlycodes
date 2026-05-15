@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from swebench.harness import strip_git_history
+from swebench.harness import apply_test_patch, strip_git_history
 
 
 def _git(repo: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -243,3 +243,45 @@ def test_strip_works_when_head_is_detached(tmp_path: Path) -> None:
     assert count == "1"
     # HEAD should be a valid commit.
     _git(repo, "rev-parse", "HEAD")
+
+
+def test_apply_test_patch_leaves_empty_git_diff(tmp_path: Path) -> None:
+    """Regression test for Issue #226: test patch must not be visible via git diff.
+
+    After apply_test_patch(), `git diff` and `git diff HEAD` must both return
+    empty output so an agent cannot read the test assertions from the diff.
+    """
+    repo = _make_repo(tmp_path)
+    strip_git_history(repo)
+
+    # Create a minimal patch that adds a new test file.
+    patch_path = tmp_path / "test.patch"
+    patch_path.write_text(
+        "diff --git a/test_secret.py b/test_secret.py\n"
+        "new file mode 100644\n"
+        "index 0000000..e69de29\n"
+        "--- /dev/null\n"
+        "+++ b/test_secret.py\n"
+        "@@ -0,0 +1,3 @@\n"
+        "+def test_answer():\n"
+        "+    assert answer == 42  # hidden assertion\n"
+        "+\n"
+    )
+
+    result = apply_test_patch(repo, str(patch_path))
+    assert result is True
+
+    # git diff (unstaged changes) must be empty — Issue #226.
+    diff = _git(repo, "diff").stdout
+    assert diff == "", f"git diff is not empty after apply_test_patch: {diff!r}"
+
+    # git diff HEAD (staged + unstaged vs last commit) must also be empty.
+    diff_head = _git(repo, "diff", "HEAD").stdout
+    assert diff_head == "", f"git diff HEAD is not empty after apply_test_patch: {diff_head!r}"
+
+    # The patch file itself should exist in the working tree (was applied).
+    assert (Path(repo) / "test_secret.py").exists()
+
+    # History should now have exactly 2 commits (orphan base + test patch commit).
+    count = _git(repo, "rev-list", "--all", "--count").stdout.strip()
+    assert count == "2"
