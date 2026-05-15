@@ -73,25 +73,38 @@ def _write_fixture_task(tasks_root: Path, agent_answer: str = "42") -> str:
     return "test_fixture__trivial_pass"
 
 
-@pytest.fixture
-def stub_runtime(monkeypatch):
-    """Stub out Claude launch and binary discovery so CLI tests stay hermetic."""
-    monkeypatch.setattr(
-        artifact_cli_mod, "find_claude_binary",
-        lambda: "/bin/true",
-    )
-    monkeypatch.setattr(
-        artifact_run_mod, "get_claude_version",
-        lambda _b: "claude-test",
-    )
+class _FakeRunner:
+    """Minimal AgentRunner stub for CLI integration tests."""
+    surface = "claude_code"
 
-    def fake_run_claude(*, prompt, repo_dir, system_prompt, tools_flags,
-                        result_file, claude_binary):
-        Path(repo_dir, "answer.txt").write_text("42\n")
+    def find_binary(self):
+        return "/bin/true"
+
+    def get_version(self, _binary):
+        return "fake-runner-test"
+
+    def build_tools_flags(self, arm, mcp_config_path):
+        from swebench.runner import ClaudeRunner
+        return ClaudeRunner().build_tools_flags(arm, mcp_config_path)
+
+    def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
+               result_file, binary, mcp_config_path=None):
+        Path(cwd, "answer.txt").write_text("42\n")
         with open(result_file, "a") as f:
             f.write('{"type":"result","total_cost_usd":0.01,"num_turns":2}\n')
 
-    monkeypatch.setattr(artifact_run_mod, "run_claude", fake_run_claude)
+    def extract_metadata(self, jsonl_path):
+        from swebench.runner import ClaudeRunner
+        return ClaudeRunner().extract_metadata(jsonl_path)
+
+
+@pytest.fixture
+def stub_runtime(monkeypatch):
+    """Stub out agent launch and binary discovery so CLI tests stay hermetic."""
+    monkeypatch.setattr(
+        artifact_cli_mod, "make_runner",
+        lambda _surface: _FakeRunner(),
+    )
     return monkeypatch
 
 
@@ -233,7 +246,8 @@ def _write_result_json(
         "cost_usd": cost_usd,
         "num_turns": num_turns,
         "wall_secs": wall_secs,
-        "claude_version": "test",
+        "agent_version": "test",
+        "agent_surface": "claude_code",
         "agent_jsonl_path": str(run_dir / "agent.jsonl"),
     }
     (run_dir / "result.json").write_text(json.dumps(payload))

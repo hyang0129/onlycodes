@@ -88,7 +88,7 @@ fuse-overlayfs copy-up semantics prevent `git clean -fd` from un-creating files 
 
 ### Tool restriction for onlycode / code_only
 
-The onlycode arm passes `--tools mcp__codebox__execute_code,mcp__codebox__execute_code_and_wait` and `--disallowedTools` covering all built-in tools. This is implemented in `run.py`; check there before modifying tool lists.
+The onlycode arm passes `--tools mcp__codebox__execute_code,mcp__codebox__list_tools` and `--disallowedTools` covering all built-in tools. This is implemented in `runner.py:ClaudeRunner.build_tools_flags`; check there before modifying tool lists.
 
 ### patterns.json is append-only during runs
 
