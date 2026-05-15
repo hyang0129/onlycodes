@@ -8,10 +8,13 @@ from pathlib import Path
 
 import pytest
 
+import tomllib
+
 from swebench.runner import (
     BLOCKED_BUILTINS,
     ClaudeRunner,
     CodexRunner,
+    _toml_str,
     _write_codex_config,
     make_runner,
 )
@@ -569,3 +572,73 @@ def test_codex_jsonl_analyze_guard(tmp_path):
             f"Expected non-zero exit + 'Codex JSONL not yet supported'. "
             f"Got: exit={result.exit_code}, output={output!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# _toml_str — escape helper
+# ---------------------------------------------------------------------------
+
+def test_toml_str_escapes_backslash():
+    assert _toml_str("C:\\foo") == "C:\\\\foo"
+
+
+def test_toml_str_escapes_quote():
+    assert _toml_str('say "hi"') == 'say \\"hi\\"'
+
+
+def test_toml_str_passthrough_clean():
+    assert _toml_str("/clean/path") == "/clean/path"
+
+
+def test_write_codex_config_roundtrip_paths(tmp_path):
+    """Paths with backslash and quote must round-trip through config.toml."""
+    bundle_path = 'C:\\Users\\test "user"\\bundle.mjs'
+    cwd = 'C:\\work dir\\"quoted"'
+    _write_codex_config(str(tmp_path), bundle_path, cwd, "0")
+    toml_text = (tmp_path / "config.toml").read_text()
+    parsed = tomllib.loads(toml_text)
+    assert parsed["mcp_servers"]["codebox"]["args"][0] == bundle_path
+    assert parsed["mcp_servers"]["codebox"]["options"]["cwd"] == cwd
+
+
+# ---------------------------------------------------------------------------
+# CodexRunner.preflight() — all four cases
+# ---------------------------------------------------------------------------
+
+def test_codex_preflight_happy(monkeypatch):
+    """preflight() returns None when node, binary, and bundle are all found."""
+    monkeypatch.setattr("swebench.runner.shutil.which", lambda name: "/usr/bin/node" if name == "node" else None)
+    monkeypatch.setattr("swebench.runner.CodexRunner.find_binary", lambda self: "/usr/bin/codex")
+    monkeypatch.setattr("swebench.runner.CodexRunner._resolve_bundle", lambda self, _: "/fake/bundle.mjs")
+    result = CodexRunner().preflight()
+    assert result is None
+
+
+def test_codex_preflight_no_node(monkeypatch):
+    """preflight() raises RuntimeError with 'node' in message when node is absent."""
+    monkeypatch.setattr("swebench.runner.shutil.which", lambda _name: None)
+    with pytest.raises(RuntimeError, match="node"):
+        CodexRunner().preflight()
+
+
+def test_codex_preflight_no_binary(monkeypatch):
+    """preflight() raises RuntimeError when codex binary is not found."""
+    monkeypatch.setattr("swebench.runner.shutil.which", lambda name: "/usr/bin/node" if name == "node" else None)
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner.find_binary",
+        lambda self: (_ for _ in ()).throw(FileNotFoundError("codex binary not found")),
+    )
+    with pytest.raises(RuntimeError):
+        CodexRunner().preflight()
+
+
+def test_codex_preflight_no_bundle(monkeypatch):
+    """preflight() raises RuntimeError with 'bundle' in message when bundle is absent."""
+    monkeypatch.setattr("swebench.runner.shutil.which", lambda name: "/usr/bin/node" if name == "node" else None)
+    monkeypatch.setattr("swebench.runner.CodexRunner.find_binary", lambda self: "/usr/bin/codex")
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner._resolve_bundle",
+        lambda self, _: (_ for _ in ()).throw(FileNotFoundError("exec-server bundle not found")),
+    )
+    with pytest.raises(RuntimeError, match="bundle"):
+        CodexRunner().preflight()
