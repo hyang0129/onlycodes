@@ -696,14 +696,40 @@ def setup_venv(
 
 
 def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
-    """Apply a test patch to the repo. Returns True if successful."""
+    """Apply a test patch to the repo and commit it. Returns True if successful.
+
+    Committing the patch (rather than leaving it as an unstaged diff) prevents
+    agents from reading the test assertions via ``git diff`` — Issue #226.
+    """
     if not os.path.isfile(patch_path):
         return False
     result = subprocess.run(
         ["git", "-C", repo_dir, "apply", patch_path],
         capture_output=True,
     )
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+    env = os.environ.copy()
+    env.update({
+        "GIT_AUTHOR_NAME": "swebench",
+        "GIT_AUTHOR_EMAIL": "swebench@localhost",
+        "GIT_AUTHOR_DATE": "1970-01-01T00:00:00+0000",
+        "GIT_COMMITTER_NAME": "swebench",
+        "GIT_COMMITTER_EMAIL": "swebench@localhost",
+        "GIT_COMMITTER_DATE": "1970-01-01T00:00:00+0000",
+    })
+    subprocess.run(
+        ["git", "-C", repo_dir, "add", "-A"],
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", repo_dir, "commit", "-m", "test patch"],
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    return True
 
 
 def make_isolated_claude_config() -> str:
