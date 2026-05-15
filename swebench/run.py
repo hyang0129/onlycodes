@@ -139,7 +139,7 @@ def _run_arm(
     repo_dir: str,
     venv_dir: str,
     results_dir: str,
-    claude_binary: str,
+    agent_binary: str,
     mcp_config_path: str,
     root: Path,
     persistent_kernel: bool = True,
@@ -263,7 +263,7 @@ def _run_arm(
 
     start_time = time.time()
 
-    agent_version = _runner.get_version(claude_binary)
+    agent_version = _runner.get_version(agent_binary)
     with open(result_file, "w") as _meta_f:
         _meta_f.write(json.dumps({
             "type": "meta",
@@ -271,7 +271,7 @@ def _run_arm(
             "arm": arm,
             "run": run_idx,
             "agent_surface": _runner.surface,
-            "agent_binary": claude_binary,
+            "agent_binary": agent_binary,
             "agent_version": agent_version,
         }) + "\n")
 
@@ -281,7 +281,7 @@ def _run_arm(
         system_prompt="You are a helpful assistant.",
         tools_flags=tools_flags,
         result_file=result_file,
-        binary=claude_binary,
+        binary=agent_binary,
         mcp_config_path=effective_mcp_config,
     )
 
@@ -618,9 +618,8 @@ def run_command(
     # Create runner and resolve binary (preflight)
     try:
         runner = make_runner(agent_surface)
-        claude_binary = runner.find_binary()
-        if agent_surface == "codex_cli":
-            runner.make_isolated_config()  # verify auth early; discard result
+        agent_binary = runner.find_binary()
+        runner.verify_auth()
     except (ValueError, FileNotFoundError) as e:
         click.echo(f"ERROR: {e}", err=True)
         raise SystemExit(1)
@@ -709,8 +708,8 @@ def run_command(
     click.echo(f"Resume: {resume}")
     click.echo(f"Output dir: {results_dir}")
     click.echo(f"Agent surface: {agent_surface}")
-    click.echo(f"Agent binary: {claude_binary}")
-    agent_version = runner.get_version(claude_binary)
+    click.echo(f"Agent binary: {agent_binary}")
+    agent_version = runner.get_version(agent_binary)
     click.echo(f"Agent version: {agent_version}")
     click.echo()
 
@@ -871,7 +870,7 @@ def run_command(
                         repo_dir=task.repo_dir,
                         venv_dir=task.venv_dir,
                         results_dir=str(results_dir),
-                        claude_binary=claude_binary,
+                        agent_binary=agent_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
                         persistent_kernel=persistent_kernel,
@@ -925,7 +924,7 @@ def run_command(
                         repo_dir=task.repo_dir,
                         venv_dir=task.venv_dir,
                         results_dir=str(results_dir),
-                        claude_binary=claude_binary,
+                        agent_binary=agent_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
                         persistent_kernel=persistent_kernel,

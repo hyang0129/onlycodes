@@ -139,6 +139,7 @@ def artifact_run_command(
     try:
         runner = make_runner(agent_surface)
         binary = runner.find_binary()
+        runner.verify_auth()
     except (ValueError, FileNotFoundError) as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1)

@@ -281,18 +281,53 @@ def test_codex_find_binary_missing(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# CodexRunner — make_isolated_config raises when auth.json is absent
+# verify_auth — surface-agnostic preflight check
 # ---------------------------------------------------------------------------
 
-def test_codex_make_isolated_config_missing_auth(monkeypatch):
-    """make_isolated_config() must raise FileNotFoundError when ~/.codex/auth.json is absent."""
+def test_claude_verify_auth_is_noop():
+    """ClaudeRunner.verify_auth() returns None without raising, regardless of env."""
+    from swebench.runner import ClaudeRunner
+    assert ClaudeRunner().verify_auth() is None
+
+
+def test_codex_verify_auth_raises_when_auth_missing(monkeypatch):
+    """CodexRunner.verify_auth() must raise FileNotFoundError when ~/.codex/auth.json is absent."""
     monkeypatch.setattr("swebench.runner.os.path.isfile", lambda _p: False)
     with pytest.raises(FileNotFoundError, match=r"~/\.codex/auth\.json"):
-        CodexRunner().make_isolated_config()
+        CodexRunner().verify_auth()
 
+
+def test_codex_verify_auth_ok_when_auth_present(tmp_path, monkeypatch):
+    """CodexRunner.verify_auth() returns None and creates no temp dirs when auth exists."""
+    fake_home = tmp_path / "home"
+    codex_dir = fake_home / ".codex"
+    codex_dir.mkdir(parents=True)
+    (codex_dir / "auth.json").write_text('{"token": "test-token"}')
+
+    real_expanduser = os.path.expanduser
+
+    def fake_expanduser(path: str) -> str:
+        if path.startswith("~/"):
+            return str(fake_home / path[2:])
+        return real_expanduser(path)
+
+    monkeypatch.setattr("swebench.runner.os.path.expanduser", fake_expanduser)
+
+    # Sentinel: ensure no temp dir is created during verify_auth.
+    def fail_mkdtemp(*_a, **_kw):
+        raise AssertionError("verify_auth must not create a temp dir")
+
+    monkeypatch.setattr("swebench.runner.tempfile.mkdtemp", fail_mkdtemp)
+
+    assert CodexRunner().verify_auth() is None
+
+
+# ---------------------------------------------------------------------------
+# CodexRunner — _make_isolated_config (internal helper) still works end-to-end
+# ---------------------------------------------------------------------------
 
 def test_codex_make_isolated_config_success(tmp_path, monkeypatch):
-    """make_isolated_config() returns a dir containing auth.json when the source exists."""
+    """_make_isolated_config() returns a dir containing auth.json when source exists."""
     import shutil as _shutil
 
     fake_home = tmp_path / "home"
@@ -311,8 +346,7 @@ def test_codex_make_isolated_config_success(tmp_path, monkeypatch):
 
     monkeypatch.setattr("swebench.runner.os.path.expanduser", fake_expanduser)
 
-    # _resolve_bundle will look for a bundle; redirect Path.is_file so the
-    # fallback candidate appears missing, then supply a fake bundle via mcp_config.
+    # _resolve_bundle will look for a bundle; supply a fake bundle via mcp_config.
     bundle = tmp_path / "bundle.mjs"
     bundle.write_text("// fake")
     mcp_json = tmp_path / "mcp.json"
@@ -320,7 +354,7 @@ def test_codex_make_isolated_config_success(tmp_path, monkeypatch):
         "mcpServers": {"codebox": {"args": [str(bundle)]}}
     }))
 
-    cfg_dir = CodexRunner().make_isolated_config(
+    cfg_dir = CodexRunner()._make_isolated_config(
         mcp_config_path=str(mcp_json),
         cwd=str(tmp_path),
     )
@@ -329,6 +363,55 @@ def test_codex_make_isolated_config_success(tmp_path, monkeypatch):
         assert (Path(cfg_dir) / "auth.json").is_file()
     finally:
         _shutil.rmtree(cfg_dir, ignore_errors=True)
+
+
+def test_run_command_codex_baseline_skips_bundle_check(tmp_path, monkeypatch):
+    """Preflight for codex_cli + baseline must not require the exec-server bundle (F-1)."""
+    from click.testing import CliRunner
+    from swebench.cli import cli
+    from swebench.runner import CodexRunner
+
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner.find_binary",
+        lambda self: "/usr/bin/codex",
+    )
+    # verify_auth must be a no-op (real test of: preflight does not touch the bundle).
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner.verify_auth",
+        lambda self: None,
+    )
+    # If preflight wrongly tries to resolve the bundle, this blows up loudly.
+    def _bundle_should_not_be_touched(self, _mcp):
+        raise AssertionError(
+            "preflight must not call _resolve_bundle for baseline arm"
+        )
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner._resolve_bundle",
+        _bundle_should_not_be_touched,
+    )
+
+    # Empty problems dir so run_command exits with "No problem files found"
+    # *after* preflight succeeds — verifies preflight passes without bundle.
+    problems_dir = tmp_path / "problems" / "swe"
+    problems_dir.mkdir(parents=True)
+    monkeypatch.setattr("swebench.run.repo_root", lambda: tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--agent-surface", "codex_cli",
+            "--arms", "baseline",
+            "--output-dir", str(tmp_path / "out"),
+        ],
+        catch_exceptions=False,
+    )
+    # Preflight succeeded; failure now comes from empty problems dir, not from bundle.
+    assert result.exit_code == 1
+    assert "No problem files found" in (result.output or ""), (
+        f"expected post-preflight failure, got: {result.output!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -341,16 +424,15 @@ def test_run_command_rejects_codex_onlycode(tmp_path, monkeypatch):
     from swebench.cli import cli
 
     # Prevent real binary discovery / auth check from running before the guard.
-    # The rejection guard in run_command fires after find_binary() + make_isolated_config(),
-    # so we stub both to no-ops. If the guard fires first this monkeypatch is unused —
-    # either way the test is correct.
+    # The rejection guard in run_command fires after find_binary() + verify_auth(),
+    # so we stub both to no-ops.
     monkeypatch.setattr(
         "swebench.runner.CodexRunner.find_binary",
         lambda self: "/usr/bin/codex",
     )
     monkeypatch.setattr(
-        "swebench.runner.CodexRunner.make_isolated_config",
-        lambda self, **kw: tmp_path / "cfg",
+        "swebench.runner.CodexRunner.verify_auth",
+        lambda self: None,
     )
     # Prevent the problems-dir check from failing on a clean env.
     problems_dir = tmp_path / "problems" / "swe"
@@ -383,10 +465,14 @@ def test_artifact_run_command_rejects_codex_code_only(tmp_path, monkeypatch):
     from click.testing import CliRunner
     from swebench.cli import cli
 
-    # Stub binary discovery so preflight doesn't fail on missing codex binary.
+    # Stub binary discovery + auth so preflight doesn't fail on missing codex / auth.json.
     monkeypatch.setattr(
         "swebench.runner.CodexRunner.find_binary",
         lambda self: "/usr/bin/codex",
+    )
+    monkeypatch.setattr(
+        "swebench.runner.CodexRunner.verify_auth",
+        lambda self: None,
     )
     # Provide a minimal task so load_tasks doesn't fail.
     tasks_dir = tmp_path / "problems" / "artifact" / "enumeration" / "dummy_task"

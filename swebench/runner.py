@@ -68,6 +68,15 @@ class AgentRunner(ABC):
         """Return path to the agent binary, or raise FileNotFoundError."""
 
     @abstractmethod
+    def verify_auth(self) -> None:
+        """Raise FileNotFoundError if required auth artifacts are missing.
+
+        Called by preflight code. Must have no side effects (no temp dirs,
+        no file copies). Returning ``None`` means auth is plausibly valid;
+        it does not guarantee a live session.
+        """
+
+    @abstractmethod
     def get_version(self, binary: str) -> str:
         """Return a version string for the binary, or 'unknown'."""
 
@@ -133,6 +142,11 @@ class ClaudeRunner(AgentRunner):
         raise FileNotFoundError(
             "claude binary not found. Set CLAUDE= or install Claude Code."
         )
+
+    def verify_auth(self) -> None:
+        # Claude credentials are copied into a temp config dir inside invoke();
+        # surface-level pre-check is intentionally a no-op.
+        return
 
     def get_version(self, binary: str) -> str:
         try:
@@ -240,6 +254,13 @@ class CodexRunner(AgentRunner):
             "codex binary not found. Install with: npm install -g @openai/codex"
         )
 
+    def verify_auth(self) -> None:
+        src = os.path.expanduser("~/.codex/auth.json")
+        if not os.path.isfile(src):
+            raise FileNotFoundError(
+                "~/.codex/auth.json not found — Codex CLI requires a valid auth token."
+            )
+
     def get_version(self, binary: str) -> str:
         try:
             proc = subprocess.run(
@@ -255,26 +276,23 @@ class CodexRunner(AgentRunner):
             raise ValueError(f"Unknown arm for CodexRunner: {arm!r}")
         return []
 
-    def make_isolated_config(
+    def _make_isolated_config(
         self,
         mcp_config_path: str | None = None,
         cwd: str = ".",
     ) -> str:
         """Create an isolated CODEX_HOME directory for a single run.
 
-        Copies ``~/.codex/auth.json`` into a fresh temp dir and writes
-        ``config.toml``.  Raises ``FileNotFoundError`` if the auth file is
-        absent — callers must ensure the user is authenticated before
-        invoking Codex.
+        Private helper of ``invoke()``. Copies ``~/.codex/auth.json`` into
+        a fresh temp dir and writes ``config.toml``. Re-runs the auth check
+        as defense-in-depth; preflight callers should use ``verify_auth()``
+        instead, which has no side effects.
 
-        Returns the path to the isolated config directory.  The caller is
-        responsible for removing it (``shutil.rmtree``) after the run.
+        Returns the path to the isolated config directory; ``invoke()`` is
+        responsible for ``shutil.rmtree``.
         """
+        self.verify_auth()
         src = os.path.expanduser("~/.codex/auth.json")
-        if not os.path.isfile(src):
-            raise FileNotFoundError(
-                "~/.codex/auth.json not found — Codex CLI requires a valid auth token."
-            )
 
         cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
         shutil.copy2(src, cfg_dir)
@@ -297,7 +315,7 @@ class CodexRunner(AgentRunner):
         mcp_config_path: str | None = None,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
-        cfg_dir = self.make_isolated_config(mcp_config_path=mcp_config_path, cwd=cwd)
+        cfg_dir = self._make_isolated_config(mcp_config_path=mcp_config_path, cwd=cwd)
         try:
             cmd = [
                 binary, "exec",
