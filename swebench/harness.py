@@ -505,16 +505,20 @@ def _needs_jinja2_pin(repo_dir: str) -> bool:
 
 
 def _pin_jinja2(pip: str) -> None:
-    """Pin Jinja2 to >=2.11,<3.0 — the last series compatible with Python 3.11
-    that still exports environmentfilter."""
+    """Pin Jinja2 >=2.11,<3.0 and markupsafe<2.1 together.
+
+    Jinja2 2.x calls markupsafe.soft_unicode, which was removed in markupsafe
+    2.1. Without the co-pin, pytest crashes at import with ImportError before
+    any test collects.
+    """
     result = subprocess.run(
-        [pip, "install", "--quiet", "jinja2<3.0,>=2.11"],
+        [pip, "install", "--quiet", "jinja2<3.0,>=2.11", "markupsafe<2.1"],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         print(
-            f"[harness] jinja2 pin failed (rc={result.returncode}):\n{result.stderr}",
+            f"[harness] jinja2/markupsafe pin failed (rc={result.returncode}):\n{result.stderr}",
             flush=True,
         )
         raise subprocess.CalledProcessError(
