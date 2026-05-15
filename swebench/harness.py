@@ -29,7 +29,13 @@ _REPO_PRE_INSTALL: dict[str, list[str]] = {
     # certifi is required: matplotlib's build downloads freetype/qhull tarballs
     # over HTTPS and imports certifi for the CA bundle.  Without it, build
     # fails with "ImportError: `certifi` is unavailable" before any C compile.
-    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi"],
+    # pyparsing<3 is required: matplotlib 3.3–3.7 registers
+    # `error::PyparsingDeprecationWarning` as a pytest warning filter, and
+    # pyparsing 3.x emits that warning on legacy camelCase APIs (setParseAction,
+    # parseString, enablePackrat, ...) used throughout matplotlib's
+    # fontconfig_pattern/mathtext modules, causing test collection to ERROR
+    # before any test runs.
+    "matplotlib/matplotlib": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3"],
 }
 
 # ---------------------------------------------------------------------------
@@ -63,12 +69,22 @@ _INSTANCE_PYTHON: dict[str, str] = {
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # astropy 3.x era (2018): setuptools.dep_util removed in setuptools 71
     "astropy__astropy-6938":  ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
-    # astropy 5.x era (2022): same issue
-    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
-    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers"],
+    # astropy 5.x era (2022): same issue. setuptools_scm is required at test-import
+    # time because astropy/version.py calls scm_version.get_version() during
+    # `import astropy`. Without it, every test errors with "No module named 'setuptools_scm'".
+    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
+    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
-    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel"],
+    # pyparsing<3 mirrors the repo-level pin (instance override fully replaces it).
+    "matplotlib__matplotlib-26160": ["numpy<2", "cython<3", "pybind11>=2.6", "certifi", "wheel", "pyparsing<3"],
+    # xarray 0.12–2022.x (pre-numpy-2): xarray/core/dtypes.py references np.unicode_
+    # which was removed in NumPy 2.0. Without a numpy<2 pin, every test errors with
+    # "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release".
+    # pytz is required at test-module import time (xarray/tests/test_variable.py).
+    "pydata__xarray-2905": ["numpy<2", "pytz"],
+    "pydata__xarray-6601": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
+    "pydata__xarray-7003": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
     # scikit-learn 0.21.dev–0.22.dev era (2019): _cython_blas.pyx imports scipy.linalg.cython_blas
     # at pre-build time. Without scipy pre-installed, Cython can't resolve the BLAS function
     # pointers and the build fails with "Converting to Python object not allowed without gil".
