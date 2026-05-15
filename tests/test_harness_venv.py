@@ -360,6 +360,23 @@ def test_astropy_6938_uses_python39() -> None:
     )
 
 
+def test_sphinx_types_union_instances_use_python39() -> None:
+    """sphinx 4.0.x era: instances whose tests transitively import
+    ``sphinx/util/typing.py`` must run on Python 3.9.
+
+    The base commits for these two instances ship a typo in typing.py:
+    ``if sys.version_info > (3, 10): from types import Union as types_Union``.
+    ``types.Union`` does not exist on any released Python. The guard fires on
+    Python 3.10.x too (``(3, 10, x) > (3, 10)`` is True by tuple length), so
+    pinning anything above 3.9 still hits the broken import.
+    """
+    for instance_id in ("sphinx-doc__sphinx-9230", "sphinx-doc__sphinx-9281"):
+        assert _INSTANCE_PYTHON.get(instance_id) == "python3.9", (
+            f"{instance_id} must use python3.9 to skip the broken "
+            "`from types import Union` branch in sphinx/util/typing.py"
+        )
+
+
 def test_astropy_5x_pre_install_pins() -> None:
     """Test 15: astropy 5.x instances have the required pre-install pins."""
     for instance_id in ("astropy__astropy-12962", "astropy__astropy-13842"):

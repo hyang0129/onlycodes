@@ -71,6 +71,15 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "sympy__sympy-11232": "python3.9",
     "sympy__sympy-13259": "python3.9",
     "sympy__sympy-14180": "python3.9",
+    # sphinx 4.0.x era (May 2021): sphinx/util/typing.py has a buggy guard
+    # ``if sys.version_info > (3, 10): from types import Union as types_Union``.
+    # ``types.Union`` never existed; the line was a typo for ``UnionType``
+    # (later fixed upstream). The tuple comparison is True on Python 3.10.x as
+    # well as 3.11+ (longer tuple > shorter), so pinning must be ≤3.9 to skip
+    # the branch entirely. Only these two instances are affected — the
+    # adjacent 9229's test target doesn't import ``sphinx/util/typing``.
+    "sphinx-doc__sphinx-9230": "python3.9",
+    "sphinx-doc__sphinx-9281": "python3.9",
 }
 
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
