@@ -1,0 +1,19 @@
+instance_id: ml_engineering__curve_queries_medium
+category: ml_engineering
+difficulty: medium
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/answers.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - ml_engineering
+  - learning_curve
+  - aggregation
+  - csv
+  - kernel_persistence_probe
