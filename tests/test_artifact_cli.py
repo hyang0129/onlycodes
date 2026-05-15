@@ -80,6 +80,9 @@ class _FakeRunner:
     def find_binary(self):
         return "/bin/true"
 
+    def verify_auth(self):
+        return
+
     def get_version(self, _binary):
         return "fake-runner-test"
 

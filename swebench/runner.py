@@ -38,6 +38,9 @@ from typing import ClassVar
 # Shared constants
 # ---------------------------------------------------------------------------
 
+# Imported by run.py and artifact_cli.py so rejection error wording is consistent.
+CODEX_NOT_IMPLEMENTED_MSG = "not yet implemented — see Slice 5"
+
 # Built-in Claude tools blocked for onlycode / code_only arms.
 # Canonical single source of truth — imported by run.py and artifact_run.py.
 BLOCKED_BUILTINS = (
@@ -63,6 +66,15 @@ class AgentRunner(ABC):
     @abstractmethod
     def find_binary(self) -> str:
         """Return path to the agent binary, or raise FileNotFoundError."""
+
+    @abstractmethod
+    def verify_auth(self) -> None:
+        """Raise FileNotFoundError if required auth artifacts are missing.
+
+        Called by preflight code. Must have no side effects (no temp dirs,
+        no file copies). Returning ``None`` means auth is plausibly valid;
+        it does not guarantee a live session.
+        """
 
     @abstractmethod
     def get_version(self, binary: str) -> str:
@@ -130,6 +142,11 @@ class ClaudeRunner(AgentRunner):
         raise FileNotFoundError(
             "claude binary not found. Set CLAUDE= or install Claude Code."
         )
+
+    def verify_auth(self) -> None:
+        # Claude credentials are copied into a temp config dir inside invoke();
+        # surface-level pre-check is intentionally a no-op.
+        return
 
     def get_version(self, binary: str) -> str:
         try:
@@ -237,6 +254,13 @@ class CodexRunner(AgentRunner):
             "codex binary not found. Install with: npm install -g @openai/codex"
         )
 
+    def verify_auth(self) -> None:
+        src = os.path.expanduser("~/.codex/auth.json")
+        if not os.path.isfile(src):
+            raise FileNotFoundError(
+                "~/.codex/auth.json not found — Codex CLI requires a valid auth token."
+            )
+
     def get_version(self, binary: str) -> str:
         try:
             proc = subprocess.run(
@@ -252,6 +276,33 @@ class CodexRunner(AgentRunner):
             raise ValueError(f"Unknown arm for CodexRunner: {arm!r}")
         return []
 
+    def _make_isolated_config(
+        self,
+        mcp_config_path: str | None = None,
+        cwd: str = ".",
+    ) -> str:
+        """Create an isolated CODEX_HOME directory for a single run.
+
+        Private helper of ``invoke()``. Copies ``~/.codex/auth.json`` into
+        a fresh temp dir and writes ``config.toml``. Re-runs the auth check
+        as defense-in-depth; preflight callers should use ``verify_auth()``
+        instead, which has no side effects.
+
+        Returns the path to the isolated config directory; ``invoke()`` is
+        responsible for ``shutil.rmtree``.
+        """
+        self.verify_auth()
+        src = os.path.expanduser("~/.codex/auth.json")
+
+        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
+        shutil.copy2(src, cfg_dir)
+
+        bundle_path = self._resolve_bundle(mcp_config_path)
+        persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
+        _write_codex_config(cfg_dir, bundle_path, cwd, persistent)
+
+        return cfg_dir
+
     def invoke(
         self,
         *,
@@ -264,18 +315,8 @@ class CodexRunner(AgentRunner):
         mcp_config_path: str | None = None,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
-        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
+        cfg_dir = self._make_isolated_config(mcp_config_path=mcp_config_path, cwd=cwd)
         try:
-            # Copy auth credentials into isolated dir.
-            src = os.path.expanduser("~/.codex/auth.json")
-            if os.path.isfile(src):
-                shutil.copy2(src, cfg_dir)
-
-            # Write per-run config.toml.
-            bundle_path = self._resolve_bundle(mcp_config_path)
-            persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
-            _write_codex_config(cfg_dir, bundle_path, cwd, persistent)
-
             cmd = [
                 binary, "exec",
                 "--ephemeral",
@@ -351,10 +392,11 @@ def _write_codex_config(
     as a string directly.
     """
     toml = (
+        'web_search = "disabled"\n'
+        "\n"
         "[features]\n"
         "shell_tool = false\n"
         "apply_patch_freeform = false\n"
-        'web_search_mode = "disabled"\n'
         "\n"
         "[mcp_servers.codebox]\n"
         'command = "node"\n'

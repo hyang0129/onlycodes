@@ -75,6 +75,9 @@ class FakeRunner(AgentRunner):
     def find_binary(self) -> str:
         return "/bin/true"
 
+    def verify_auth(self) -> None:
+        return
+
     def get_version(self, binary: str) -> str:
         return "fake-runner-1.0.0"
 
