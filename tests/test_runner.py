@@ -182,7 +182,7 @@ def test_write_codex_config_creates_valid_toml(tmp_path):
     content = toml_path.read_text()
     assert "shell_tool = false" in content
     assert "apply_patch_freeform = false" in content
-    assert 'web_search_mode = "disabled"' in content
+    assert 'web_search = "disabled"' in content
     assert "/path/bundle.mjs" in content
     assert "/scratch" in content
     assert 'ONLYCODES_PERSISTENT_KERNEL = "0"' in content
