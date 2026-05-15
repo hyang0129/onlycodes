@@ -374,10 +374,11 @@ def _write_codex_config(
     as a string directly.
     """
     toml = (
+        'web_search = "disabled"\n'
+        "\n"
         "[features]\n"
         "shell_tool = false\n"
         "apply_patch_freeform = false\n"
-        'web_search_mode = "disabled"\n'
         "\n"
         "[mcp_servers.codebox]\n"
         'command = "node"\n'
