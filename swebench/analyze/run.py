@@ -179,6 +179,58 @@ def _analysis_root(results_dir: Path, run_id: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
+# Codex JSONL guard
+# ---------------------------------------------------------------------------
+
+
+def _check_not_codex_jsonl(jsonl_path: Path) -> None:
+    """Raise NotImplementedError if *jsonl_path* looks like a Codex transcript.
+
+    Two-pass detection strategy:
+
+    1. **Meta-line check (preferred):** the harness writes the first line as a
+       JSON object. If it contains ``"agent_surface": "codex_cli"`` the file is
+       unambiguously a Codex transcript.
+    2. **Event-shape fallback:** if the meta line is absent or inconclusive,
+       peek at the first non-meta data line. Codex emits events whose ``type``
+       field starts with ``"turn."`` (e.g. ``"turn.started"``). Claude events
+       do not use this prefix. A single match is enough to raise.
+
+    The error message deliberately contains ``"Codex JSONL not yet supported"``
+    so callers and tests can assert on the substring.
+    """
+    _CODEX_MSG = "Codex JSONL not yet supported by analyze pipeline — see Slice 6."
+    try:
+        with open(jsonl_path) as fh:
+            first_line = fh.readline()
+            second_line = fh.readline()
+    except OSError:
+        return  # let downstream handle unreadable files
+
+    # Pass 1: meta-line agent_surface field
+    if first_line.strip():
+        try:
+            meta = json.loads(first_line)
+            if isinstance(meta, dict) and meta.get("agent_surface") == "codex_cli":
+                raise NotImplementedError(_CODEX_MSG)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Pass 2: event-shape fallback — check first non-empty line after meta
+    for raw in (second_line,):
+        if not raw.strip():
+            continue
+        try:
+            evt = json.loads(raw)
+            if isinstance(evt, dict):
+                evt_type = evt.get("type", "")
+                if isinstance(evt_type, str) and evt_type.startswith("turn."):
+                    raise NotImplementedError(_CODEX_MSG)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Stage 1: mechanical
 # ---------------------------------------------------------------------------
 
@@ -203,6 +255,7 @@ def _stage_mechanical(
 
     metrics: list[dict] = []
     for jsonl in logs:
+        _check_not_codex_jsonl(jsonl)  # raises NotImplementedError on Codex format
         parsed = _parse_log_ref(jsonl)
         log_ref = _synthesize_log_ref(parsed, jsonl)
         sidecar = mech_dir / f"{log_ref}.json"

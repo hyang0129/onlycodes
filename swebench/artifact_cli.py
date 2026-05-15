@@ -30,7 +30,7 @@ from swebench.artifact_run import (
     run_artifact_arm,
     run_dir_for,
 )
-from swebench.runner import make_runner
+from swebench.runner import CODEX_NOT_IMPLEMENTED_MSG, make_runner
 
 
 @click.group()
@@ -148,6 +148,13 @@ def artifact_run_command(
         arm_list = list(ARMS)
     else:
         arm_list = [arms]
+
+    # Reject codex_cli + code_only (not yet implemented)
+    if agent_surface == "codex_cli" and "code_only" in arm_list:
+        click.echo(
+            f"ERROR: codex_cli + code_only is {CODEX_NOT_IMPLEMENTED_MSG}", err=True
+        )
+        raise SystemExit(1)
 
     mcp_path = mcp_config
     if mcp_path is None:

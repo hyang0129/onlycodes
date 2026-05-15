@@ -34,8 +34,6 @@ from swebench.harness import (
     _venv_kwargs,
     apply_test_patch,
     clone_repo,
-    find_claude_binary,
-    get_claude_version,
     git_reset,
     run_claude,
     run_tests,
@@ -43,7 +41,7 @@ from swebench.harness import (
     strip_git_history,
 )
 from swebench.models import Problem
-from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner
+from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, CODEX_NOT_IMPLEMENTED_MSG, make_runner
 
 
 def _mcp_config_without_persistent_kernel(
@@ -582,6 +580,14 @@ def _cleanup_stale_overlays(
         "PASS or FAIL; otherwise it is re-run."
     ),
 )
+@click.option(
+    "--agent-surface",
+    "agent_surface",
+    type=click.Choice(["claude_code", "codex_cli"]),
+    default="claude_code",
+    show_default=True,
+    help="Agent surface to use for running evaluations.",
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -593,6 +599,7 @@ def run_command(
     shuffle_arms: bool,
     output_dir: str | None,
     resume: bool,
+    agent_surface: str,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -608,10 +615,13 @@ def run_command(
     results_dir.mkdir(parents=True, exist_ok=True)
     os.makedirs(clone_base, exist_ok=True)
 
-    # Find claude binary
+    # Create runner and resolve binary (preflight)
     try:
-        claude_binary = find_claude_binary()
-    except FileNotFoundError as e:
+        runner = make_runner(agent_surface)
+        claude_binary = runner.find_binary()
+        if agent_surface == "codex_cli":
+            runner.make_isolated_config()  # verify auth early; discard result
+    except (ValueError, FileNotFoundError) as e:
         click.echo(f"ERROR: {e}", err=True)
         raise SystemExit(1)
 
@@ -640,6 +650,13 @@ def run_command(
         arm_list.append("onlycode")
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
+
+    # Reject codex_cli + onlycode (not yet implemented)
+    if agent_surface == "codex_cli" and "onlycode" in arm_list:
+        click.echo(
+            f"ERROR: codex_cli + onlycode is {CODEX_NOT_IMPLEMENTED_MSG}", err=True
+        )
+        raise SystemExit(1)
 
     # --- Environment pre-flight checks ------------------------------------------
     env_errors: list[str] = []
@@ -691,9 +708,10 @@ def run_command(
     click.echo(f"Use cache: {use_cache}")
     click.echo(f"Resume: {resume}")
     click.echo(f"Output dir: {results_dir}")
-    click.echo(f"Claude binary: {claude_binary}")
-    claude_version = get_claude_version(claude_binary)
-    click.echo(f"Claude version: {claude_version}")
+    click.echo(f"Agent surface: {agent_surface}")
+    click.echo(f"Agent binary: {claude_binary}")
+    agent_version = runner.get_version(claude_binary)
+    click.echo(f"Agent version: {agent_version}")
     click.echo()
 
     # --- Cache backend selection (only relevant when --use-cache) ---------------
@@ -858,6 +876,7 @@ def run_command(
                         root=root,
                         persistent_kernel=persistent_kernel,
                         needs_editable_reinstall=task.needs_editable_reinstall,
+                        runner=runner,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -912,6 +931,7 @@ def run_command(
                         persistent_kernel=persistent_kernel,
                         log_buffer=buf,
                         needs_editable_reinstall=task.needs_editable_reinstall,
+                        runner=runner,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)

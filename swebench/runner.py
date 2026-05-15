@@ -38,6 +38,9 @@ from typing import ClassVar
 # Shared constants
 # ---------------------------------------------------------------------------
 
+# Imported by run.py and artifact_cli.py so rejection error wording is consistent.
+CODEX_NOT_IMPLEMENTED_MSG = "not yet implemented — see Slice 5"
+
 # Built-in Claude tools blocked for onlycode / code_only arms.
 # Canonical single source of truth — imported by run.py and artifact_run.py.
 BLOCKED_BUILTINS = (
@@ -252,6 +255,36 @@ class CodexRunner(AgentRunner):
             raise ValueError(f"Unknown arm for CodexRunner: {arm!r}")
         return []
 
+    def make_isolated_config(
+        self,
+        mcp_config_path: str | None = None,
+        cwd: str = ".",
+    ) -> str:
+        """Create an isolated CODEX_HOME directory for a single run.
+
+        Copies ``~/.codex/auth.json`` into a fresh temp dir and writes
+        ``config.toml``.  Raises ``FileNotFoundError`` if the auth file is
+        absent — callers must ensure the user is authenticated before
+        invoking Codex.
+
+        Returns the path to the isolated config directory.  The caller is
+        responsible for removing it (``shutil.rmtree``) after the run.
+        """
+        src = os.path.expanduser("~/.codex/auth.json")
+        if not os.path.isfile(src):
+            raise FileNotFoundError(
+                "~/.codex/auth.json not found — Codex CLI requires a valid auth token."
+            )
+
+        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
+        shutil.copy2(src, cfg_dir)
+
+        bundle_path = self._resolve_bundle(mcp_config_path)
+        persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
+        _write_codex_config(cfg_dir, bundle_path, cwd, persistent)
+
+        return cfg_dir
+
     def invoke(
         self,
         *,
@@ -264,18 +297,8 @@ class CodexRunner(AgentRunner):
         mcp_config_path: str | None = None,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
-        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
+        cfg_dir = self.make_isolated_config(mcp_config_path=mcp_config_path, cwd=cwd)
         try:
-            # Copy auth credentials into isolated dir.
-            src = os.path.expanduser("~/.codex/auth.json")
-            if os.path.isfile(src):
-                shutil.copy2(src, cfg_dir)
-
-            # Write per-run config.toml.
-            bundle_path = self._resolve_bundle(mcp_config_path)
-            persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
-            _write_codex_config(cfg_dir, bundle_path, cwd, persistent)
-
             cmd = [
                 binary, "exec",
                 "--ephemeral",
