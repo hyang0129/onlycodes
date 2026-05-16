@@ -47,7 +47,7 @@ from swebench.harness import (
     strip_git_history,
 )
 from swebench.models import Problem
-from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, CODEX_NOT_IMPLEMENTED_MSG, make_runner
+from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, make_runner
 
 
 def _mcp_config_without_persistent_kernel(
@@ -740,13 +740,6 @@ def run_command(
         arm_list.append("onlycode")
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
-
-    # Reject codex_cli + onlycode (not yet implemented)
-    if agent_surface == "codex_cli" and "onlycode" in arm_list:
-        click.echo(
-            f"ERROR: codex_cli + onlycode is {CODEX_NOT_IMPLEMENTED_MSG}", err=True
-        )
-        raise SystemExit(1)
 
     # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
     # baseline runs the agent binary directly without the exec-server bundle.

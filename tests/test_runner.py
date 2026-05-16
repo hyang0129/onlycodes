@@ -418,106 +418,71 @@ def test_run_command_codex_baseline_skips_bundle_check(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run_command — rejects codex_cli + onlycode
+# _write_codex_config — arm-conditional onlycode restrictions
 # ---------------------------------------------------------------------------
 
-def test_run_command_rejects_codex_onlycode(tmp_path, monkeypatch):
-    """swebench run --agent-surface codex_cli --arms onlycode must exit 1."""
-    from click.testing import CliRunner
-    from swebench.cli import cli
+def test_write_codex_config_onlycode_restrictions(tmp_path):
+    """onlycode arm must emit browser_use=false and computer_use=false."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="onlycode")
+    content = (tmp_path / "config.toml").read_text()
+    assert "browser_use = false" in content
+    assert "computer_use = false" in content
+    # Baseline restrictions must still be present.
+    assert "shell_tool = false" in content
+    assert "apply_patch_freeform = false" in content
+    assert 'web_search = "disabled"' in content
 
-    # Prevent real binary discovery / auth check from running before the guard.
-    # The rejection guard in run_command fires after find_binary() + verify_auth(),
-    # so we stub both to no-ops.
-    monkeypatch.setattr(
-        "swebench.runner.CodexRunner.find_binary",
-        lambda self: "/usr/bin/codex",
-    )
-    monkeypatch.setattr(
-        "swebench.runner.CodexRunner.verify_auth",
-        lambda self: None,
-    )
-    # Prevent the problems-dir check from failing on a clean env.
-    problems_dir = tmp_path / "problems" / "swe"
-    problems_dir.mkdir(parents=True)
-    (problems_dir / "dummy.yaml").write_text(
-        "instance_id: dummy\nrepo: r\nbase_commit: abc\n"
-        "problem_statement: p\ntest_cmd: pytest\n"
-    )
-    monkeypatch.setattr("swebench.run.repo_root", lambda: tmp_path)
 
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["run", "--agent-surface", "codex_cli", "--arms", "onlycode",
-         "--output-dir", str(tmp_path / "out")],
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}. output={result.output}"
-    assert "not yet implemented" in (result.output or ""), (
-        f"Expected 'not yet implemented' in output. Got: {result.output!r}"
-    )
+def test_write_codex_config_code_only_restrictions(tmp_path):
+    """code_only arm (artifact mode alias) must emit the same restrictions as onlycode."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="code_only")
+    content = (tmp_path / "config.toml").read_text()
+    assert "browser_use = false" in content
+    assert "computer_use = false" in content
+
+
+def test_write_codex_config_baseline_no_extra_restrictions(tmp_path):
+    """baseline arm must NOT emit browser_use or computer_use flags."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="baseline")
+    content = (tmp_path / "config.toml").read_text()
+    assert "browser_use" not in content
+    assert "computer_use" not in content
+
+
+def test_write_codex_config_tool_rich_no_extra_restrictions(tmp_path):
+    """tool_rich arm must NOT emit browser_use or computer_use flags."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="tool_rich")
+    content = (tmp_path / "config.toml").read_text()
+    assert "browser_use" not in content
+    assert "computer_use" not in content
+
+
+def test_write_codex_config_onlycode_valid_toml(tmp_path):
+    """onlycode config must produce valid TOML parseable by tomllib."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="onlycode")
+    content = (tmp_path / "config.toml").read_text()
+    parsed = tomllib.loads(content)
+    assert parsed["features"]["browser_use"] is False
+    assert parsed["features"]["computer_use"] is False
+    assert parsed["features"]["shell_tool"] is False
+    assert parsed["features"]["apply_patch_freeform"] is False
 
 
 # ---------------------------------------------------------------------------
-# artifact run_command — rejects codex_cli + code_only
+# CodexRunner.build_tools_flags — stores _arm for invoke()
 # ---------------------------------------------------------------------------
 
-def test_artifact_run_command_rejects_codex_code_only(tmp_path, monkeypatch):
-    """artifact run --agent-surface codex_cli --arms code_only must exit 1."""
-    from click.testing import CliRunner
-    from swebench.cli import cli
+def test_codex_build_tools_flags_stores_arm():
+    """build_tools_flags must set self._arm so invoke() can read it."""
+    runner = CodexRunner()
+    runner.build_tools_flags("onlycode", None)
+    assert runner._arm == "onlycode"
 
-    # Stub binary discovery + auth so preflight doesn't fail on missing codex / auth.json.
-    monkeypatch.setattr(
-        "swebench.runner.CodexRunner.find_binary",
-        lambda self: "/usr/bin/codex",
-    )
-    monkeypatch.setattr(
-        "swebench.runner.CodexRunner.verify_auth",
-        lambda self: None,
-    )
-    # Provide a minimal task so load_tasks doesn't fail.
-    tasks_dir = tmp_path / "problems" / "artifact" / "enumeration" / "dummy_task"
-    tasks_dir.mkdir(parents=True)
-    (tasks_dir / "task.yaml").write_text(
-        "instance_id: enumeration__dummy_task\n"
-        "category: enumeration\n"
-        "difficulty: easy\n"
-        "problem_statement: |\n  Write code.\n"
-        "workspace_dir: workspace\n"
-        "output_artifact: answer.txt\n"
-        "hidden_grader: grader/hidden.py\n"
-        "reference_output: grader/reference_output.txt\n"
-        "execution_budget:\n"
-        "  max_code_runs: 0\n"
-        "  max_wall_seconds: 0\n"
-    )
-    (tasks_dir / "workspace").mkdir()
-    grader_dir = tasks_dir / "grader"
-    grader_dir.mkdir()
-    (grader_dir / "hidden.py").write_text("def grade(d): pass\n")
-    (grader_dir / "reference_output.txt").write_text("42\n")
-    monkeypatch.setattr("swebench.artifact_cli.repo_root", lambda: tmp_path)
 
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            "artifact", "run",
-            "--agent-surface", "codex_cli",
-            "--arms", "code_only",
-            "--tasks-dir", str(tmp_path / "problems" / "artifact"),
-            "--output-dir", str(tmp_path / "out"),
-        ],
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 1, (
-        f"Expected exit 1, got {result.exit_code}. output={result.output}"
-    )
-    assert "not yet implemented" in (result.output or ""), (
-        f"Expected 'not yet implemented' in output. Got: {result.output!r}"
-    )
+def test_codex_build_tools_flags_baseline_stores_arm():
+    runner = CodexRunner()
+    runner.build_tools_flags("baseline", None)
+    assert runner._arm == "baseline"
 
 
 # ---------------------------------------------------------------------------
