@@ -185,6 +185,19 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+    # matplotlib 3.5–3.6 era (2022): matplotlib/__init__.py calls
+    # ``setuptools_scm.get_version()`` at runtime to compute ``mpl.__version__``
+    # (the editable install does not generate a static ``_version.py``).  The
+    # pre-install pin of setuptools_scm<7 is overridden by ``pip install -e .``
+    # which pulls the latest setuptools_scm (10.x) as a runtime dep, and 10.x
+    # emits a DeprecationWarning ("Version scheme 'release-branch-semver' has
+    # been renamed ...") which pytest's ``filterwarnings = error`` config in
+    # matplotlib's conftest promotes to a hard test failure.  Re-pin after the
+    # editable install to keep setuptools_scm at a version that does not emit
+    # the warning.
+    "matplotlib__matplotlib-23476": ["setuptools_scm<7"],
+    "matplotlib__matplotlib-24637": ["setuptools_scm<7"],
+    "matplotlib__matplotlib-25126": ["setuptools_scm<7"],
 }
 
 # ---------------------------------------------------------------------------
