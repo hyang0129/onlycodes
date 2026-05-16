@@ -1,0 +1,23 @@
+training:
+  optimizer: sgd
+  learning_rate: 0.05791
+  momentum: 0.804
+  beta1: 0.878
+  beta2: 0.992
+  weight_decay: 0.000739
+  batch_size: 16
+  num_epochs: 158
+  scheduler: step
+  warmup_epochs: 2
+  step_size: 5
+  gamma: 0.14
+
+model:
+  arch: resnet50
+  num_classes: 240
+  dropout: 0.2
+
+data:
+  val_split: 0.053
+  test_split: 0.07
+  augmentation: true

@@ -20,6 +20,7 @@ _CATEGORIES = frozenset({
     "data_processing",
     "data_engineering",
     "data_science",
+    "ml_engineering",
     "algorithmic",
     "verification_heavy",
     "enumeration",

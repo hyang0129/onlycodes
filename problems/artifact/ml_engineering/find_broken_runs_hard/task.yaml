@@ -1,0 +1,19 @@
+instance_id: ml_engineering__find_broken_runs_hard
+category: ml_engineering
+difficulty: hard
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/broken.csv
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.csv
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - ml_engineering
+  - log_extraction
+  - search_multifile
+  - jsonl
+  - arm_advantage_bash

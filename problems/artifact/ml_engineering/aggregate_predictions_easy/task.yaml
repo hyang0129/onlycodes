@@ -1,0 +1,18 @@
+instance_id: ml_engineering__aggregate_predictions_easy
+category: ml_engineering
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/predictions.csv
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.csv
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - ml_engineering
+  - prediction_aggregation
+  - format_heterogeneity
+  - csv
