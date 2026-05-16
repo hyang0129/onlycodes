@@ -38,9 +38,6 @@ from typing import ClassVar
 # Shared constants
 # ---------------------------------------------------------------------------
 
-# Imported by run.py and artifact_cli.py so rejection error wording is consistent.
-CODEX_NOT_IMPLEMENTED_MSG = "not yet implemented — see Slice 5"
-
 # Built-in Claude tools blocked for onlycode / code_only arms.
 # Canonical single source of truth — imported by run.py and artifact_run.py.
 BLOCKED_BUILTINS = (
@@ -274,12 +271,16 @@ class CodexRunner(AgentRunner):
         # Tool restriction is enforced via [features] in config.toml, not CLI flags.
         if arm not in ("tool_rich", "baseline", "code_only", "onlycode", "bash_only"):
             raise ValueError(f"Unknown arm for CodexRunner: {arm!r}")
+        # Store the arm so invoke() can pass it to _make_isolated_config without
+        # changing the AgentRunner ABC interface.
+        self._arm = arm
         return []
 
     def _make_isolated_config(
         self,
         mcp_config_path: str | None = None,
         cwd: str = ".",
+        arm: str = "baseline",
     ) -> str:
         """Create an isolated CODEX_HOME directory for a single run.
 
@@ -287,6 +288,9 @@ class CodexRunner(AgentRunner):
         a fresh temp dir and writes ``config.toml``. Re-runs the auth check
         as defense-in-depth; preflight callers should use ``verify_auth()``
         instead, which has no side effects.
+
+        ``arm`` controls whether extra tool-restriction knobs are written into
+        config.toml (for ``onlycode``/``code_only`` arms).
 
         Returns the path to the isolated config directory; ``invoke()`` is
         responsible for ``shutil.rmtree``.
@@ -299,7 +303,7 @@ class CodexRunner(AgentRunner):
 
         bundle_path = self._resolve_bundle(mcp_config_path)
         persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
-        _write_codex_config(cfg_dir, bundle_path, cwd, persistent)
+        _write_codex_config(cfg_dir, bundle_path, cwd, persistent, arm=arm)
 
         return cfg_dir
 
@@ -315,7 +319,10 @@ class CodexRunner(AgentRunner):
         mcp_config_path: str | None = None,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
-        cfg_dir = self._make_isolated_config(mcp_config_path=mcp_config_path, cwd=cwd)
+        arm = getattr(self, "_arm", "baseline")
+        cfg_dir = self._make_isolated_config(
+            mcp_config_path=mcp_config_path, cwd=cwd, arm=arm
+        )
         try:
             cmd = [
                 binary, "exec",
@@ -420,19 +427,44 @@ def _write_codex_config(
     bundle_path: str,
     cwd: str,
     persistent_kernel: str,
+    arm: str = "baseline",
 ) -> None:
     """Write config.toml into cfg_dir for a Codex run.
 
     Avoids an external TOML library by rendering the known-shape config
     as a string directly.
+
+    ``arm`` controls extra ``[features]`` restrictions:
+    - ``onlycode`` / ``code_only``: adds ``browser_use = false`` and
+      ``computer_use = false`` to disable all Codex native tool surfaces
+      beyond the codebox MCP server (which is the only permitted tool for
+      the code-only evaluation arm).
+    - All other arms (``baseline``, ``tool_rich``, ``bash_only``): no extra
+      restrictions beyond the baseline ``shell_tool = false`` and
+      ``apply_patch_freeform = false`` that are always emitted.
+
+    Note: ``shell_tool = false`` and ``apply_patch_freeform = false`` are
+    always present because the codebox MCP server runs code in a sandboxed
+    kernel; direct shell access is never appropriate for this harness.
+    ``web_search = "disabled"`` is always set to prevent uncontrolled
+    external requests that would pollute benchmark measurements.
     """
+    # Extra [features] lines emitted only for code-only arms.
+    onlycode_features = ""
+    if arm in ("onlycode", "code_only"):
+        onlycode_features = (
+            "browser_use = false\n"
+            "computer_use = false\n"
+        )
+
     toml = (
         'web_search = "disabled"\n'
         "\n"
         "[features]\n"
         "shell_tool = false\n"
         "apply_patch_freeform = false\n"
-        "\n"
+        + onlycode_features
+        + "\n"
         "[mcp_servers.codebox]\n"
         'command = "node"\n'
         f'args = ["{_toml_str(bundle_path)}"]\n'

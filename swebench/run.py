@@ -47,7 +47,7 @@ from swebench.harness import (
     strip_git_history,
 )
 from swebench.models import Problem
-from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, CODEX_NOT_IMPLEMENTED_MSG, make_runner
+from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, make_runner
 
 
 def _mcp_config_without_persistent_kernel(
@@ -741,13 +741,6 @@ def run_command(
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
 
-    # Reject codex_cli + onlycode (not yet implemented)
-    if agent_surface == "codex_cli" and "onlycode" in arm_list:
-        click.echo(
-            f"ERROR: codex_cli + onlycode is {CODEX_NOT_IMPLEMENTED_MSG}", err=True
-        )
-        raise SystemExit(1)
-
     # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
     # baseline runs the agent binary directly without the exec-server bundle.
     _CODEX_EXEC_SERVER_ARMS = {"onlycode", "bash_only"}
@@ -759,8 +752,10 @@ def run_command(
             raise SystemExit(1)
 
     # --- Environment pre-flight checks ------------------------------------------
+    # Only run for Claude Code surface: Codex does not read the Claude-format
+    # mcp-config.json (it generates config.toml internally via _write_codex_config).
     env_errors: list[str] = []
-    if "onlycode" in arm_list:
+    if "onlycode" in arm_list and agent_surface != "codex_cli":
         _configs_to_check = [mcp_config_path]
         for _cfg in _configs_to_check:
             if not os.path.isfile(_cfg):
