@@ -59,6 +59,10 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "scikit-learn__scikit-learn-13013": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
+    # sklearn 0.21.dev era (2019): distutils.version.LooseVersion emits DeprecationWarning
+    # on Python 3.10+ (deprecated there, removed 3.12); pytest collection aborts
+    # when warnings-as-errors is active.  Python 3.9 sidesteps the deprecation.
+    "scikit-learn__scikit-learn-11596": "python3.9",
     "scikit-learn__scikit-learn-13283": "python3.9",
     "scikit-learn__scikit-learn-13496": "python3.9",
     "scikit-learn__scikit-learn-13864": "python3.9",
@@ -113,10 +117,21 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     "pydata__xarray-4911": ["numpy<2"],
     "pydata__xarray-6601": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
     "pydata__xarray-7003": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
+    # scikit-learn 0.18 era (2017): tests use nose-style yield parametrize which
+    # the pytest nose plugin supported until pytest 7.2 removed it.  pytest<7
+    # keeps the nose compatibility layer active so yield tests are collected.
+    "scikit-learn__scikit-learn-3840": ["setuptools<60", "numpy<1.24", "cython<3", "pytest<7"],
     # scikit-learn 0.20-era: tests import sklearn.externals._pilutil (a vendored
     # copy of scipy.misc.pilutil) which requires Pillow at import time. Without
     # Pillow pre-installed, collection fails with ModuleNotFoundError.
     "scikit-learn__scikit-learn-10427": ["setuptools<60", "numpy<1.24", "cython<3", "Pillow"],
+    # scikit-learn 0.21.dev era (2019): test_print_versions.py imports
+    # distutils.version.LooseVersion which emits a DeprecationWarning on Python
+    # 3.10+ that pytest promotes to an error, aborting collection.  pytest<7
+    # avoids this via older internal handling (and the python3.9 pin in
+    # _INSTANCE_PYTHON also sidesteps the deprecation).  scipy<1.6 is required
+    # for the same _cython_blas.pyx build reason as adjacent 0.21.dev instances.
+    "scikit-learn__scikit-learn-11596": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6", "pytest<7"],
     # scikit-learn 0.20–0.21.dev era: pinned scipy needed at runtime because
     # scipy.optimize.linesearch.line_search_wolfe2 was removed in scipy 1.8.
     # scipy<1.6 matches the adjacent 0.21.dev entries below.
@@ -127,7 +142,10 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # scipy<1.6 is the last release supporting Python 3.9 with old numpy.
     "scikit-learn__scikit-learn-13283": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     "scikit-learn__scikit-learn-13496": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
-    "scikit-learn__scikit-learn-13864": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    # pytest<7 added: pytest.warns(None) as a context manager that suppresses
+    # warnings was changed in pytest 7.0 to raise TypeError; pytest 6.x accepts
+    # the legacy usage that sklearn 0.22.dev tests rely on.
+    "scikit-learn__scikit-learn-13864": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6", "pytest<7"],
     "scikit-learn__scikit-learn-14125": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     "scikit-learn__scikit-learn-14710": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
     "scikit-learn__scikit-learn-15094": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
