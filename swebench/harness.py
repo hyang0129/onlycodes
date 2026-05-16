@@ -765,8 +765,14 @@ def setup_venv(
                 raise subprocess.CalledProcessError(
                     result.returncode, result.args, result.stdout, result.stderr
                 )
+            # Honour any pytest version constraint from pre_install so the reuse
+            # path doesn't silently upgrade past a pinned version (e.g. pytest<7).
+            _pytest_spec = next(
+                (p for p in (pre_install or []) if p.lower().startswith("pytest")),
+                "pytest",
+            )
             result = subprocess.run(
-                [pip, "install", "--quiet", "pytest"],
+                [pip, "install", "--quiet", _pytest_spec],
                 capture_output=True,
                 text=True,
             )
@@ -827,8 +833,13 @@ def setup_venv(
             capture_output=True,
             text=True,
         )
-    # Always ensure pytest is present as a final fallback.
-    _pip_run_checked(pip, ["install", "--quiet", "pytest"])
+    # Always ensure pytest is present as a final fallback, honouring any
+    # version constraint from pre_install (e.g. "pytest<7" for era-pinned instances).
+    _pytest_spec = next(
+        (p for p in (pre_install or []) if p.lower().startswith("pytest")),
+        "pytest",
+    )
+    _pip_run_checked(pip, ["install", "--quiet", _pytest_spec])
     if _needs_jinja2_pin(repo_dir):
         _pin_jinja2(pip)
     if post_install:
