@@ -401,6 +401,33 @@ def test_matplotlib_26160_instance_pins() -> None:
     )
 
 
+def test_matplotlib_35_36_era_setuptools_scm_pin() -> None:
+    """Test 19: matplotlib 3.5–3.6 era instances pin setuptools_scm<7.
+
+    setuptools_scm 7.x deprecated get_version() and emits DeprecationWarning
+    when mpl.__version__ is accessed.  Pytest's filterwarnings=error promotes
+    this to a hard failure before the agent code runs.
+    """
+    for instance_id in (
+        "matplotlib__matplotlib-23476",
+        "matplotlib__matplotlib-24637",
+        "matplotlib__matplotlib-25126",
+    ):
+        pins = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pins is not None, f"No instance pins for {instance_id}"
+        assert any("setuptools_scm<7" in p for p in pins), (
+            f"Missing setuptools_scm<7 in {instance_id}"
+        )
+        # Must still carry the repo-level pre-build pins
+        assert any("setuptools<65" in p for p in pins), (
+            f"Missing setuptools<65 in {instance_id}"
+        )
+        assert any("numpy<2" in p for p in pins), f"Missing numpy<2 in {instance_id}"
+        assert any("pyparsing<3" in p for p in pins), (
+            f"Missing pyparsing<3 in {instance_id}"
+        )
+
+
 @pytest.mark.integration
 def test_smoke_import_raises_on_broken_venv(tmp_path: Path) -> None:
     """Test 16: _smoke_import raises RuntimeError when the module cannot be imported."""

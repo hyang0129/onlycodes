@@ -90,6 +90,15 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # `import astropy`. Without it, every test errors with "No module named 'setuptools_scm'".
     "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
     "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
+    # matplotlib 3.5–3.6 era (2022): setuptools_scm 7.x deprecated get_version()
+    # and emits DeprecationWarning when mpl.__version__ is accessed.  Pytest's
+    # `filterwarnings = error` promotes this to an error, breaking SVG backend
+    # and pickle tests before the agent-under-test code runs.  Pin setuptools_scm<7
+    # to suppress the warning at its source.  All other repo-level pins are
+    # carried forward since instance overrides fully replace the repo-level entry.
+    "matplotlib__matplotlib-23476": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
+    "matplotlib__matplotlib-24637": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
+    "matplotlib__matplotlib-25126": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
     # pyparsing<3 mirrors the repo-level pin (instance override fully replaces it).
