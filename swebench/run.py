@@ -6,7 +6,6 @@ import io
 import json
 import os
 import random
-import re
 import shutil
 import time
 import traceback
@@ -33,17 +32,22 @@ from swebench.cache import (
 )
 from swebench.harness import (
     _venv_kwargs,
+    _INSTANCE_ENV,
+    _INSTANCE_EXTRA_PYTEST_ARGS,
+    _INSTANCE_SOURCE_SEEDS,
+    _patch_vendored_cloudpickle,
     apply_test_patch,
     clone_repo,
-    find_claude_binary,
-    get_claude_version,
     git_reset,
+    resolve_test_node_ids,
     run_claude,
+    run_preflight_collect,
     run_tests,
     setup_venv,
     strip_git_history,
 )
 from swebench.models import Problem
+from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, make_runner
 
 
 def _mcp_config_without_persistent_kernel(
@@ -100,7 +104,12 @@ def _is_triple_complete(
     - ``<results_dir>/<instance_id>_<arm>_run<N>.jsonl`` exists, AND
     - ``<results_dir>/<instance_id>_<arm>_run<N>_test.txt`` exists, AND
     - the test file's last non-empty line (stripped of trailing whitespace) is
-      exactly ``PASS`` or ``FAIL``.
+      one of ``PASS``, ``FAIL``, or ``env_fail``.
+
+    ``env_fail`` (Issue #238) is the verdict written by the pre-flight
+    ``pytest --collect-only`` check when zero items are collected — the agent
+    is never invoked in that case, so the jsonl will contain only the meta
+    record.  We still treat it as complete so ``--resume`` skips it.
 
     If any of those conditions fail (missing file, no verdict, empty file,
     mid-run kill leaving partial output), the triple is **incomplete** and the
@@ -125,7 +134,7 @@ def _is_triple_complete(
         line = raw.strip()
         if not line:
             continue
-        if line == "PASS" or line == "FAIL":
+        if line in ("PASS", "FAIL", "env_fail"):
             return line
         return None
 
@@ -141,16 +150,22 @@ def _run_arm(
     repo_dir: str,
     venv_dir: str,
     results_dir: str,
-    claude_binary: str,
+    agent_binary: str,
     mcp_config_path: str,
     root: Path,
     persistent_kernel: bool = True,
     log_buffer: io.StringIO | None = None,
     needs_editable_reinstall: bool = False,
+    runner: AgentRunner | None = None,
+    codex_model: str | None = None,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
-    Returns the verdict string ("PASS", "FAIL", or "ERROR").
+    Returns the verdict string ("PASS", "FAIL", "ERROR", or "env_fail").
+    ``env_fail`` is returned when the pre-flight ``pytest --collect-only``
+    check collects zero items (Issue #238): the agent is not invoked and the
+    run is excluded from pass-rate aggregates downstream.
+
     When *log_buffer* is provided, all output is written there instead of
     directly to stdout so that parallel runs don't interleave.
 
@@ -176,6 +191,11 @@ def _run_arm(
     # "discard agent edits, clean untracked" semantics without needing the
     # original SHA that no longer exists in the object graph.
     git_reset(repo_dir, "HEAD")
+    # Re-apply the vendored cloudpickle patch after git_reset: the patch is an
+    # unstaged modification that git_reset (git clean -fd + checkout) discards.
+    # Applying it here ensures every arm sees the patched file before the test
+    # patch is applied (and git-add-A commits it alongside the test changes).
+    _patch_vendored_cloudpickle(repo_dir)
 
     # The git_reset above runs `git clean -fd`, which wipes the untracked
     # .egg-info/ directory that reinstall_editable placed in the overlay
@@ -184,6 +204,16 @@ def _run_arm(
     if needs_editable_reinstall:
         reinstall_editable(venv_dir, repo_dir)
 
+    # Apply source seed patch (if any) before the test patch so that
+    # test-patch imports of agent-created modules succeed at pre-flight time.
+    seed_rel = _INSTANCE_SOURCE_SEEDS.get(problem.instance_id)
+    if seed_rel:
+        seed_path = str(root / seed_rel)
+        if apply_test_patch(repo_dir, seed_path):
+            _echo(f"  [{arm} run {run_idx}] Applied source seed patch.")
+        else:
+            _echo(f"  [{arm} run {run_idx}] WARNING: source seed patch failed to apply.")
+
     # Apply test patch
     if problem.patch_file:
         patch_path = str(root / problem.patch_file)
@@ -191,6 +221,70 @@ def _run_arm(
             _echo(f"  [{arm} run {run_idx}] Applied test patch.")
         else:
             _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
+
+    # ------------------------------------------------------------------
+    # Pre-flight: pytest --collect-only (Issue #238 / #234)
+    # ------------------------------------------------------------------
+    # Resolve the test command first (sympy bare-name → file::test node IDs)
+    # so the collection check sees the same final command the test run will
+    # use.  If zero items collect, record env_fail and skip the agent
+    # entirely — there is nothing for the agent to fix, and counting this
+    # as FAIL silently corrupts pass-rate aggregates.
+    resolved_test_cmd = resolve_test_node_ids(
+        problem.test_cmd,
+        repo_dir=repo_dir,
+        venv_dir=venv_dir,
+        repo_slug=problem.repo_slug,
+    )
+    collected_ok, preflight_output = run_preflight_collect(
+        repo_dir=repo_dir,
+        test_cmd=resolved_test_cmd,
+        venv_dir=venv_dir,
+        extra_env=_INSTANCE_ENV.get(problem.instance_id),
+        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
+    )
+    if not collected_ok:
+        _echo(
+            f"  [{arm} run {run_idx}] Pre-flight collect FAILED — recording env_fail "
+            f"(0 items collected; skipping agent)."
+        )
+        result_file = os.path.join(
+            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl"
+        )
+        # Write a minimal meta record so downstream tools (analyze, summary,
+        # _is_triple_complete) see a properly-shaped jsonl file.
+        _meta_surface = runner.surface if runner is not None else "claude_code"
+        _meta_record: dict[str, object] = {
+            "type": "meta",
+            "instance_id": problem.instance_id,
+            "arm": arm,
+            "run": run_idx,
+            "agent_surface": _meta_surface,
+            "agent_binary": agent_binary,
+            "verdict": "env_fail",
+            "reason": "pytest --collect-only returned 0 items",
+        }
+        # Pin the model for codex_cli runs so extract_metadata can price the
+        # (empty) usage record and so the result file is self-describing.
+        if _meta_surface == "codex_cli" and codex_model is not None:
+            _meta_record["model"] = codex_model
+        with open(result_file, "w") as _meta_f:
+            _meta_f.write(json.dumps(_meta_record) + "\n")
+        test_result_file = os.path.join(
+            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
+        )
+        with open(test_result_file, "w") as out:
+            out.write(
+                "# pre-flight pytest --collect-only (Issue #238) — "
+                "0 items collected; agent was not invoked.\n"
+            )
+            if preflight_output:
+                out.write("\n--- pytest --collect-only output ---\n")
+                out.write(preflight_output)
+                out.write("\n--- end ---\n")
+            out.write("\nenv_fail\n")
+        _echo(f"  [{arm} run {run_idx}] Verdict: env_fail")
+        return "env_fail"
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     venv_python = os.path.join(venv_dir, "bin", "python")
@@ -248,66 +342,51 @@ def _run_arm(
 
     result_file = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
 
-    # Build tools flags based on arm
-    _BLOCKED_BUILTINS = (
-        "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
-        "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
-        "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
-        "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
-        "RemoteTrigger,SendMessage,Skill,"
-        "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
-        "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
-    )
-    tools_flags: list[str] = []
-    if is_onlycode:
-        # --tools whitelists MCP tools but does not reliably block built-ins
-        # like Monitor (added v2.1.98). --disallowedTools explicitly removes
-        # every built-in so the agent can only use the two codebox MCP tools.
-        # The default mcp-config.json enables the persistent kernel via
-        # ONLYCODES_PERSISTENT_KERNEL=1. When --no-persistent-kernel is passed
-        # we emit a per-run temp config with that env scrubbed.
-        effective_mcp_config = mcp_config_path
-        if not persistent_kernel:
-            effective_mcp_config = _mcp_config_without_persistent_kernel(
-                mcp_config_path, results_dir, problem.instance_id, run_idx
-            )
-        tools_flags = [
-            "--mcp-config", effective_mcp_config,
-            "--strict-mcp-config",
-            "--tools", "mcp__codebox__execute_code,mcp__codebox__list_tools",
-            "--disallowedTools", _BLOCKED_BUILTINS,
-        ]
-    elif arm == "bash_only":
-        # Allow only Bash; block every other built-in tool.
-        blocked_no_bash = ",".join(t for t in _BLOCKED_BUILTINS.split(",") if t.strip() != "Bash")
-        tools_flags = ["--tools", "Bash", "--disallowedTools", blocked_no_bash]
+    _runner = runner if runner is not None else ClaudeRunner()
+
+    # For the onlycode arm, honour persistent_kernel by stripping the env var
+    # from the MCP config when disabled. This is Claude-specific; CodexRunner
+    # handles persistent_kernel via the ONLYCODES_PERSISTENT_KERNEL env var
+    # that it reads inside invoke().
+    effective_mcp_config = mcp_config_path
+    if is_onlycode and not persistent_kernel and isinstance(_runner, ClaudeRunner):
+        effective_mcp_config = _mcp_config_without_persistent_kernel(
+            mcp_config_path, results_dir, problem.instance_id, run_idx
+        )
+
+    tools_flags = _runner.build_tools_flags(arm, effective_mcp_config)
 
     start_time = time.time()
 
-    # Prepend a metadata record so every JSONL is self-describing.
-    claude_version = get_claude_version(claude_binary)
+    agent_version = _runner.get_version(agent_binary)
+    _meta_record: dict[str, object] = {
+        "type": "meta",
+        "instance_id": problem.instance_id,
+        "arm": arm,
+        "run": run_idx,
+        "agent_surface": _runner.surface,
+        "agent_binary": agent_binary,
+        "agent_version": agent_version,
+    }
+    # Pin the model for codex_cli runs so extract_metadata can look up prices
+    # in codex_prices.toml and so the result file is self-describing.
+    if _runner.surface == "codex_cli" and codex_model is not None:
+        _meta_record["model"] = codex_model
     with open(result_file, "w") as _meta_f:
-        _meta_f.write(json.dumps({
-            "type": "meta",
-            "instance_id": problem.instance_id,
-            "arm": arm,
-            "run": run_idx,
-            "claude_binary": claude_binary,
-            "claude_version": claude_version,
-        }) + "\n")
+        _meta_f.write(json.dumps(_meta_record) + "\n")
 
-    run_claude(
+    _runner.invoke(
         prompt=prompt,
-        repo_dir=repo_dir,
+        cwd=repo_dir,
         system_prompt="You are a helpful assistant.",
         tools_flags=tools_flags,
         result_file=result_file,
-        claude_binary=claude_binary,
+        binary=agent_binary,
+        mcp_config_path=effective_mcp_config,
     )
 
     wall_secs = int(time.time() - start_time)
 
-    # Run tests
     test_result_file = os.path.join(
         results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
     )
@@ -319,24 +398,19 @@ def _run_arm(
         test_cmd=problem.test_cmd,
         venv_dir=venv_dir,
         result_file=test_result_file,
+        repo_slug=problem.repo_slug,
+        extra_env=_INSTANCE_ENV.get(problem.instance_id),
+        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
     )
 
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
 
-    # Extract cost and turns from stream-json output
-    cost = "N/A"
-    turns = "N/A"
-    try:
-        with open(result_file) as f:
-            content = f.read()
-        cost_matches = re.findall(r'"total_cost_usd":\s*([\d.]+)', content)
-        turns_matches = re.findall(r'"num_turns":\s*(\d+)', content)
-        if cost_matches:
-            cost = f"${cost_matches[-1]}"
-        if turns_matches:
-            turns = turns_matches[-1]
-    except (OSError, ValueError):
-        pass
+    cost_usd, num_turns = _runner.extract_metadata(Path(result_file))
+    # Codex costs are derived from token counts × codex_prices.toml — mark as
+    # estimate with `~` to distinguish from Claude's authoritative USD figure.
+    _cost_prefix = "~$" if _runner.surface == "codex_cli" else "$"
+    cost = f"{_cost_prefix}{cost_usd:.4f}" if cost_usd is not None else "N/A"
+    turns = str(num_turns) if num_turns is not None else "N/A"
 
     _echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
     return verdict
@@ -612,6 +686,28 @@ def _cleanup_stale_overlays(
         "PASS or FAIL; otherwise it is re-run."
     ),
 )
+@click.option(
+    "--agent-surface",
+    "agent_surface",
+    type=click.Choice(["claude_code", "codex_cli"]),
+    default="claude_code",
+    show_default=True,
+    help="Agent surface to use for running evaluations.",
+)
+@click.option(
+    "--codex-model",
+    "codex_model",
+    type=str,
+    default="gpt-5.5",
+    show_default=True,
+    help=(
+        "Codex CLI model slug to pin (e.g. gpt-5.5, gpt-5.4, gpt-5.4-mini). "
+        "Written to config.toml AND passed as `codex exec -m <model>` so the "
+        "run is reproducible across CLI upgrades. The same value is recorded "
+        "in the JSONL meta line and looked up in swebench/codex_prices.toml "
+        "by extract_metadata. Ignored when --agent-surface=claude_code."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -623,6 +719,8 @@ def run_command(
     shuffle_arms: bool,
     output_dir: str | None,
     resume: bool,
+    agent_surface: str,
+    codex_model: str,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -638,10 +736,12 @@ def run_command(
     results_dir.mkdir(parents=True, exist_ok=True)
     os.makedirs(clone_base, exist_ok=True)
 
-    # Find claude binary
+    # Create runner and resolve binary (preflight)
     try:
-        claude_binary = find_claude_binary()
-    except FileNotFoundError as e:
+        runner = make_runner(agent_surface, codex_model=codex_model)
+        agent_binary = runner.find_binary()
+        runner.verify_auth()
+    except (ValueError, FileNotFoundError) as e:
         click.echo(f"ERROR: {e}", err=True)
         raise SystemExit(1)
 
@@ -671,9 +771,21 @@ def run_command(
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
 
+    # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
+    # baseline runs the agent binary directly without the exec-server bundle.
+    _CODEX_EXEC_SERVER_ARMS = {"onlycode", "bash_only"}
+    if agent_surface == "codex_cli" and any(a in _CODEX_EXEC_SERVER_ARMS for a in arm_list):
+        try:
+            runner.preflight(mcp_config_path)
+        except RuntimeError as e:
+            click.echo(f"ERROR: Codex pre-flight failed: {e}", err=True)
+            raise SystemExit(1)
+
     # --- Environment pre-flight checks ------------------------------------------
+    # Only run for Claude Code surface: Codex does not read the Claude-format
+    # mcp-config.json (it generates config.toml internally via _write_codex_config).
     env_errors: list[str] = []
-    if "onlycode" in arm_list:
+    if "onlycode" in arm_list and agent_surface != "codex_cli":
         _configs_to_check = [mcp_config_path]
         for _cfg in _configs_to_check:
             if not os.path.isfile(_cfg):
@@ -721,9 +833,10 @@ def run_command(
     click.echo(f"Use cache: {use_cache}")
     click.echo(f"Resume: {resume}")
     click.echo(f"Output dir: {results_dir}")
-    click.echo(f"Claude binary: {claude_binary}")
-    claude_version = get_claude_version(claude_binary)
-    click.echo(f"Claude version: {claude_version}")
+    click.echo(f"Agent surface: {agent_surface}")
+    click.echo(f"Agent binary: {agent_binary}")
+    agent_version = runner.get_version(agent_binary)
+    click.echo(f"Agent version: {agent_version}")
     click.echo()
 
     # --- Cache backend selection (only relevant when --use-cache) ---------------
@@ -883,11 +996,13 @@ def run_command(
                         repo_dir=task.repo_dir,
                         venv_dir=task.venv_dir,
                         results_dir=str(results_dir),
-                        claude_binary=claude_binary,
+                        agent_binary=agent_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
                         persistent_kernel=persistent_kernel,
                         needs_editable_reinstall=task.needs_editable_reinstall,
+                        runner=runner,
+                        codex_model=codex_model if agent_surface == "codex_cli" else None,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -936,12 +1051,14 @@ def run_command(
                         repo_dir=task.repo_dir,
                         venv_dir=task.venv_dir,
                         results_dir=str(results_dir),
-                        claude_binary=claude_binary,
+                        agent_binary=agent_binary,
                         mcp_config_path=mcp_config_path,
                         root=root,
                         persistent_kernel=persistent_kernel,
                         log_buffer=buf,
                         needs_editable_reinstall=task.needs_editable_reinstall,
+                        runner=runner,
+                        codex_model=codex_model if agent_surface == "codex_cli" else None,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)

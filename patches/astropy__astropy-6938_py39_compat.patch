@@ -1,0 +1,22 @@
+diff --git a/astropy/conftest.py b/astropy/conftest.py
+index 5894a23..bcc22ed 100644
+--- a/astropy/conftest.py
++++ b/astropy/conftest.py
+@@ -12,7 +12,16 @@ enable_deprecations_as_exceptions(
+     # This is a workaround for the OpenSSL deprecation warning that comes from
+     # the `requests` module. It only appears when both asdf and sphinx are
+     # installed. This can be removed once pyopenssl 1.7.20+ is released.
+-    modules_to_ignore_on_import=['requests'])
++    modules_to_ignore_on_import=['requests', 'pkg_resources'],
++    # Python 3.9: collections ABCs moved to collections.abc; astropy 3.x
++    # still uses the old location which issues a DeprecationWarning.
++    # pkg_resources deprecation is from setuptools >= 67.
++    warnings_to_ignore_by_pyver={
++        (3, 9): {
++            r"Using or importing the ABCs from 'collections'",
++            r"pkg_resources is deprecated as an API",
++        },
++    })
+ 
+ try:
+     import matplotlib

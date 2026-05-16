@@ -20,12 +20,16 @@ import pytest
 
 from swebench.harness import (
     _DEFAULT_PYTHON,
+    _INSTANCE_POST_INSTALL,
     _INSTANCE_PRE_INSTALL,
     _INSTANCE_PYTHON,
+    _N_BUILD_JOBS,
+    _REPO_PRE_BUILD,
     _REPO_PRE_INSTALL,
     _REPO_PYTHON,
     _read_sentinel,
     _smoke_import,
+    _venv_kwargs,
     _venv_sentinel,
     setup_venv,
 )
@@ -357,6 +361,23 @@ def test_astropy_6938_uses_python39() -> None:
     )
 
 
+def test_sphinx_types_union_instances_use_python39() -> None:
+    """sphinx 4.0.x era: instances whose tests transitively import
+    ``sphinx/util/typing.py`` must run on Python 3.9.
+
+    The base commits for these two instances ship a typo in typing.py:
+    ``if sys.version_info > (3, 10): from types import Union as types_Union``.
+    ``types.Union`` does not exist on any released Python. The guard fires on
+    Python 3.10.x too (``(3, 10, x) > (3, 10)`` is True by tuple length), so
+    pinning anything above 3.9 still hits the broken import.
+    """
+    for instance_id in ("sphinx-doc__sphinx-9230", "sphinx-doc__sphinx-9281"):
+        assert _INSTANCE_PYTHON.get(instance_id) == "python3.9", (
+            f"{instance_id} must use python3.9 to skip the broken "
+            "`from types import Union` branch in sphinx/util/typing.py"
+        )
+
+
 def test_astropy_5x_pre_install_pins() -> None:
     """Test 15: astropy 5.x instances have the required pre-install pins."""
     for instance_id in ("astropy__astropy-12962", "astropy__astropy-13842"):
@@ -381,6 +402,45 @@ def test_matplotlib_26160_instance_pins() -> None:
     )
 
 
+def test_matplotlib_35_36_era_setuptools_scm_pin() -> None:
+    """Test 19: matplotlib 3.5–3.6 era instances pin setuptools_scm<7.
+
+    setuptools_scm 10.x (the resolved version when unpinned) emits a
+    DeprecationWarning ("Version scheme 'release-branch-semver' has been
+    renamed") when mpl.__version__ is computed via setuptools_scm.get_version()
+    at runtime.  Pytest's filterwarnings=error in matplotlib's conftest promotes
+    this to a hard failure before the agent code under test runs.
+
+    The pin must appear in BOTH pre- and post-install lists: pre-install so the
+    build sees the right version, post-install because ``pip install -e .``
+    pulls setuptools_scm as a runtime dep and would otherwise upgrade it back.
+    """
+    for instance_id in (
+        "matplotlib__matplotlib-23476",
+        "matplotlib__matplotlib-24637",
+        "matplotlib__matplotlib-25126",
+    ):
+        pre = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pre is not None, f"No pre-install pins for {instance_id}"
+        assert any("setuptools_scm<7" in p for p in pre), (
+            f"Missing setuptools_scm<7 in pre-install for {instance_id}"
+        )
+        # Must still carry the repo-level pre-build pins
+        assert any("setuptools<65" in p for p in pre), (
+            f"Missing setuptools<65 in {instance_id}"
+        )
+        assert any("numpy<2" in p for p in pre), f"Missing numpy<2 in {instance_id}"
+        assert any("pyparsing<3" in p for p in pre), (
+            f"Missing pyparsing<3 in {instance_id}"
+        )
+        post = _INSTANCE_POST_INSTALL.get(instance_id)
+        assert post is not None, f"No post-install pins for {instance_id}"
+        assert any("setuptools_scm<7" in p for p in post), (
+            f"Missing setuptools_scm<7 in post-install for {instance_id} "
+            f"(pre-install pin is overridden by pip install -e .)"
+        )
+
+
 @pytest.mark.integration
 def test_smoke_import_raises_on_broken_venv(tmp_path: Path) -> None:
     """Test 16: _smoke_import raises RuntimeError when the module cannot be imported."""
@@ -400,3 +460,115 @@ def test_smoke_import_skips_unknown_repo(tmp_path: Path) -> None:
     venv_dir = str(tmp_path / "no-venv-needed")
     # Should not raise even though the venv doesn't exist.
     _smoke_import(venv_dir, "unknown/repo")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Tests for parallel pre-build (issue: sklearn-24677 / sklearn-25694 timeout)
+# ---------------------------------------------------------------------------
+
+
+def test_sklearn_has_pre_build_command() -> None:
+    """scikit-learn must have a parallel pre-build command configured."""
+    cmd = _REPO_PRE_BUILD.get("scikit-learn/scikit-learn")
+    assert cmd is not None, "No pre-build command for scikit-learn/scikit-learn"
+    assert "setup.py" in cmd, "Pre-build must invoke setup.py"
+    assert "build_ext" in cmd, "Pre-build must call build_ext"
+    assert "--inplace" in cmd, "Pre-build must use --inplace"
+    assert any(tok.startswith("-j") for tok in cmd), "Pre-build must pass -j N for parallel build"
+
+
+def test_pre_build_job_count_is_bounded() -> None:
+    """_N_BUILD_JOBS must be between 1 and 4 (capped to avoid OOM on large C files)."""
+    import os as _os
+    assert _N_BUILD_JOBS >= 1
+    assert _N_BUILD_JOBS <= 4
+    assert _N_BUILD_JOBS == min(4, max(1, _os.cpu_count() or 1))
+
+
+def test_venv_kwargs_includes_pre_build_cmd_for_sklearn() -> None:
+    """_venv_kwargs for scikit-learn must include pre_build_cmd."""
+    problem = _make_problem(
+        instance_id="scikit-learn__scikit-learn-24677",
+        repo_slug="scikit-learn/scikit-learn",
+    )
+    result = _venv_kwargs(problem)
+    assert "pre_build_cmd" in result, "_venv_kwargs must return pre_build_cmd key"
+    assert result["pre_build_cmd"] is not None, (
+        "pre_build_cmd must be set for scikit-learn/scikit-learn"
+    )
+    assert "build_ext" in result["pre_build_cmd"]
+
+
+def test_venv_kwargs_pre_build_cmd_none_for_unknown_repo() -> None:
+    """_venv_kwargs for an unknown repo must have pre_build_cmd=None."""
+    problem = _make_problem(instance_id="some__other-1", repo_slug="some/other")
+    result = _venv_kwargs(problem)
+    assert result.get("pre_build_cmd") is None, (
+        f"Unknown repo must have pre_build_cmd=None, got {result.get('pre_build_cmd')!r}"
+    )
+
+
+def test_setup_venv_runs_pre_build_cmd_before_editable_install(tmp_path: Path) -> None:
+    """setup_venv must invoke pre_build_cmd between pre_install and pip install -e."""
+    venv_dir = str(tmp_path / "venv")
+    repo_dir = str(tmp_path / "repo")
+    os.makedirs(repo_dir)
+
+    call_log: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        if "-m" in cmd and "venv" in cmd:
+            pip_dir = os.path.join(venv_dir, "bin")
+            os.makedirs(pip_dir, exist_ok=True)
+            for name in ("pip", "python"):
+                Path(os.path.join(pip_dir, name)).touch()
+        label = " ".join(str(t) for t in cmd)
+        call_log.append(label)
+        return _make_success(cmd)
+
+    pre_build = ["python", "setup.py", "build_ext", "--inplace", "-j8"]
+    with patch("subprocess.run", side_effect=fake_run):
+        setup_venv(
+            venv_dir,
+            repo_dir,
+            python_bin="python3.11",
+            pre_install=["cython<3"],
+            pre_build_cmd=pre_build,
+        )
+
+    # Verify pre-build ran
+    pre_build_calls = [c for c in call_log if "build_ext" in c]
+    assert pre_build_calls, "Pre-build command was not invoked"
+
+    # Verify ordering: pre-build before editable install
+    editable_calls = [c for c in call_log if "-e" in c and repo_dir in c]
+    assert editable_calls, "No editable install call found"
+    pre_build_idx = next(i for i, c in enumerate(call_log) if "build_ext" in c)
+    editable_idx = next(i for i, c in enumerate(call_log) if "-e" in c and repo_dir in c)
+    assert pre_build_idx < editable_idx, (
+        f"Pre-build (idx={pre_build_idx}) must run before editable install (idx={editable_idx})"
+    )
+
+
+def test_setup_venv_skips_pre_build_cmd_when_none(tmp_path: Path) -> None:
+    """setup_venv must not invoke any build_ext when pre_build_cmd is None."""
+    venv_dir = str(tmp_path / "venv")
+    repo_dir = str(tmp_path / "repo")
+    os.makedirs(repo_dir)
+
+    call_log: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        if "-m" in cmd and "venv" in cmd:
+            pip_dir = os.path.join(venv_dir, "bin")
+            os.makedirs(pip_dir, exist_ok=True)
+            Path(os.path.join(pip_dir, "pip")).touch()
+        call_log.append(" ".join(str(t) for t in cmd))
+        return _make_success(cmd)
+
+    with patch("subprocess.run", side_effect=fake_run):
+        setup_venv(venv_dir, repo_dir, python_bin="python3.11", pre_install=["cython<3"])
+
+    assert not any("build_ext" in c for c in call_log), (
+        f"build_ext should not be called when pre_build_cmd=None; calls: {call_log}"
+    )

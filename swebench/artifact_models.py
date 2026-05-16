@@ -89,15 +89,16 @@ class ArtifactArmResult:
     """
 
     instance_id: str
-    arm: str            # "code_only" | "tool_rich"
+    arm: str                # "code_only" | "tool_rich"
     run_idx: int
-    verdict: str        # "PASS" | "FAIL" | "ERROR"
+    verdict: str            # "PASS" | "FAIL" | "ERROR"
     grade_result: GradeResult | None
     budget: dict[str, Any]
     wall_secs: int
     cost_usd: float | None
     num_turns: int | None
-    claude_version: str | None
+    agent_surface: str      # "claude_code" | "codex_cli"
+    agent_version: str | None
     agent_jsonl_path: str
 
     def to_dict(self) -> dict[str, Any]:

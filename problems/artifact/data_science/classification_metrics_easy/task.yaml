@@ -1,0 +1,18 @@
+instance_id: data_science__classification_metrics_easy
+category: data_science
+difficulty: easy
+problem_statement: prompt.md
+workspace_dir: workspace/
+workspace_generator: workspace/generator.py
+output_artifact: output/result.json
+structural_verifier: workspace/verify.py
+hidden_grader: grader/hidden.py
+reference_output: grader/reference_output.json
+execution_budget:
+  max_code_runs: 0
+  max_wall_seconds: 0
+tags:
+  - data_science
+  - metric_computation
+  - classification
+  - sklearn

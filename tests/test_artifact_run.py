@@ -1,8 +1,7 @@
-"""Tests for swebench.artifact_run — end-to-end arm execution with a stubbed Claude.
+"""Tests for swebench.artifact_run — end-to-end arm execution with a stubbed runner.
 
-We monkeypatch ``swebench.harness.run_claude`` so no real Claude binary is
-invoked. The agent behaviour is simulated by writing output files into the
-scratch dir directly.
+We inject a FakeRunner so no real agent binary is invoked. The agent behaviour
+is simulated by writing output files into the scratch dir directly.
 """
 
 from __future__ import annotations
@@ -13,16 +12,15 @@ from pathlib import Path
 
 import pytest
 
-from swebench import artifact_run as artifact_run_mod
 from swebench.artifact_models import ExecutionBudget, Task
 from swebench.artifact_run import (
     ARMS,
     _build_prompt,
-    _build_tools_flags,
     is_run_complete,
     run_artifact_arm,
     run_dir_for,
 )
+from swebench.runner import AgentRunner, ClaudeRunner, BLOCKED_BUILTINS
 
 
 def _make_fixture(task_dir: Path, grader_src: str, budget=(0, 0)) -> Task:
@@ -66,73 +64,106 @@ _GRADER_CHECKS_42 = """
 """
 
 
-def _stub_claude_writes(contents: str):
-    """Return a fake run_claude that drops a file named answer.txt in cwd."""
-    def fake_run_claude(*, prompt, repo_dir, system_prompt, tools_flags,
-                       result_file, claude_binary):
-        # Simulate the agent writing its artifact into the scratch dir.
-        Path(repo_dir, "answer.txt").write_text(contents)
-        # Also append a fake stream-json entry so cost/turns extraction paths run.
+class FakeRunner(AgentRunner):
+    """Test double for AgentRunner. Writes a fixed artifact and fake JSONL."""
+
+    surface = "claude_code"
+
+    def __init__(self, artifact_content: str = "42\n"):
+        self._artifact_content = artifact_content
+
+    def find_binary(self) -> str:
+        return "/bin/true"
+
+    def verify_auth(self) -> None:
+        return
+
+    def get_version(self, binary: str) -> str:
+        return "fake-runner-1.0.0"
+
+    def build_tools_flags(self, arm: str, mcp_config_path) -> list[str]:
+        return ClaudeRunner().build_tools_flags(arm, mcp_config_path)
+
+    def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
+               result_file, binary, mcp_config_path=None) -> None:
+        Path(cwd, "answer.txt").write_text(self._artifact_content)
         with open(result_file, "a") as f:
             f.write(json.dumps({
                 "type": "result",
                 "total_cost_usd": 0.0123,
                 "num_turns": 4,
             }) + "\n")
-    return fake_run_claude
+
+    def extract_metadata(self, jsonl_path):
+        return ClaudeRunner().extract_metadata(jsonl_path)
 
 
-@pytest.fixture
-def stub_claude(monkeypatch):
-    """Replace run_claude + get_claude_version with harmless stubs."""
-    monkeypatch.setattr(
-        artifact_run_mod, "get_claude_version",
-        lambda _b: "claude-test-1.0.0",
-    )
-    return monkeypatch
-
+# ---------------------------------------------------------------------------
+# ClaudeRunner.build_tools_flags tests (replaces old _build_tools_flags tests)
+# ---------------------------------------------------------------------------
 
 def test_build_tools_flags_code_only_includes_blocked_builtins():
-    flags = _build_tools_flags("code_only", mcp_config_path="/tmp/mcp.json")
+    flags = ClaudeRunner().build_tools_flags("code_only", mcp_config_path="/tmp/mcp.json")
     assert "--mcp-config" in flags
     assert "--strict-mcp-config" in flags
     assert "--disallowedTools" in flags
-    # Matched verbatim with run.py — confirm a few canary tools.
     disallowed = flags[flags.index("--disallowedTools") + 1]
     for name in ("Bash", "Read", "Write", "Edit", "Grep"):
         assert name in disallowed
 
 
 def test_build_tools_flags_tool_rich_empty():
-    assert _build_tools_flags("tool_rich", mcp_config_path="/tmp/mcp.json") == []
+    assert ClaudeRunner().build_tools_flags("tool_rich", mcp_config_path="/tmp/mcp.json") == []
 
 
 def test_build_tools_flags_rejects_unknown_arm():
     with pytest.raises(ValueError):
-        _build_tools_flags("nonsense", mcp_config_path=None)
+        ClaudeRunner().build_tools_flags("nonsense", mcp_config_path=None)
 
 
-def test_run_artifact_arm_end_to_end_pass(tmp_path, stub_claude, monkeypatch):
+def test_build_tools_flags_bash_only():
+    flags = ClaudeRunner().build_tools_flags("bash_only", mcp_config_path=None)
+    assert "--tools" in flags
+    assert flags[flags.index("--tools") + 1] == "Bash"
+    assert "--disallowedTools" in flags
+    disallowed = flags[flags.index("--disallowedTools") + 1]
+    assert "Bash" not in disallowed
+    assert "Read" in disallowed
+    assert "--mcp-config" not in flags
+    assert "--strict-mcp-config" not in flags
+
+
+# ---------------------------------------------------------------------------
+# BLOCKED_BUILTINS canonical source
+# ---------------------------------------------------------------------------
+
+def test_blocked_builtins_contains_expected_tools():
+    for name in ("Bash", "Read", "Write", "Edit", "Grep", "WebSearch"):
+        assert name in BLOCKED_BUILTINS
+
+
+# ---------------------------------------------------------------------------
+# run_artifact_arm end-to-end tests
+# ---------------------------------------------------------------------------
+
+def test_run_artifact_arm_end_to_end_pass(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42)
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("42\n"),
-    )
     results_dir = tmp_path / "results"
     result = run_artifact_arm(
         task, "code_only", 1,
         results_dir=results_dir,
-        claude_binary="/bin/true",
+        runner=FakeRunner("42\n"),
         echo=lambda _m: None,
     )
     assert result.verdict == "PASS"
     assert result.grade_result is not None
     assert result.grade_result.passed is True
     assert result.grade_result.score == 1.0
+    assert result.agent_surface == "claude_code"
+    assert result.agent_version == "fake-runner-1.0.0"
     assert result.budget == {
         "max_code_runs": 0, "max_wall_seconds": 0, "enforcement": "OFF",
     }
-    # Cost / turns parsed from stubbed stream-json.
     assert result.cost_usd == pytest.approx(0.0123)
     assert result.num_turns == 4
 
@@ -140,21 +171,19 @@ def test_run_artifact_arm_end_to_end_pass(tmp_path, stub_claude, monkeypatch):
     assert (run_dir / "result.json").is_file()
     assert (run_dir / "agent.jsonl").is_file()
     assert (run_dir / "scratch" / "answer.txt").read_text() == "42\n"
-    # Starter workspace file must have been copied.
     assert (run_dir / "scratch" / "starter.txt").read_text() == "START\n"
 
+    # result.json must include agent_surface
+    data = json.loads((run_dir / "result.json").read_text())
+    assert data["agent_surface"] == "claude_code"
 
-def test_run_artifact_arm_fail_verdict(tmp_path, stub_claude, monkeypatch):
+
+def test_run_artifact_arm_fail_verdict(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42)
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("wrong\n"),
-    )
-    results_dir = tmp_path / "results"
     result = run_artifact_arm(
         task, "tool_rich", 1,
-        results_dir=results_dir,
-        claude_binary="/bin/true",
+        results_dir=tmp_path / "results",
+        runner=FakeRunner("wrong\n"),
         echo=lambda _m: None,
     )
     assert result.verdict == "FAIL"
@@ -162,60 +191,44 @@ def test_run_artifact_arm_fail_verdict(tmp_path, stub_claude, monkeypatch):
     assert result.grade_result.passed is False
 
 
-def test_run_artifact_arm_no_leak_in_scratch(tmp_path, stub_claude, monkeypatch):
+def test_run_artifact_arm_no_leak_in_scratch(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42)
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("42\n"),
-    )
-    results_dir = tmp_path / "results"
     run_artifact_arm(
         task, "code_only", 1,
-        results_dir=results_dir,
-        claude_binary="/bin/true",
+        results_dir=tmp_path / "results",
+        runner=FakeRunner("42\n"),
         echo=lambda _m: None,
     )
-    scratch = results_dir / task.instance_id / "code_only" / "run1" / "scratch"
-    # ABSOLUTE invariant: no grader/hidden.py, no reference_output.* in scratch.
+    scratch = tmp_path / "results" / task.instance_id / "code_only" / "run1" / "scratch"
     assert not any(scratch.rglob("hidden.py"))
     assert not any(scratch.rglob("reference_output*"))
 
 
-def test_budget_log_unlimited(tmp_path, stub_claude, monkeypatch, capsys):
+def test_budget_log_unlimited(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42, budget=(0, 0))
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("42\n"),
-    )
     captured: list[str] = []
     run_artifact_arm(
         task, "code_only", 1,
         results_dir=tmp_path / "results",
-        claude_binary="/bin/true",
+        runner=FakeRunner("42\n"),
         echo=captured.append,
     )
-    joined = "\n".join(captured)
-    assert "budget enforcement OFF (0 = unlimited)" in joined
+    assert "budget enforcement OFF (0 = unlimited)" in "\n".join(captured)
 
 
-def test_budget_log_nonzero(tmp_path, stub_claude, monkeypatch):
+def test_budget_log_nonzero(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42, budget=(10, 300))
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("42\n"),
-    )
     captured: list[str] = []
     result = run_artifact_arm(
         task, "code_only", 1,
         results_dir=tmp_path / "results",
-        claude_binary="/bin/true",
+        runner=FakeRunner("42\n"),
         echo=captured.append,
     )
     joined = "\n".join(captured)
     assert "max_code_runs=10" in joined
     assert "max_wall_seconds=300" in joined
     assert "enforcement OFF" in joined
-    # Fields are stored on the result even though enforcement is off.
     assert result.budget == {
         "max_code_runs": 10, "max_wall_seconds": 300, "enforcement": "OFF",
     }
@@ -235,33 +248,12 @@ def test_arm_list_constants():
     assert set(ARMS) == {"code_only", "tool_rich", "bash_only"}
 
 
-def test_build_tools_flags_bash_only():
-    flags = _build_tools_flags("bash_only", mcp_config_path=None)
-    assert "--tools" in flags
-    tools_val = flags[flags.index("--tools") + 1]
-    assert tools_val == "Bash"
-    assert "--disallowedTools" in flags
-    disallowed = flags[flags.index("--disallowedTools") + 1]
-    # Bash must NOT be in the disallowed list for bash_only.
-    assert "Bash" not in disallowed
-    # Known blocked builtins must still be disallowed.
-    assert "Read" in disallowed
-    # No MCP flags for bash_only.
-    assert "--mcp-config" not in flags
-    assert "--strict-mcp-config" not in flags
-
-
-def test_run_artifact_arm_end_to_end_bash_only(tmp_path, stub_claude, monkeypatch):
+def test_run_artifact_arm_end_to_end_bash_only(tmp_path):
     task = _make_fixture(tmp_path / "task", _GRADER_CHECKS_42)
-    monkeypatch.setattr(
-        artifact_run_mod, "run_claude",
-        _stub_claude_writes("42\n"),
-    )
-    results_dir = tmp_path / "results"
     result = run_artifact_arm(
         task, "bash_only", 1,
-        results_dir=results_dir,
-        claude_binary="/bin/true",
+        results_dir=tmp_path / "results",
+        runner=FakeRunner("42\n"),
         echo=lambda _m: None,
     )
     assert result.arm == "bash_only"
@@ -271,13 +263,7 @@ def test_run_artifact_arm_end_to_end_bash_only(tmp_path, stub_claude, monkeypatc
 
 
 def test_build_prompt_uses_absolute_paths(tmp_path):
-    """Regression for #107: agent must receive absolute paths, not relative.
-
-    The MCP ``execute_code`` tool defaults to a fresh tmpdir when the agent
-    omits ``cwd=`` on a call. Relative paths in the prompt would resolve
-    against that tmpdir, not scratch_dir — so the output artifact would land
-    outside where the grader looks. Absolute paths remove the ambiguity.
-    """
+    """Regression for #107: agent must receive absolute paths, not relative."""
     task_dir = tmp_path / "task"
     task = _make_fixture(task_dir, _GRADER_CHECKS_42)
     scratch = tmp_path / "results" / task.instance_id / "code_only" / "run1" / "scratch"
@@ -288,8 +274,6 @@ def test_build_prompt_uses_absolute_paths(tmp_path):
     scratch_abs = str(scratch.resolve())
     output_abs = str((scratch.resolve() / task.output_artifact))
 
-    # Must contain absolute scratch path and absolute output path.
     assert scratch_abs in prompt
     assert output_abs in prompt
-    # Must NOT contain the old "relative path" framing that caused #107.
     assert "relative path" not in prompt

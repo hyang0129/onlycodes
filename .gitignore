@@ -16,3 +16,7 @@ results*/
 /codebox.py
 /mcp_bridge.py
 
+# Claude Code agent internals
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+

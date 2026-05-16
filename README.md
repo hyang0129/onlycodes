@@ -91,6 +91,20 @@ python -m swebench analyze pathology --concurrency 4
 
 Results go to `runs/swebench/` keyed by `instance_id`. Analysis sidecars go to `runs/swebench/_analysis/<run_id>/`.
 
+### MCP Config
+
+After building the exec-server bundle (`npm run build` in `exec_server/`),
+regenerate `mcp-config.json` with the correct paths for your environment:
+
+```bash
+python -m swebench mcp-config generate
+# or write to a custom location:
+python -m swebench mcp-config generate --out /path/to/mcp-config.json
+```
+
+This resolves `node`, the bundle path, and the repo root automatically. Re-run
+after any container rebuild or workspace move.
+
 ### OverlayFS Cache
 
 For large-scale or repeated runs, the harness supports an OverlayFS-backed instance cache that skips clone + venv setup on subsequent runs.

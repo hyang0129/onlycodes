@@ -30,7 +30,7 @@ from swebench.artifact_run import (
     run_artifact_arm,
     run_dir_for,
 )
-from swebench.harness import find_claude_binary
+from swebench.runner import make_runner
 
 
 @click.group()
@@ -91,6 +91,14 @@ def artifact_group() -> None:
     default=None,
     help="MCP config path for the code_only arm [default: <repo>/mcp-config.json if present].",
 )
+@click.option(
+    "--agent-surface",
+    "agent_surface",
+    type=click.Choice(["claude_code", "codex_cli"]),
+    default="claude_code",
+    show_default=True,
+    help="Agent surface to use for running tasks.",
+)
 def artifact_run_command(
     filter_ids: str | None,
     arms: str,
@@ -99,6 +107,7 @@ def artifact_run_command(
     resume: bool,
     tasks_dir: str | None,
     mcp_config: str | None,
+    agent_surface: str,
 ) -> None:
     """Run artifact-graded benchmark arms on one or more tasks."""
     if num_runs < 1:
@@ -127,9 +136,17 @@ def artifact_run_command(
         )
         raise SystemExit(1)
 
+    mcp_path = mcp_config
+    if mcp_path is None:
+        candidate = root / "mcp-config.json"
+        if candidate.is_file():
+            mcp_path = str(candidate)
+
     try:
-        claude_binary = find_claude_binary()
-    except FileNotFoundError as exc:
+        runner = make_runner(agent_surface)
+        binary = runner.find_binary()
+        runner.verify_auth()
+    except (ValueError, FileNotFoundError) as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1)
 
@@ -139,17 +156,21 @@ def artifact_run_command(
     else:
         arm_list = [arms]
 
-    mcp_path = mcp_config
-    if mcp_path is None:
-        candidate = root / "mcp-config.json"
-        if candidate.is_file():
-            mcp_path = str(candidate)
+    # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
+    # tool_rich runs the agent binary directly without the exec-server bundle.
+    _CODEX_EXEC_SERVER_ARMS = {"code_only", "bash_only"}
+    if agent_surface == "codex_cli" and any(a in _CODEX_EXEC_SERVER_ARMS for a in arm_list):
+        try:
+            runner.preflight(mcp_path)
+        except RuntimeError as e:
+            click.echo(f"ERROR: Codex pre-flight failed: {e}", err=True)
+            raise SystemExit(1)
 
     results_dir.mkdir(parents=True, exist_ok=True)
 
     click.echo(
         f"Loaded {len(tasks)} task(s); arms={arm_list}; runs={num_runs}; "
-        f"results_dir={results_dir}"
+        f"agent_surface={agent_surface}; results_dir={results_dir}"
     )
 
     for task in tasks:
@@ -168,7 +189,8 @@ def artifact_run_command(
                     arm,
                     run_idx,
                     results_dir=results_dir,
-                    claude_binary=claude_binary,
+                    runner=runner,
+                    claude_binary=binary,
                     mcp_config_path=mcp_path,
                     echo=click.echo,
                 )

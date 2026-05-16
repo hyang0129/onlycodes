@@ -64,8 +64,9 @@ FAILURE_PATTERNS: list[tuple[str, str, str]] = [
         r"types\.CodeType.*'bytes' object cannot be interpreted as an integer|"
         r"_make_cell_set_template_code",
         "vendored_cloudpickle_pre_3_8",
-        "Vendored cloudpickle uses pre-3.8 types.CodeType signature. Needs "
-        "Python 3.7 (not installed in this devcontainer) — tracked in #208.",
+        "Vendored cloudpickle uses pre-3.8 types.CodeType signature. "
+        "harness._patch_vendored_cloudpickle should have fixed this — "
+        "check that the file path or pre-3.8 block hasn't drifted (#208).",
     ),
     (
         r"ModuleNotFoundError: No module named 'distutils'",
