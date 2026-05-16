@@ -20,6 +20,7 @@ import pytest
 
 from swebench.harness import (
     _DEFAULT_PYTHON,
+    _INSTANCE_POST_INSTALL,
     _INSTANCE_PRE_INSTALL,
     _INSTANCE_PYTHON,
     _N_BUILD_JOBS,
@@ -399,6 +400,45 @@ def test_matplotlib_26160_instance_pins() -> None:
     assert not any("setuptools" in p for p in pins), (
         "matplotlib__matplotlib-26160 should not pin setuptools"
     )
+
+
+def test_matplotlib_35_36_era_setuptools_scm_pin() -> None:
+    """Test 19: matplotlib 3.5–3.6 era instances pin setuptools_scm<7.
+
+    setuptools_scm 10.x (the resolved version when unpinned) emits a
+    DeprecationWarning ("Version scheme 'release-branch-semver' has been
+    renamed") when mpl.__version__ is computed via setuptools_scm.get_version()
+    at runtime.  Pytest's filterwarnings=error in matplotlib's conftest promotes
+    this to a hard failure before the agent code under test runs.
+
+    The pin must appear in BOTH pre- and post-install lists: pre-install so the
+    build sees the right version, post-install because ``pip install -e .``
+    pulls setuptools_scm as a runtime dep and would otherwise upgrade it back.
+    """
+    for instance_id in (
+        "matplotlib__matplotlib-23476",
+        "matplotlib__matplotlib-24637",
+        "matplotlib__matplotlib-25126",
+    ):
+        pre = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pre is not None, f"No pre-install pins for {instance_id}"
+        assert any("setuptools_scm<7" in p for p in pre), (
+            f"Missing setuptools_scm<7 in pre-install for {instance_id}"
+        )
+        # Must still carry the repo-level pre-build pins
+        assert any("setuptools<65" in p for p in pre), (
+            f"Missing setuptools<65 in {instance_id}"
+        )
+        assert any("numpy<2" in p for p in pre), f"Missing numpy<2 in {instance_id}"
+        assert any("pyparsing<3" in p for p in pre), (
+            f"Missing pyparsing<3 in {instance_id}"
+        )
+        post = _INSTANCE_POST_INSTALL.get(instance_id)
+        assert post is not None, f"No post-install pins for {instance_id}"
+        assert any("setuptools_scm<7" in p for p in post), (
+            f"Missing setuptools_scm<7 in post-install for {instance_id} "
+            f"(pre-install pin is overridden by pip install -e .)"
+        )
 
 
 @pytest.mark.integration

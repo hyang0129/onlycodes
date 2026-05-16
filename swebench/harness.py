@@ -90,6 +90,15 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # `import astropy`. Without it, every test errors with "No module named 'setuptools_scm'".
     "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
     "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
+    # matplotlib 3.5–3.6 era (2022): setuptools_scm 7.x deprecated get_version()
+    # and emits DeprecationWarning when mpl.__version__ is accessed.  Pytest's
+    # `filterwarnings = error` promotes this to an error, breaking SVG backend
+    # and pickle tests before the agent-under-test code runs.  Pin setuptools_scm<7
+    # to suppress the warning at its source.  All other repo-level pins are
+    # carried forward since instance overrides fully replace the repo-level entry.
+    "matplotlib__matplotlib-23476": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
+    "matplotlib__matplotlib-24637": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
+    "matplotlib__matplotlib-25126": ["setuptools<65", "numpy<2", "cython<3", "pybind11>=2.6", "certifi", "pyparsing<3", "setuptools_scm<7"],
     # matplotlib 3.7 era (2023): uses pybind11 + downloads qhull (needs certifi);
     # repo-level setuptools<65 is too old for this version's pyproject.toml build.
     # pyparsing<3 mirrors the repo-level pin (instance override fully replaces it).
@@ -176,6 +185,19 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+    # matplotlib 3.5–3.6 era (2022): matplotlib/__init__.py calls
+    # ``setuptools_scm.get_version()`` at runtime to compute ``mpl.__version__``
+    # (the editable install does not generate a static ``_version.py``).  The
+    # pre-install pin of setuptools_scm<7 is overridden by ``pip install -e .``
+    # which pulls the latest setuptools_scm (10.x) as a runtime dep, and 10.x
+    # emits a DeprecationWarning ("Version scheme 'release-branch-semver' has
+    # been renamed ...") which pytest's ``filterwarnings = error`` config in
+    # matplotlib's conftest promotes to a hard test failure.  Re-pin after the
+    # editable install to keep setuptools_scm at a version that does not emit
+    # the warning.
+    "matplotlib__matplotlib-23476": ["setuptools_scm<7"],
+    "matplotlib__matplotlib-24637": ["setuptools_scm<7"],
+    "matplotlib__matplotlib-25126": ["setuptools_scm<7"],
 }
 
 # ---------------------------------------------------------------------------
