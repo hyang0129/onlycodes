@@ -126,7 +126,7 @@ def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Pat
         repo_dir=str(repo_dir),
         venv_dir=str(venv_dir),
         results_dir=str(results_dir),
-        claude_binary="/usr/bin/claude",
+        agent_binary="/usr/bin/claude",
         mcp_config_path=str(tmp_path / "mcp.json"),
         root=tmp_path,
     )
@@ -208,7 +208,7 @@ def test_run_arm_proceeds_when_preflight_passes(monkeypatch, tmp_path: Path):
         repo_dir=str(repo_dir),
         venv_dir=str(venv_dir),
         results_dir=str(results_dir),
-        claude_binary="/usr/bin/claude",
+        agent_binary="/usr/bin/claude",
         mcp_config_path=str(tmp_path / "mcp.json"),
         root=tmp_path,
         runner=_StubRunner(),

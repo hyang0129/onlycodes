@@ -238,7 +238,7 @@ def _run_arm(
                 "arm": arm,
                 "run": run_idx,
                 "agent_surface": (runner.surface if runner is not None else "claude_code"),
-                "agent_binary": claude_binary,
+                "agent_binary": agent_binary,
                 "verdict": "env_fail",
                 "reason": "pytest --collect-only returned 0 items",
             }) + "\n")
