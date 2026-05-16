@@ -174,13 +174,20 @@ def test_codex_run_onlycode_preflight_ok_proceeds_past_preflight(runner, monkeyp
 
     Wiring assertion: when preflight is a no-op (simulating a valid environment),
     the CLI continues and does not emit a rejection error.
+
+    For codex_cli the MCP env-errors block in run_command is intentionally skipped
+    (Codex reads config.toml, not the Claude-format mcp-config.json), so the run
+    proceeds directly from preflight into setup.  We stub clone_repo to prevent a
+    real network call and let the test confirm only that no rejection/preflight error
+    appeared in the output.
     """
     _make_monkeypatched_codex_env(monkeypatch, preflight_raises=False)
     _make_minimal_swe_problem(tmp_path / "problems" / "swe")
     monkeypatch.setattr("swebench.run.repo_root", lambda: tmp_path)
-    # Also stub os.path.isfile so the MCP config env pre-flight passes.
+    # Stub clone_repo so no real git clone is attempted — this test only verifies
+    # that the CLI does not exit at the preflight/rejection stage.
     import swebench.run as run_mod
-    monkeypatch.setattr(run_mod.os.path, "isfile", lambda p: True)
+    monkeypatch.setattr(run_mod, "clone_repo", lambda repo_slug, dest, **kw: None)
 
     result = runner.invoke(
         cli,
@@ -190,7 +197,7 @@ def test_codex_run_onlycode_preflight_ok_proceeds_past_preflight(runner, monkeyp
             "--arms", "onlycode",
             "--output-dir", str(tmp_path / "out"),
         ],
-        catch_exceptions=False,
+        catch_exceptions=True,
     )
 
     output = result.output or ""

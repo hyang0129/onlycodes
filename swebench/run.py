@@ -752,8 +752,10 @@ def run_command(
             raise SystemExit(1)
 
     # --- Environment pre-flight checks ------------------------------------------
+    # Only run for Claude Code surface: Codex does not read the Claude-format
+    # mcp-config.json (it generates config.toml internally via _write_codex_config).
     env_errors: list[str] = []
-    if "onlycode" in arm_list:
+    if "onlycode" in arm_list and agent_surface != "codex_cli":
         _configs_to_check = [mcp_config_path]
         for _cfg in _configs_to_check:
             if not os.path.isfile(_cfg):

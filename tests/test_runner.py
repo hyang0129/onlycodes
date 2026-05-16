@@ -457,6 +457,14 @@ def test_write_codex_config_tool_rich_no_extra_restrictions(tmp_path):
     assert "computer_use" not in content
 
 
+def test_write_codex_config_bash_only_no_extra_restrictions(tmp_path):
+    """bash_only arm must NOT emit browser_use or computer_use flags."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="bash_only")
+    content = (tmp_path / "config.toml").read_text()
+    assert "browser_use" not in content
+    assert "computer_use" not in content
+
+
 def test_write_codex_config_onlycode_valid_toml(tmp_path):
     """onlycode config must produce valid TOML parseable by tomllib."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="onlycode")
