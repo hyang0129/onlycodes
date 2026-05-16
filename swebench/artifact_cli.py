@@ -99,6 +99,14 @@ def artifact_group() -> None:
     show_default=True,
     help="Agent surface to use for running tasks.",
 )
+@click.option(
+    "--max-wall-seconds",
+    "max_wall_seconds",
+    type=int,
+    default=3600,
+    show_default=True,
+    help="Wall-time cap in seconds per agent invocation (0 = unlimited). Overridden per task by execution_budget.max_wall_seconds when set.",
+)
 def artifact_run_command(
     filter_ids: str | None,
     arms: str,
@@ -108,6 +116,7 @@ def artifact_run_command(
     tasks_dir: str | None,
     mcp_config: str | None,
     agent_surface: str,
+    max_wall_seconds: int,
 ) -> None:
     """Run artifact-graded benchmark arms on one or more tasks."""
     if num_runs < 1:
@@ -184,6 +193,7 @@ def artifact_run_command(
                         "Skipping — already complete (resume on)."
                     )
                     continue
+                effective_timeout = task.execution_budget.max_wall_seconds or max_wall_seconds
                 run_artifact_arm(
                     task,
                     arm,
@@ -193,6 +203,7 @@ def artifact_run_command(
                     claude_binary=binary,
                     mcp_config_path=mcp_path,
                     echo=click.echo,
+                    wall_timeout_seconds=effective_timeout,
                 )
 
 

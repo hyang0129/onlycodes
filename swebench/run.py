@@ -158,6 +158,7 @@ def _run_arm(
     needs_editable_reinstall: bool = False,
     runner: AgentRunner | None = None,
     codex_model: str | None = None,
+    wall_timeout_seconds: int = 3600,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
@@ -383,6 +384,7 @@ def _run_arm(
         result_file=result_file,
         binary=agent_binary,
         mcp_config_path=effective_mcp_config,
+        wall_timeout_seconds=wall_timeout_seconds,
     )
 
     wall_secs = int(time.time() - start_time)
@@ -708,6 +710,14 @@ def _cleanup_stale_overlays(
         "by extract_metadata. Ignored when --agent-surface=claude_code."
     ),
 )
+@click.option(
+    "--max-wall-seconds",
+    "max_wall_seconds",
+    type=int,
+    default=3600,
+    show_default=True,
+    help="Wall-time cap in seconds per agent invocation (0 = unlimited).",
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -721,6 +731,7 @@ def run_command(
     resume: bool,
     agent_surface: str,
     codex_model: str,
+    max_wall_seconds: int,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -1003,6 +1014,7 @@ def run_command(
                         needs_editable_reinstall=task.needs_editable_reinstall,
                         runner=runner,
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
+                        wall_timeout_seconds=max_wall_seconds,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -1059,6 +1071,7 @@ def run_command(
                         needs_editable_reinstall=task.needs_editable_reinstall,
                         runner=runner,
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
+                        wall_timeout_seconds=max_wall_seconds,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)

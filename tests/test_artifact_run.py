@@ -85,7 +85,8 @@ class FakeRunner(AgentRunner):
         return ClaudeRunner().build_tools_flags(arm, mcp_config_path)
 
     def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
-               result_file, binary, mcp_config_path=None) -> None:
+               result_file, binary, mcp_config_path=None,
+               wall_timeout_seconds: int = 3600) -> None:
         Path(cwd, "answer.txt").write_text(self._artifact_content)
         with open(result_file, "a") as f:
             f.write(json.dumps({

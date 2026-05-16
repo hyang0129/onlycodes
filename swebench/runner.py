@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import re
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -92,12 +94,16 @@ class AgentRunner(ABC):
         result_file: str,
         binary: str,
         mcp_config_path: str | None = None,
+        wall_timeout_seconds: int = 3600,
     ) -> None:
         """Run the agent, appending output to result_file. Non-zero exit does not raise.
 
         ``mcp_config_path`` is used by CodexRunner to locate the exec-server
         bundle. ClaudeRunner ignores it (the path is already embedded in
         ``tools_flags`` via ``--mcp-config``).
+
+        ``wall_timeout_seconds`` caps the total wall time of the agent subprocess.
+        Pass 0 for unlimited.
         """
 
     @abstractmethod
@@ -183,6 +189,7 @@ class ClaudeRunner(AgentRunner):
         result_file: str,
         binary: str,
         mcp_config_path: str | None = None,  # unused; already in tools_flags
+        wall_timeout_seconds: int = 3600,
     ) -> None:
         cfg_dir = tempfile.mkdtemp(prefix="claude-eval-")
         try:
@@ -205,10 +212,23 @@ class ClaudeRunner(AgentRunner):
             env = os.environ.copy()
             env["CLAUDE_CONFIG_DIR"] = cfg_dir
             env["FORCE_PROMPT_CACHING_5M"] = "1"
+            effective_timeout = wall_timeout_seconds if wall_timeout_seconds != 0 else None
             with open(result_file, "a") as out:
-                subprocess.run(
-                    cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env
-                )
+                with subprocess.Popen(
+                    cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
+                    start_new_session=True,
+                ) as proc:
+                    try:
+                        proc.wait(timeout=effective_timeout)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        proc.wait()
+                        out.flush()
+                        out.write(json.dumps({"type": "system", "subtype": "wall_timeout", "wall_seconds": wall_timeout_seconds}) + "\n")
+                        logging.warning("wall_timeout: agent killed after %ds", wall_timeout_seconds)
         finally:
             shutil.rmtree(cfg_dir, ignore_errors=True)
 
@@ -333,6 +353,7 @@ class CodexRunner(AgentRunner):
         result_file: str,
         binary: str,
         mcp_config_path: str | None = None,
+        wall_timeout_seconds: int = 3600,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
         arm = getattr(self, "_arm", "baseline")
@@ -350,15 +371,24 @@ class CodexRunner(AgentRunner):
             ]
             env = os.environ.copy()
             env["CODEX_HOME"] = cfg_dir
+            effective_timeout = wall_timeout_seconds if wall_timeout_seconds != 0 else None
             with open(result_file, "a") as out:
-                subprocess.run(
-                    cmd,
-                    cwd=cwd,
-                    stdout=out,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    env=env,
-                )
+                with subprocess.Popen(
+                    cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL, env=env,
+                    start_new_session=True,
+                ) as proc:
+                    try:
+                        proc.wait(timeout=effective_timeout)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        proc.wait()
+                        out.flush()
+                        out.write(json.dumps({"type": "system", "subtype": "wall_timeout", "wall_seconds": wall_timeout_seconds}) + "\n")
+                        logging.warning("wall_timeout: agent killed after %ds", wall_timeout_seconds)
         finally:
             shutil.rmtree(cfg_dir, ignore_errors=True)
 
