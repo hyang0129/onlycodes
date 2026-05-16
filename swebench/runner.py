@@ -238,10 +238,24 @@ class ClaudeRunner(AgentRunner):
 # CodexRunner
 # ---------------------------------------------------------------------------
 
+DEFAULT_CODEX_MODEL = "gpt-5.5"
+
+
 class CodexRunner(AgentRunner):
-    """Runs OpenAI Codex CLI (the ``codex`` binary)."""
+    """Runs OpenAI Codex CLI (the ``codex`` binary).
+
+    ``model`` pins the underlying ChatGPT model for reproducibility. The value
+    is written into ``config.toml`` *and* passed as ``codex exec -m <model>``
+    (belt-and-braces — the CLI flag wins on conflict, but having both means a
+    config-write bug cannot silently drop the pin). The same value is recorded
+    in the JSONL ``meta`` line by ``run.py``, then read back by
+    ``extract_metadata`` to look up prices in ``codex_prices.toml``.
+    """
 
     surface = "codex_cli"
+
+    def __init__(self, model: str = DEFAULT_CODEX_MODEL) -> None:
+        self.model = model
 
     def find_binary(self) -> str:
         path = shutil.which("codex")
@@ -303,7 +317,9 @@ class CodexRunner(AgentRunner):
 
         bundle_path = self._resolve_bundle(mcp_config_path)
         persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
-        _write_codex_config(cfg_dir, bundle_path, cwd, persistent, arm=arm)
+        _write_codex_config(
+            cfg_dir, bundle_path, cwd, persistent, arm=arm, model=self.model
+        )
 
         return cfg_dir
 
@@ -329,6 +345,7 @@ class CodexRunner(AgentRunner):
                 "--ephemeral",
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--json",
+                "-m", self.model,
                 prompt,
             ]
             env = os.environ.copy()
@@ -346,17 +363,82 @@ class CodexRunner(AgentRunner):
             shutil.rmtree(cfg_dir, ignore_errors=True)
 
     def extract_metadata(self, jsonl_path: Path) -> tuple[float | None, int | None]:
+        """Return ``(cost_usd, num_turns)`` for a Codex JSONL log.
+
+        ``cost_usd`` is an **estimate** derived from ``turn.completed.usage``
+        token counts and a price table in ``codex_prices.toml``. ChatGPT Pro
+        sessions never emit a true USD cost, so this is the best we can do.
+
+        Degrades gracefully — returns ``cost=None`` when:
+        - the file cannot be read
+        - the JSONL contains no ``meta`` line with a ``model`` field
+        - the ``model`` is not in the price table
+        - no ``turn.completed`` line carries a usage block
+
+        Cost formula (Responses-API convention — see issue #253 investigation
+        comment): ``output_tokens`` already includes ``reasoning_output_tokens``,
+        and ``input_tokens`` already includes ``cached_input_tokens``::
+
+            non_cached_input = input_tokens - cached_input_tokens
+            cost = (non_cached_input * price.input
+                  + cached_input_tokens * price.cached_input
+                  + output_tokens * price.output) / 1_000_000
+        """
         try:
             content = jsonl_path.read_text()
         except OSError:
             return (None, None)
-        turns = sum(
-            1
-            for line in content.splitlines()
-            if _safe_json_type(line) == "turn.started"
-        )
-        # Codex does not expose a cost field for ChatGPT Pro sessions.
-        return (None, turns if turns > 0 else None)
+
+        lines = content.splitlines()
+        turns = sum(1 for line in lines if _safe_json_type(line) == "turn.started")
+        turns_val = turns if turns > 0 else None
+
+        # Read the model name from the `meta` JSONL record written by run.py.
+        model = _read_meta_model(lines)
+        if model is None:
+            return (None, turns_val)
+
+        prices = _load_codex_prices().get(model)
+        if prices is None:
+            return (None, turns_val)
+
+        # Sum usage across all turn.completed events (a run can have many).
+        total_input = 0
+        total_cached = 0
+        total_output = 0
+        saw_usage = False
+        for line in lines:
+            try:
+                obj = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if obj.get("type") != "turn.completed":
+                continue
+            usage = obj.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            # Only count this turn if the usage dict carries at least one
+            # known token field. An empty dict — or a turn.completed without
+            # a usage key — is treated as missing data, not zero usage.
+            if not any(k in usage for k in ("input_tokens", "output_tokens", "cached_input_tokens")):
+                continue
+            saw_usage = True
+            total_input += int(usage.get("input_tokens", 0) or 0)
+            total_cached += int(usage.get("cached_input_tokens", 0) or 0)
+            total_output += int(usage.get("output_tokens", 0) or 0)
+
+        if not saw_usage:
+            return (None, turns_val)
+
+        # Defensive: cached_input may exceed input if the JSONL is malformed —
+        # clamp to keep the non-cached term non-negative.
+        non_cached_input = max(0, total_input - total_cached)
+        cost = (
+            non_cached_input * prices["input"]
+            + total_cached * prices["cached_input"]
+            + total_output * prices["output"]
+        ) / 1_000_000.0
+        return (cost, turns_val)
 
     def preflight(self, mcp_config_path: str | None = None) -> None:
         """Verify all Codex runtime dependencies before starting a run.
@@ -428,6 +510,7 @@ def _write_codex_config(
     cwd: str,
     persistent_kernel: str,
     arm: str = "baseline",
+    model: str = DEFAULT_CODEX_MODEL,
 ) -> None:
     """Write config.toml into cfg_dir for a Codex run.
 
@@ -442,6 +525,11 @@ def _write_codex_config(
     - All other arms (``baseline``, ``tool_rich``, ``bash_only``): no extra
       restrictions beyond the baseline ``shell_tool = false`` and
       ``apply_patch_freeform = false`` that are always emitted.
+
+    ``model`` pins the underlying ChatGPT model at the top of config.toml so
+    runs are reproducible across CLI upgrades — Codex would otherwise silently
+    fall back to its compiled-in default. This is belt-and-braces with the
+    ``codex exec -m <model>`` CLI flag (which takes precedence on conflict).
 
     Note: ``shell_tool = false`` and ``apply_patch_freeform = false`` are
     always present because the codebox MCP server runs code in a sandboxed
@@ -458,6 +546,7 @@ def _write_codex_config(
         )
 
     toml = (
+        f'model = "{_toml_str(model)}"\n'
         'web_search = "disabled"\n'
         "\n"
         "[features]\n"
@@ -481,6 +570,75 @@ def _write_codex_config(
         f.write(toml)
 
 
+def _read_meta_model(lines: list[str]) -> str | None:
+    """Return the ``model`` field from the first ``type: meta`` JSONL record.
+
+    Returns ``None`` if no meta line exists, the meta line has no ``model``
+    field, or all candidates are malformed. Defensive by design — a missing
+    or broken meta line must not raise, only degrade ``cost`` to ``None``.
+    """
+    for line in lines:
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(obj, dict) and obj.get("type") == "meta":
+            model = obj.get("model")
+            if isinstance(model, str) and model:
+                return model
+            return None  # meta found but no usable model field
+    return None
+
+
+# Cache of the parsed codex_prices.toml. Reloaded on each call so a manual edit
+# during a long-running multi-arm session takes effect without a restart; the
+# cost is one file read per result file, which is negligible.
+def _load_codex_prices() -> dict[str, dict[str, float]]:
+    """Load the Codex CLI price table.
+
+    Returns a mapping ``{model_slug: {"input": .., "cached_input": .., "output": ..}}``.
+    Returns ``{}`` if the file is missing or unparseable (so unknown-model fallthrough
+    to ``cost=None`` is the only consequence).
+    """
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        try:
+            import tomli as tomllib  # type: ignore[import-not-found]
+        except ModuleNotFoundError:
+            return {}
+
+    path = Path(__file__).parent / "codex_prices.toml"
+    if not path.is_file():
+        return {}
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, ValueError):
+        return {}
+
+    # Each table is keyed by an arbitrary section name; the canonical model
+    # slug is the ``model`` field inside the section. This avoids TOML key
+    # quoting issues for names like ``gpt-5.5``.
+    out: dict[str, dict[str, float]] = {}
+    for section in data.values():
+        if not isinstance(section, dict):
+            continue
+        name = section.get("model")
+        if not isinstance(name, str):
+            continue
+        try:
+            out[name] = {
+                "input": float(section["input"]),
+                "cached_input": float(section["cached_input"]),
+                "output": float(section["output"]),
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
 def _safe_json_type(line: str) -> str | None:
     """Parse a JSONL line and return its 'type' field, or None on error."""
     try:
@@ -493,12 +651,17 @@ def _safe_json_type(line: str) -> str | None:
 # Factory
 # ---------------------------------------------------------------------------
 
-def make_runner(surface: str) -> AgentRunner:
-    """Return an AgentRunner for the given surface name."""
+def make_runner(surface: str, *, codex_model: str = DEFAULT_CODEX_MODEL) -> AgentRunner:
+    """Return an AgentRunner for the given surface name.
+
+    ``codex_model`` is only consulted when ``surface == "codex_cli"``. It is
+    threaded down into ``CodexRunner.__init__`` so the pin is applied to both
+    ``config.toml`` and the ``codex exec -m`` CLI flag.
+    """
     if surface == "claude_code":
         return ClaudeRunner()
     if surface == "codex_cli":
-        return CodexRunner()
+        return CodexRunner(model=codex_model)
     raise ValueError(
         f"Unknown agent surface: {surface!r}. "
         f"Valid values: 'claude_code', 'codex_cli'."

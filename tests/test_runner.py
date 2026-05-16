@@ -198,6 +198,238 @@ def test_write_codex_config_persistent_kernel_flag(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# CodexRunner — model pinning (Issue #253)
+# ---------------------------------------------------------------------------
+
+def test_write_codex_config_writes_default_model_line(tmp_path):
+    """Acceptance: ``_write_codex_config`` always writes a ``model = "..."`` line."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0")
+    content = (tmp_path / "config.toml").read_text()
+    assert 'model = "gpt-5.5"' in content
+
+
+def test_write_codex_config_writes_custom_model_line(tmp_path):
+    """Acceptance: ``--codex-model <name>`` overrides the default."""
+    _write_codex_config(
+        str(tmp_path), "/bundle.mjs", "/scratch", "0", model="gpt-5.4-mini"
+    )
+    content = (tmp_path / "config.toml").read_text()
+    assert 'model = "gpt-5.4-mini"' in content
+    # Must be at top level, not inside any [section]
+    first_section = content.split("[", 1)[0]
+    assert 'model = "gpt-5.4-mini"' in first_section
+
+
+def test_codex_runner_constructor_passes_model(tmp_path):
+    """The model arg threads through to ``_write_codex_config``."""
+    runner = CodexRunner(model="gpt-5.4")
+    assert runner.model == "gpt-5.4"
+
+
+def test_codex_runner_default_model_is_gpt_5_5():
+    """Default constructor arg is gpt-5.5."""
+    assert CodexRunner().model == "gpt-5.5"
+
+
+def test_make_runner_codex_threads_codex_model():
+    """make_runner forwards codex_model to CodexRunner."""
+    r = make_runner("codex_cli", codex_model="gpt-5.4")
+    assert isinstance(r, CodexRunner)
+    assert r.model == "gpt-5.4"
+
+
+def test_make_runner_codex_default_model():
+    """make_runner uses gpt-5.5 as the default codex_model."""
+    r = make_runner("codex_cli")
+    assert isinstance(r, CodexRunner)
+    assert r.model == "gpt-5.5"
+
+
+# ---------------------------------------------------------------------------
+# CodexRunner — cost estimation from token usage (Issue #253)
+# ---------------------------------------------------------------------------
+
+def _make_codex_jsonl(
+    tmp_path: Path,
+    *,
+    model: str | None,
+    usages: list[dict] | None,
+) -> Path:
+    """Build a minimal Codex JSONL with optional meta+model and usage entries."""
+    f = tmp_path / "agent.jsonl"
+    lines: list[str] = []
+    if model is not None:
+        lines.append(json.dumps({"type": "meta", "model": model}))
+    else:
+        lines.append(json.dumps({"type": "meta"}))  # meta but no model field
+    if usages is None:
+        # Default: just one turn with no usage block
+        lines += [
+            json.dumps({"type": "turn.started"}),
+            json.dumps({"type": "turn.completed"}),
+        ]
+    else:
+        for usage in usages:
+            lines += [
+                json.dumps({"type": "turn.started"}),
+                json.dumps({"type": "turn.completed", "usage": usage}),
+            ]
+    f.write_text("\n".join(lines) + "\n")
+    return f
+
+
+def test_codex_extract_metadata_known_model_estimates_cost(tmp_path):
+    """Acceptance: known model + turn.completed usage → estimated cost."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model="gpt-5.5",
+        usages=[{
+            "input_tokens": 421838,
+            "cached_input_tokens": 353280,
+            "output_tokens": 4673,
+            "reasoning_output_tokens": 1881,  # already inside output_tokens
+        }],
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert turns == 1
+    # gpt-5.5: input=$5/M, cached=$0.50/M, output=$30/M
+    # non_cached = 421838 - 353280 = 68558
+    # cost = (68558 * 5 + 353280 * 0.50 + 4673 * 30) / 1_000_000
+    #      = (342790 + 176640 + 140190) / 1_000_000 = 659620 / 1_000_000 = 0.65962
+    expected = (68558 * 5.0 + 353280 * 0.50 + 4673 * 30.0) / 1_000_000.0
+    assert cost == pytest.approx(expected, rel=1e-9)
+
+
+def test_codex_extract_metadata_sums_multiple_turns(tmp_path):
+    """Multiple turn.completed events are summed."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model="gpt-5.4-mini",
+        usages=[
+            {"input_tokens": 1000, "cached_input_tokens": 0, "output_tokens": 100},
+            {"input_tokens": 2000, "cached_input_tokens": 500, "output_tokens": 200},
+        ],
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert turns == 2
+    # Totals: input=3000, cached=500, output=300
+    # gpt-5.4-mini: input=$0.75, cached=$0.075, output=$4.50
+    # non_cached = 3000 - 500 = 2500
+    # cost = (2500 * 0.75 + 500 * 0.075 + 300 * 4.50) / 1_000_000
+    expected = (2500 * 0.75 + 500 * 0.075 + 300 * 4.50) / 1_000_000.0
+    assert cost == pytest.approx(expected, rel=1e-9)
+
+
+def test_codex_extract_metadata_unknown_model_returns_none(tmp_path):
+    """Acceptance: unknown model → cost=None (turns still extracted)."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model="claude-sonnet-99",  # not in price table
+        usages=[{"input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 10}],
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert cost is None
+    assert turns == 1
+
+
+def test_codex_extract_metadata_missing_meta_returns_none(tmp_path):
+    """No meta line at all → cost=None."""
+    f = tmp_path / "agent.jsonl"
+    f.write_text(
+        json.dumps({"type": "turn.started"}) + "\n"
+        + json.dumps({"type": "turn.completed", "usage": {
+            "input_tokens": 100, "output_tokens": 5
+        }}) + "\n"
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert cost is None
+    assert turns == 1
+
+
+def test_codex_extract_metadata_meta_without_model_returns_none(tmp_path):
+    """Meta line present but no model field → cost=None."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model=None,  # meta with no model field
+        usages=[{"input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 5}],
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert cost is None
+    assert turns == 1
+
+
+def test_codex_extract_metadata_no_usage_returns_none(tmp_path):
+    """Known model but no turn.completed has a ``usage`` block → cost=None."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model="gpt-5.5",
+        usages=None,  # turn.completed with no usage key
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert cost is None
+    assert turns == 1
+
+
+def test_codex_extract_metadata_handles_missing_cached_input(tmp_path):
+    """``cached_input_tokens`` absent → treated as 0 (still produces a cost)."""
+    f = _make_codex_jsonl(
+        tmp_path,
+        model="gpt-5.4",
+        usages=[{"input_tokens": 1000, "output_tokens": 100}],
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert turns == 1
+    # gpt-5.4: input=$2.50, cached=$0.25, output=$15
+    # cost = (1000 * 2.5 + 0 * 0.25 + 100 * 15) / 1_000_000
+    expected = (1000 * 2.5 + 100 * 15) / 1_000_000.0
+    assert cost == pytest.approx(expected, rel=1e-9)
+
+
+def test_codex_extract_metadata_malformed_jsonl_lines_ignored(tmp_path):
+    """Non-JSON / malformed lines are skipped, not raised."""
+    f = tmp_path / "agent.jsonl"
+    f.write_text(
+        json.dumps({"type": "meta", "model": "gpt-5.5"}) + "\n"
+        + "WARNING: some stderr line leaked in\n"
+        + json.dumps({"type": "turn.started"}) + "\n"
+        + json.dumps({"type": "turn.completed", "usage": {
+            "input_tokens": 100, "output_tokens": 5
+        }}) + "\n"
+    )
+    cost, turns = CodexRunner().extract_metadata(f)
+    assert turns == 1
+    assert cost == pytest.approx(
+        (100 * 5.0 + 5 * 30.0) / 1_000_000.0, rel=1e-9
+    )
+
+
+# ---------------------------------------------------------------------------
+# codex_prices.toml — schema sanity
+# ---------------------------------------------------------------------------
+
+def test_codex_prices_toml_contains_three_models():
+    """Acceptance: price table covers gpt-5.5, gpt-5.4, gpt-5.4-mini."""
+    from swebench.runner import _load_codex_prices
+    prices = _load_codex_prices()
+    for slug in ("gpt-5.5", "gpt-5.4", "gpt-5.4-mini"):
+        assert slug in prices, f"missing {slug} in price table"
+        assert prices[slug]["input"] > 0
+        assert prices[slug]["cached_input"] >= 0
+        assert prices[slug]["output"] > 0
+
+
+def test_codex_prices_toml_has_dated_header():
+    """Acceptance: TOML header records the date and source URL."""
+    from pathlib import Path as _P
+    import swebench.runner as _r
+    path = _P(_r.__file__).parent / "codex_prices.toml"
+    content = path.read_text()
+    # Must mention a 2026 date and openai.com source so a reviewer can audit it.
+    assert "2026" in content
+    assert "openai" in content.lower()
+
+
+# ---------------------------------------------------------------------------
 # CodexRunner — build_tools_flags always empty
 # ---------------------------------------------------------------------------
 

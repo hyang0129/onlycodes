@@ -154,5 +154,140 @@ def test_env_fail_appears_in_table_and_excluded_from_pass_rate():
     assert "pass_rate=n/a" in result.output
 
 
+# ---------------------------------------------------------------------------
+# Issue #253 — Codex cost estimates: ~$ prefix and price-table lookup
+# ---------------------------------------------------------------------------
+
+
+def _write_codex_run_fixture(
+    fixture_dir: Path,
+    *,
+    instance_id: str,
+    arm: str,
+    run_idx: int,
+    model: str | None,
+    verdict: str,
+    input_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    output_tokens: int = 0,
+) -> None:
+    """Build a minimal Codex JSONL + _test.txt pair for a single arm/run."""
+    import json as _json
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    jsonl = fixture_dir / f"{instance_id}_{arm}_run{run_idx}.jsonl"
+    lines = []
+    meta: dict = {
+        "type": "meta",
+        "instance_id": instance_id,
+        "arm": arm,
+        "run": run_idx,
+        "agent_surface": "codex_cli",
+    }
+    if model is not None:
+        meta["model"] = model
+    lines.append(_json.dumps(meta))
+    lines.append(_json.dumps({"type": "turn.started"}))
+    if input_tokens or output_tokens:
+        lines.append(_json.dumps({
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": input_tokens,
+                "cached_input_tokens": cached_input_tokens,
+                "output_tokens": output_tokens,
+            },
+        }))
+    else:
+        lines.append(_json.dumps({"type": "turn.completed"}))
+    jsonl.write_text("\n".join(lines) + "\n")
+    (fixture_dir / f"{instance_id}_{arm}_run{run_idx}_test.txt").write_text(
+        f"{verdict}\n"
+    )
+
+
+def test_codex_cli_cost_displayed_with_tilde_prefix(tmp_path: Path):
+    """``analyze summary`` prepends ``~`` to costs from codex_cli runs.
+
+    Acceptance criterion for issue #253: the cost column for a codex_cli row
+    must be visually distinguishable from a claude_code row to make clear it
+    is an estimate (token-count × price table) rather than a billed figure.
+    """
+    _write_codex_run_fixture(
+        tmp_path,
+        instance_id="myrepo__test-1",
+        arm="baseline",
+        run_idx=1,
+        model="gpt-5.5",
+        verdict="PASS",
+        input_tokens=10_000,
+        cached_input_tokens=2_000,
+        output_tokens=500,
+    )
+    result = _run(tmp_path)
+    assert result.exit_code == 0, result.output
+    # The dollar amount comes from CodexRunner.extract_metadata; we only assert
+    # the marker prefix is present so the test does not break on minor price
+    # rounding.
+    assert "~$" in result.output, result.output
+
+
+def test_codex_cli_unknown_model_shows_na(tmp_path: Path):
+    """Unknown model → cost=None → 'N/A' in the table (no ~$ prefix)."""
+    _write_codex_run_fixture(
+        tmp_path,
+        instance_id="myrepo__test-2",
+        arm="baseline",
+        run_idx=1,
+        model="totally-fake-model-99",
+        verdict="PASS",
+        input_tokens=1000,
+        output_tokens=100,
+    )
+    result = _run(tmp_path)
+    assert result.exit_code == 0, result.output
+    # Confirm the row exists and has N/A (no ~$).
+    assert "totally-fake-model" not in result.output  # we don't print model
+    assert "myrepo__test-2" in result.output
+    assert "N/A" in result.output
+    assert "~$" not in result.output
+
+
+def test_codex_cli_missing_model_in_meta_shows_na(tmp_path: Path):
+    """Meta line without a 'model' field → cost=None → 'N/A'."""
+    _write_codex_run_fixture(
+        tmp_path,
+        instance_id="myrepo__test-3",
+        arm="baseline",
+        run_idx=1,
+        model=None,  # no model key in meta
+        verdict="PASS",
+        input_tokens=1000,
+        output_tokens=100,
+    )
+    result = _run(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "N/A" in result.output
+    assert "~$" not in result.output
+
+
+def test_summary_parses_agent_surface_from_meta(tmp_path: Path):
+    """`_parse_results` populates ArmResult.agent_surface from the meta line."""
+    from swebench.analyze.summary import _parse_results
+    _write_codex_run_fixture(
+        tmp_path,
+        instance_id="myrepo__test-4",
+        arm="baseline",
+        run_idx=1,
+        model="gpt-5.4",
+        verdict="PASS",
+        input_tokens=1000,
+        output_tokens=100,
+    )
+    results = _parse_results(tmp_path)
+    assert len(results) == 1
+    assert results[0].agent_surface == "codex_cli"
+    assert results[0].cost_usd is not None
+    assert results[0].cost_usd > 0
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])

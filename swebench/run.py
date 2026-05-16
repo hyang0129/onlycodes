@@ -157,6 +157,7 @@ def _run_arm(
     log_buffer: io.StringIO | None = None,
     needs_editable_reinstall: bool = False,
     runner: AgentRunner | None = None,
+    codex_model: str | None = None,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
@@ -252,17 +253,23 @@ def _run_arm(
         )
         # Write a minimal meta record so downstream tools (analyze, summary,
         # _is_triple_complete) see a properly-shaped jsonl file.
+        _meta_surface = runner.surface if runner is not None else "claude_code"
+        _meta_record: dict[str, object] = {
+            "type": "meta",
+            "instance_id": problem.instance_id,
+            "arm": arm,
+            "run": run_idx,
+            "agent_surface": _meta_surface,
+            "agent_binary": agent_binary,
+            "verdict": "env_fail",
+            "reason": "pytest --collect-only returned 0 items",
+        }
+        # Pin the model for codex_cli runs so extract_metadata can price the
+        # (empty) usage record and so the result file is self-describing.
+        if _meta_surface == "codex_cli" and codex_model is not None:
+            _meta_record["model"] = codex_model
         with open(result_file, "w") as _meta_f:
-            _meta_f.write(json.dumps({
-                "type": "meta",
-                "instance_id": problem.instance_id,
-                "arm": arm,
-                "run": run_idx,
-                "agent_surface": (runner.surface if runner is not None else "claude_code"),
-                "agent_binary": agent_binary,
-                "verdict": "env_fail",
-                "reason": "pytest --collect-only returned 0 items",
-            }) + "\n")
+            _meta_f.write(json.dumps(_meta_record) + "\n")
         test_result_file = os.path.join(
             results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
         )
@@ -352,16 +359,21 @@ def _run_arm(
     start_time = time.time()
 
     agent_version = _runner.get_version(agent_binary)
+    _meta_record: dict[str, object] = {
+        "type": "meta",
+        "instance_id": problem.instance_id,
+        "arm": arm,
+        "run": run_idx,
+        "agent_surface": _runner.surface,
+        "agent_binary": agent_binary,
+        "agent_version": agent_version,
+    }
+    # Pin the model for codex_cli runs so extract_metadata can look up prices
+    # in codex_prices.toml and so the result file is self-describing.
+    if _runner.surface == "codex_cli" and codex_model is not None:
+        _meta_record["model"] = codex_model
     with open(result_file, "w") as _meta_f:
-        _meta_f.write(json.dumps({
-            "type": "meta",
-            "instance_id": problem.instance_id,
-            "arm": arm,
-            "run": run_idx,
-            "agent_surface": _runner.surface,
-            "agent_binary": agent_binary,
-            "agent_version": agent_version,
-        }) + "\n")
+        _meta_f.write(json.dumps(_meta_record) + "\n")
 
     _runner.invoke(
         prompt=prompt,
@@ -394,7 +406,10 @@ def _run_arm(
     _echo(f"  [{arm} run {run_idx}] Tests: {verdict} ({wall_secs}s wall)")
 
     cost_usd, num_turns = _runner.extract_metadata(Path(result_file))
-    cost = f"${cost_usd}" if cost_usd is not None else "N/A"
+    # Codex costs are derived from token counts × codex_prices.toml — mark as
+    # estimate with `~` to distinguish from Claude's authoritative USD figure.
+    _cost_prefix = "~$" if _runner.surface == "codex_cli" else "$"
+    cost = f"{_cost_prefix}{cost_usd:.4f}" if cost_usd is not None else "N/A"
     turns = str(num_turns) if num_turns is not None else "N/A"
 
     _echo(f"  [{arm} run {run_idx}] Cost: {cost}, Turns: {turns}, Wall: {wall_secs}s")
@@ -679,6 +694,20 @@ def _cleanup_stale_overlays(
     show_default=True,
     help="Agent surface to use for running evaluations.",
 )
+@click.option(
+    "--codex-model",
+    "codex_model",
+    type=str,
+    default="gpt-5.5",
+    show_default=True,
+    help=(
+        "Codex CLI model slug to pin (e.g. gpt-5.5, gpt-5.4, gpt-5.4-mini). "
+        "Written to config.toml AND passed as `codex exec -m <model>` so the "
+        "run is reproducible across CLI upgrades. The same value is recorded "
+        "in the JSONL meta line and looked up in swebench/codex_prices.toml "
+        "by extract_metadata. Ignored when --agent-surface=claude_code."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -691,6 +720,7 @@ def run_command(
     output_dir: str | None,
     resume: bool,
     agent_surface: str,
+    codex_model: str,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -708,7 +738,7 @@ def run_command(
 
     # Create runner and resolve binary (preflight)
     try:
-        runner = make_runner(agent_surface)
+        runner = make_runner(agent_surface, codex_model=codex_model)
         agent_binary = runner.find_binary()
         runner.verify_auth()
     except (ValueError, FileNotFoundError) as e:
@@ -972,6 +1002,7 @@ def run_command(
                         persistent_kernel=persistent_kernel,
                         needs_editable_reinstall=task.needs_editable_reinstall,
                         runner=runner,
+                        codex_model=codex_model if agent_surface == "codex_cli" else None,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -1027,6 +1058,7 @@ def run_command(
                         log_buffer=buf,
                         needs_editable_reinstall=task.needs_editable_reinstall,
                         runner=runner,
+                        codex_model=codex_model if agent_surface == "codex_cli" else None,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)

@@ -1,0 +1,48 @@
+# Codex CLI model price table — USD per 1,000,000 tokens.
+#
+# Used by swebench.runner.CodexRunner.extract_metadata to estimate cost_usd
+# from `turn.completed` token-usage events in the JSONL log. ChatGPT Pro
+# sessions never emit a USD cost field, so this table is the only way the
+# harness can produce a comparable cost figure for Codex runs.
+#
+# Schema per model (3 columns):
+#   input         — USD/1M for non-cached prompt tokens
+#   cached_input  — USD/1M for cached prompt tokens (typically 10% of input)
+#   output        — USD/1M for completion tokens (already includes
+#                   reasoning_output_tokens per OpenAI Responses-API convention)
+#
+# Cost formula in code:
+#   non_cached_input = input_tokens - cached_input_tokens
+#   cost = non_cached_input * input
+#        + cached_input_tokens * cached_input
+#        + output_tokens * output
+#   (then divided by 1_000_000)
+#
+# Prices last verified: 2026-05-16
+# Sources (cross-checked, all three agree):
+#   - https://developers.openai.com/api/docs/pricing
+#   - https://openrouter.ai/openai/gpt-5.5
+#   - https://pricepertoken.com/pricing-page/model/openai-gpt-5.4-mini
+#
+# These are Standard processing rates. Codex CLI exec sessions use Standard
+# (not Batch/Flex/Priority), so the Standard column is the right one.
+#
+# Unknown models fall through to cost=None (preserved per acceptance criteria).
+
+[gpt-5_5]
+model = "gpt-5.5"
+input = 5.00
+cached_input = 0.50
+output = 30.00
+
+[gpt-5_4]
+model = "gpt-5.4"
+input = 2.50
+cached_input = 0.25
+output = 15.00
+
+[gpt-5_4-mini]
+model = "gpt-5.4-mini"
+input = 0.75
+cached_input = 0.075
+output = 4.50
