@@ -7,6 +7,7 @@ from swebench.run import run_command
 from swebench.analyze import analyze_command
 from swebench.cache_cli import cache_group
 from swebench.artifact_cli import artifact_group
+from swebench.mcp_cli import mcp_group
 
 
 @click.group()
@@ -19,3 +20,4 @@ cli.add_command(run_command, "run")
 cli.add_command(analyze_command, "analyze")
 cli.add_command(cache_group, "cache")
 cli.add_command(artifact_group, "artifact")
+cli.add_command(mcp_group, "mcp-config")

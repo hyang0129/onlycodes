@@ -136,6 +136,12 @@ def artifact_run_command(
         )
         raise SystemExit(1)
 
+    mcp_path = mcp_config
+    if mcp_path is None:
+        candidate = root / "mcp-config.json"
+        if candidate.is_file():
+            mcp_path = str(candidate)
+
     try:
         runner = make_runner(agent_surface)
         binary = runner.find_binary()
@@ -157,11 +163,15 @@ def artifact_run_command(
         )
         raise SystemExit(1)
 
-    mcp_path = mcp_config
-    if mcp_path is None:
-        candidate = root / "mcp-config.json"
-        if candidate.is_file():
-            mcp_path = str(candidate)
+    # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
+    # tool_rich runs the agent binary directly without the exec-server bundle.
+    _CODEX_EXEC_SERVER_ARMS = {"code_only", "bash_only"}
+    if agent_surface == "codex_cli" and any(a in _CODEX_EXEC_SERVER_ARMS for a in arm_list):
+        try:
+            runner.preflight(mcp_path)
+        except RuntimeError as e:
+            click.echo(f"ERROR: Codex pre-flight failed: {e}", err=True)
+            raise SystemExit(1)
 
     results_dir.mkdir(parents=True, exist_ok=True)
 

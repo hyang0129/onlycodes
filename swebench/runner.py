@@ -351,6 +351,32 @@ class CodexRunner(AgentRunner):
         # Codex does not expose a cost field for ChatGPT Pro sessions.
         return (None, turns if turns > 0 else None)
 
+    def preflight(self, mcp_config_path: str | None = None) -> None:
+        """Verify all Codex runtime dependencies before starting a run.
+
+        Raises ``RuntimeError`` (not ``FileNotFoundError``) with an actionable
+        message for each of the following failure modes (checked in order):
+
+        1. ``node`` is not on PATH.
+        2. The ``codex`` binary is not found.
+        3. The exec-server bundle is not found.
+
+        Returns ``None`` on success. Has no side effects (no temp dirs, no
+        file writes).
+        """
+        if not shutil.which("node"):
+            raise RuntimeError(
+                "node not found on PATH. Install Node.js to run the exec-server."
+            )
+        try:
+            self.find_binary()
+        except FileNotFoundError as exc:
+            raise RuntimeError(str(exc)) from exc
+        try:
+            self._resolve_bundle(mcp_config_path)
+        except FileNotFoundError as exc:
+            raise RuntimeError(str(exc)) from exc
+
     def _resolve_bundle(self, mcp_config_path: str | None) -> str:
         """Return the exec-server JS bundle path.
 
@@ -380,6 +406,15 @@ class CodexRunner(AgentRunner):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _toml_str(s: str) -> str:
+    """Escape a string for use in a TOML basic string (double-quoted value).
+
+    Escapes backslashes first, then double-quote characters, so the result
+    can be safely embedded between ``"..."`` in a TOML document.
+    """
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _write_codex_config(
     cfg_dir: str,
     bundle_path: str,
@@ -400,15 +435,15 @@ def _write_codex_config(
         "\n"
         "[mcp_servers.codebox]\n"
         'command = "node"\n'
-        f'args = ["{bundle_path}"]\n'
+        f'args = ["{_toml_str(bundle_path)}"]\n'
         "\n"
         "[mcp_servers.codebox.env]\n"
-        f'ONLYCODES_PERSISTENT_KERNEL = "{persistent_kernel}"\n'
+        f'ONLYCODES_PERSISTENT_KERNEL = "{_toml_str(persistent_kernel)}"\n'
         "\n"
         "[mcp_servers.codebox.options]\n"
         f'enabled_tools = ["execute_code", "execute_code_and_wait"]\n'
         f"startup_timeout_sec = 30.0\n"
-        f'cwd = "{cwd}"\n'
+        f'cwd = "{_toml_str(cwd)}"\n'
     )
     with open(os.path.join(cfg_dir, "config.toml"), "w") as f:
         f.write(toml)
