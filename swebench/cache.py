@@ -226,13 +226,20 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
     ``import package_name`` keeps working. This writes to the upperdir, not
     the cached lowerdir.
 
+    ``--no-build-isolation`` mirrors the same flag used by the initial editable
+    install in ``swebench/harness.py`` (setup_venv): the cached venv already has
+    every build dep at the pinned version (setuptools, cython, numpy, etc.).
+    Without this flag, PEP 517 creates a fresh build-env that pulls the LATEST
+    setuptools, which has removed APIs older instances depend on (e.g.,
+    ``setuptools.dep_util`` used by astropy ``setup_package.py``). (Issue #270.)
+
     Raises ``OverlayError`` on non-zero pip exit — a silent failure here would
     leave the venv's egg-link pointing at a path with no egg-info, causing
     confusing ImportErrors at test time.
     """
     pip = os.path.join(venv_dir, "bin", "pip")
     result = subprocess.run(
-        [pip, "install", "--quiet", "--no-deps", "-e", repo_dir],
+        [pip, "install", "--quiet", "--no-deps", "--no-build-isolation", "-e", repo_dir],
         capture_output=True,
         text=True,
     )

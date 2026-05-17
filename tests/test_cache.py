@@ -243,6 +243,35 @@ def test_reinstall_editable_raises_on_pip_failure(tmp_path):
         cache.reinstall_editable(str(venv_dir), str(not_a_package))
 
 
+def test_reinstall_editable_uses_no_build_isolation(tmp_path, monkeypatch):
+    """``--no-build-isolation`` must be passed so the cached venv's pinned
+    build deps (e.g. setuptools<69 for astropy) are used — not a fresh
+    isolated build env that pulls the latest setuptools (which removed APIs
+    that older instances depend on like ``setuptools.dep_util``).
+    (Issue #270.)
+    """
+    captured = {}
+
+    class _FakeCompleted:
+        def __init__(self):
+            self.returncode = 0
+            self.stdout = ""
+            self.stderr = ""
+
+    def _fake_run(cmd, **kw):
+        captured["cmd"] = list(cmd)
+        return _FakeCompleted()
+
+    monkeypatch.setattr(cache.subprocess, "run", _fake_run)
+    cache.reinstall_editable("/tmp/some_venv", "/tmp/some_repo")
+    cmd = captured["cmd"]
+    assert "--no-build-isolation" in cmd, (
+        f"reinstall_editable must pass --no-build-isolation; got cmd={cmd!r}"
+    )
+    # Sanity: --no-deps must still be there (we don't want to re-resolve deps).
+    assert "--no-deps" in cmd
+
+
 # --- run.py cached-setup fallback and teardown ------------------------------
 
 

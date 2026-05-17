@@ -1,0 +1,23 @@
+diff --git a/sklearn/utils/_show_versions.py b/sklearn/utils/_show_versions.py
+new file mode 100644
+index 0000000000..f27d6d1424
+--- /dev/null
++++ b/sklearn/utils/_show_versions.py
+@@ -0,0 +1,17 @@
++"""Stub _show_versions module — exists only so pre-flight ``pytest --collect-only``
++succeeds on the new tests that import this module. The agent is expected to
++replace these no-op bodies with a real implementation that reports system
++info, dependency versions, and BLAS configuration.
++"""
++
++
++def _get_sys_info():
++    return {}
++
++
++def _get_deps_info():
++    return {}
++
++
++def show_versions():
++    pass

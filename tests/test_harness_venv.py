@@ -529,6 +529,80 @@ def test_astropy_5x_pre_install_pins() -> None:
         assert any("extension-helpers" in p for p in pins), f"Missing extension-helpers in {instance_id}"
 
 
+def test_xarray_pre_2_numpy_pins() -> None:
+    """xarray < 0.20 (and friends): the source tree references ``np.unicode_``,
+    removed in NumPy 2.0. Each affected instance must pin ``numpy<2`` in
+    pre-install. The set was extended in #264 after a datasci-mini sweep found
+    3520 and 5455 also affected (had been overlooked).
+    """
+    for instance_id in (
+        "pydata__xarray-2905",
+        "pydata__xarray-3520",
+        "pydata__xarray-4075",
+        "pydata__xarray-4629",
+        "pydata__xarray-4911",
+        "pydata__xarray-5455",
+        "pydata__xarray-6601",
+        "pydata__xarray-7003",
+    ):
+        pins = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pins is not None, f"No pre-install pins for {instance_id}"
+        assert any("numpy<2" in p for p in pins), (
+            f"{instance_id} must pin numpy<2; got {pins!r}"
+        )
+
+
+def test_sklearn_022_six_pin() -> None:
+    """sklearn 0.22.dev: test modules transitively import ``six`` which isn't
+    a runtime dep of modern sklearn. Both 14710 and 15094 hit the same
+    ``ModuleNotFoundError: six`` at preflight. (Issue #265.)
+    """
+    for instance_id in (
+        "scikit-learn__scikit-learn-14710",
+        "scikit-learn__scikit-learn-15094",
+    ):
+        pins = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pins is not None, f"No pre-install pins for {instance_id}"
+        assert "six" in pins, f"{instance_id} must pin `six`; got {pins!r}"
+
+
+def test_seaborn_3069_3202_flit_pins() -> None:
+    """seaborn 0.12 (3069, 3202): pyproject declares flit_core as the build
+    backend; without the pre-install pin, ``pip install -e . --no-build-isolation``
+    fails at cache setup. Mirrors the existing 2946 entry. (Issue #269.)
+    3202 additionally pins ``pandas<2.2`` because the seaborn fixture calls
+    ``pandas.set_option('mode.use_inf_as_na', ...)`` removed in pandas 2.2.
+    (Issue #268.)
+    """
+    pins_3069 = _INSTANCE_PRE_INSTALL.get("mwaskom__seaborn-3069")
+    pins_3202 = _INSTANCE_PRE_INSTALL.get("mwaskom__seaborn-3202")
+    assert pins_3069 is not None and pins_3202 is not None
+    for p in (pins_3069, pins_3202):
+        assert any("flit_core" in x for x in p), (
+            f"seaborn entry missing flit_core pin; got {p!r}"
+        )
+    assert any("pandas<2.2" in x for x in pins_3202), (
+        f"seaborn-3202 must pin pandas<2.2; got {pins_3202!r}"
+    )
+
+
+def test_sklearn_11596_has_source_seed() -> None:
+    """sklearn-11596 needs a source-seed patch creating a stub for
+    ``sklearn.utils._show_versions``. The test patch imports symbols from
+    that module which the agent is expected to create. (Issue #266.)
+    """
+    from swebench.harness import _INSTANCE_SOURCE_SEEDS
+    from swebench import repo_root
+    seed_rel = _INSTANCE_SOURCE_SEEDS.get("scikit-learn__scikit-learn-11596")
+    assert seed_rel is not None, "11596 must have a source-seed registered"
+    seed_path = repo_root() / seed_rel
+    assert seed_path.is_file(), f"source seed not found at {seed_path}"
+    text = seed_path.read_text()
+    # Must define the three symbols imported by the test patch.
+    for symbol in ("_get_sys_info", "_get_deps_info", "show_versions"):
+        assert symbol in text, f"source seed missing symbol {symbol}"
+
+
 def test_matplotlib_26160_instance_pins() -> None:
     """Test 18: matplotlib-26160 uses instance-level pins that drop setuptools<65."""
     pins = _INSTANCE_PRE_INSTALL.get("matplotlib__matplotlib-26160")

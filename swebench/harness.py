@@ -116,9 +116,11 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # "AttributeError: `np.unicode_` was removed in the NumPy 2.0 release".
     # pytz is required at test-module import time (xarray/tests/test_variable.py).
     "pydata__xarray-2905": ["numpy<2", "pytz"],
+    "pydata__xarray-3520": ["numpy<2"],
     "pydata__xarray-4075": ["numpy<2"],
     "pydata__xarray-4629": ["numpy<2"],
     "pydata__xarray-4911": ["numpy<2"],
+    "pydata__xarray-5455": ["numpy<2"],
     "pydata__xarray-6601": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
     "pydata__xarray-7003": ["numpy<2", "setuptools_scm[toml]>=3.4", "setuptools_scm_git_archive"],
     # scikit-learn 0.18 era (2017): tests use nose-style yield parametrize which
@@ -151,8 +153,10 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # the legacy usage that sklearn 0.22.dev tests rely on.
     "scikit-learn__scikit-learn-13864": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6", "pytest<7"],
     "scikit-learn__scikit-learn-14125": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
-    "scikit-learn__scikit-learn-14710": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
-    "scikit-learn__scikit-learn-15094": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6"],
+    # sklearn 0.22.dev: test modules transitively import `six` (Python 2/3 compat
+    # shim) which isn't a runtime dep of modern sklearn. (Issue #265)
+    "scikit-learn__scikit-learn-14710": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6", "six"],
+    "scikit-learn__scikit-learn-15094": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.6", "six"],
     # scikit-learn 1.2–1.3 era: setup.py's check_package_status() imports scipy
     # at metadata-generation time, before any editable install. Without scipy
     # pre-installed, build fails with "scikit-learn requires scipy >= 1.3.2".
@@ -265,6 +269,12 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
     # flit_core is required at build time for this instance's pyproject.toml.
     "mwaskom__seaborn-2946": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
+    # seaborn 0.12 era (3069, 3202): same flit_core build-backend gap as 2946.
+    # 3202 also adds pandas<2.2 — the seaborn fixture calls
+    # ``pandas.set_option('mode.use_inf_as_na', ...)`` which pandas 2.2+ removed.
+    # (Issues #268, #269.)
+    "mwaskom__seaborn-3069": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
+    "mwaskom__seaborn-3202": ["matplotlib<3.7", "numpy<2", "pandas<2.2", "flit_core>=3.2,<4"],
 }
 
 # ---------------------------------------------------------------------------
@@ -292,6 +302,12 @@ _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
     # 1.0.3 which has the import; 2.0+ needs Sphinx≥5.0). The seed is a no-op
     # shim class so the imports succeed. (Issue #261, redesigned round 2.)
     "sphinx-doc__sphinx-9698": "patches/sphinx-doc__sphinx-9698_deprecation_seed.patch",
+    # sklearn 0.21.dev: the test patch imports `_get_sys_info`,
+    # `_get_deps_info`, `show_versions` from `sklearn.utils._show_versions`,
+    # a module the agent is expected to create. The stub has no-op bodies
+    # so the new tests collect but still FAIL until the agent does real
+    # work. (Issue #266.)
+    "scikit-learn__scikit-learn-11596": "patches/scikit-learn__scikit-learn-11596_source_seed.patch",
 }
 
 # ---------------------------------------------------------------------------
