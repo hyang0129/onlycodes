@@ -80,10 +80,14 @@ _INSTANCE_PYTHON: dict[str, str] = {
     # ``types.Union`` never existed; the line was a typo for ``UnionType``
     # (later fixed upstream). The tuple comparison is True on Python 3.10.x as
     # well as 3.11+ (longer tuple > shorter), so pinning must be ≤3.9 to skip
-    # the branch entirely. Only these two instances are affected — the
-    # adjacent 9229's test target doesn't import ``sphinx/util/typing``.
+    # the branch entirely. Six instances confirmed affected by the 2026-05-16
+    # baseline validation sweep (Issue #259); 9230/9281 originally pinned in #240.
+    "sphinx-doc__sphinx-9229": "python3.9",
     "sphinx-doc__sphinx-9230": "python3.9",
     "sphinx-doc__sphinx-9281": "python3.9",
+    "sphinx-doc__sphinx-9320": "python3.9",
+    "sphinx-doc__sphinx-9367": "python3.9",
+    "sphinx-doc__sphinx-9461": "python3.9",
 }
 
 _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
@@ -155,13 +159,80 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # scipy<1.12 keeps compatibility with the repo-level numpy<1.24 pin.
     "scikit-learn__scikit-learn-24677": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
     "scikit-learn__scikit-learn-25694": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
-    # sphinx 2.x era: sphinx/writers/latex.py imports the `roman` package
-    # unconditionally; without it conftest crashes before any test collects.
+    # sphinx 2.x–3.x era: sphinx/writers/latex.py imports the `roman` package
+    # unconditionally (either via `docutils.utils.roman`, which modern docutils
+    # dropped, or its fallback `from roman import toRoman`). Without the `roman`
+    # PyPI package installed, conftest crashes before any test collects.
+    # Nine instances confirmed by the 2026-05-16 baseline validation sweep
+    # (Issue #258); 8056 originally pinned in #241.
+    "sphinx-doc__sphinx-7590": ["roman"],
+    "sphinx-doc__sphinx-7748": ["roman"],
+    "sphinx-doc__sphinx-7757": ["roman"],
+    "sphinx-doc__sphinx-7985": ["roman"],
+    # sphinx 3.x era: needs `roman` AND the sphinxcontrib-* version pins, since
+    # the new (2.x) sphinxcontrib extensions require Sphinx ≥5.0 at fixture
+    # setup. The roman fix unblocked --collect-only; the version error surfaces
+    # next without these pins. (Issue #260)
+    "sphinx-doc__sphinx-8035": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-8056": ["roman"],
+    "sphinx-doc__sphinx-8269": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8475": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8551": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8721": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    # sphinx 4.1: same sphinxcontrib-* 5.0-gate; already has _INSTANCE_PYTHON
+    # pin to 3.9 from #240 — pin is purely additive on top. (Issue #260)
+    "sphinx-doc__sphinx-9230": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     # sphinx 4.3 era: applehelp and devhelp both enforce Sphinx ≥5.0 in their
     # version checks during fixture setup; markupsafe 2.1+ removed soft_unicode
-    # breaking jinja2 2.x import. All three pins required for collection.
-    "sphinx-doc__sphinx-9698": ["sphinxcontrib.applehelp<1.0.5", "sphinxcontrib-devhelp<1.0.6", "markupsafe<2.1"],
+    # breaking jinja2 2.x import. serializinghtml floor bumped >=1.1.5 because
+    # 1.1.4 still imports the deleted RemovedInSphinx40Warning symbol at this
+    # base_commit. (Issue #261, originally #241.)
+    "sphinx-doc__sphinx-9698": [
+        "sphinxcontrib.applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10",
+        "markupsafe<2.1",
+    ],
     # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
     # flit_core is required at build time for this instance's pyproject.toml.
     "mwaskom__seaborn-2946": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
@@ -194,14 +265,60 @@ _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
 # install would otherwise upgrade (e.g. Sphinx pulls its sphinxcontrib-*
 # extensions as runtime deps, overriding pre-install pins).
 _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
-    # sphinx 4.3 era: pip install -e . resolves Sphinx's runtime deps and
+    # sphinx 3.x / 4.x era: pip install -e . resolves Sphinx's runtime deps and
     # upgrades devhelp / qthelp / htmlhelp / serializinghtml to 2.x releases
     # that require Sphinx ≥5.0. Force them back down after the editable install.
-    "sphinx-doc__sphinx-9698": [
+    # serializinghtml floor bumped >=1.1.5 on 9698 only because 1.1.4 still
+    # imports the deleted RemovedInSphinx40Warning symbol at THAT base_commit.
+    # The earlier base_commits below still ship the symbol, so the LOW pin
+    # works. (Issues #260, #261)
+    "sphinx-doc__sphinx-8035": [
+        "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
         "sphinxcontrib-qthelp<1.0.4",
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8269": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8475": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8551": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8721": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-9230": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-9698": [
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10",
     ],
     # matplotlib 3.5–3.6 era (2022): matplotlib/__init__.py calls
     # ``setuptools_scm.get_version()`` at runtime to compute ``mpl.__version__``
@@ -970,13 +1087,16 @@ def run_claude(
 # instead of silently corrupting pass-rate aggregates.
 
 # Regex for a single pytest node-ID line as emitted by ``--collect-only -q``.
-# Matches both function-level IDs (``file.py::test_fn``) and class-level IDs
-# (``file.py::TestClass::test_method``) as well as parametrized variants
-# (``file.py::TestClass::test_method[param]``).
+# Matches function-level IDs (``file.py::test_fn``), class-level IDs
+# (``file.py::TestClass::test_method``), and parametrized variants whose
+# bracketed params may contain `(`, `)`, `,`, spaces, dots, equals signs and
+# quotes — anything pytest can emit inside the ``[...]`` of a parametrize id.
+# The character class is intentionally permissive: missing chars cause silent
+# env_fail mis-classifications (Issue #262, sphinx-9367/8265).
 import re as _re
 
 _NODE_ID_LINE_RE = _re.compile(
-    r"^(?P<path>[\w./\-]+\.py)::(?P<name>[\w\[\]\-:]+)\s*$",
+    r"^(?P<path>[\w./\-]+\.py)::(?P<name>[\w\-:]+(?:\[[^\]]*\])?)\s*$",
     _re.MULTILINE,
 )
 
@@ -1119,10 +1239,14 @@ def run_preflight_collect(
     captures reality.
     """
     venv_python = os.path.join(venv_dir, "bin", "python")
-    cmd_str = test_cmd
-    if cmd_str.startswith("python "):
-        cmd_str = cmd_str[len("python "):]
-    tokens = cmd_str.split()
+    # Use shlex.split so a YAML test_cmd quoting a node ID with spaces inside
+    # the parametrize brackets — e.g. `"tests/x.py::test_unparse[(1, 2, 3)]"` —
+    # is tokenized as one pytest arg, not shredded into six. Naive str.split
+    # broke sphinx-doc__sphinx-8265 (Issue #262).
+    import shlex
+    tokens = shlex.split(test_cmd)
+    if tokens and tokens[0] == "python":
+        tokens = tokens[1:]
     if (
         len(tokens) < 2
         or tokens[0] != "-m"

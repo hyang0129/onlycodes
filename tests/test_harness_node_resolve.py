@@ -343,3 +343,80 @@ def test_collect_node_ids_real_pytest_missing_name_returns_empty(tmp_path: Path)
         str(tmp_path), _sys.executable, "test_no_such_function_anywhere",
     )
     assert node_ids == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #262: parametrized node IDs with parens / spaces / commas
+# ---------------------------------------------------------------------------
+
+
+def test_node_id_regex_matches_parametrized_id_with_parens_and_spaces():
+    """``test_unparse[(1, 2, 3)-(1, 2, 3)]`` must match. The old character
+    class ``[\\w\\[\\]\\-:]`` rejected ``(``/``)``/``,``/space and silently
+    mis-classified collected tests as 0-items (Issue #262, sphinx-9367 / 8265).
+    """
+    sample = "tests/test_pycode_ast.py::test_unparse[(1, 2, 3)-(1, 2, 3)]\n"
+    m = harness._NODE_ID_LINE_RE.search(sample)
+    assert m is not None, "regex should match parametrized id with parens/spaces"
+    assert m.group("path") == "tests/test_pycode_ast.py"
+    assert m.group("name") == "test_unparse[(1, 2, 3)-(1, 2, 3)]"
+
+
+def test_node_id_regex_still_matches_simple_function_id():
+    """Regression guard: simple ``file.py::test_fn`` still matches."""
+    m = harness._NODE_ID_LINE_RE.search("a/test_x.py::test_one\n")
+    assert m is not None
+    assert m.group("name") == "test_one"
+
+
+def test_node_id_regex_still_matches_class_method_id():
+    """Regression guard: class-level node IDs still match."""
+    m = harness._NODE_ID_LINE_RE.search(
+        "tests/x.py::TestClass::test_method\n"
+    )
+    assert m is not None
+    assert m.group("name") == "TestClass::test_method"
+
+
+def test_node_id_regex_matches_single_element_tuple_param():
+    """The sister case to 8265: ``[(1,)-(1,)]`` from sphinx-9367 — commas
+    inside parens, no spaces. Must also match.
+    """
+    m = harness._NODE_ID_LINE_RE.search(
+        "tests/test_pycode_ast.py::test_unparse[(1,)-(1,)]\n"
+    )
+    assert m is not None
+    assert m.group("name") == "test_unparse[(1,)-(1,)]"
+
+
+def test_preflight_shlex_split_handles_quoted_node_id(monkeypatch, tmp_path: Path):
+    """A YAML ``test_cmd`` that quotes a parametrized node ID containing
+    spaces must reach pytest as ONE arg, not be shredded into six by naive
+    ``str.split()`` (Issue #262).
+    """
+    captured: dict[str, list[str]] = {}
+
+    def _fake_run(cmd, **kw):
+        captured["cmd"] = list(cmd)
+        return _FakeCompleted(
+            returncode=0,
+            stdout=_fake_collect_only_output(
+                ["tests/test_pycode_ast.py::test_unparse[(1, 2, 3)-(1, 2, 3)]"]
+            ),
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    ok, _ = harness.run_preflight_collect(
+        repo_dir=str(tmp_path),
+        test_cmd=(
+            'python -m pytest '
+            '"tests/test_pycode_ast.py::test_unparse[(1, 2, 3)-(1, 2, 3)]"'
+        ),
+        venv_dir=str(tmp_path / "venv"),
+    )
+    assert ok is True
+    # Verify the quoted arg arrived as a single token (not 6 fragments).
+    cmd = captured["cmd"]
+    assert (
+        "tests/test_pycode_ast.py::test_unparse[(1, 2, 3)-(1, 2, 3)]" in cmd
+    ), f"quoted node ID was split; got cmd={cmd!r}"

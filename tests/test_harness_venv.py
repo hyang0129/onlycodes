@@ -365,17 +365,113 @@ def test_sphinx_types_union_instances_use_python39() -> None:
     """sphinx 4.0.x era: instances whose tests transitively import
     ``sphinx/util/typing.py`` must run on Python 3.9.
 
-    The base commits for these two instances ship a typo in typing.py:
+    The base commits for these instances ship a typo in typing.py:
     ``if sys.version_info > (3, 10): from types import Union as types_Union``.
     ``types.Union`` does not exist on any released Python. The guard fires on
     Python 3.10.x too (``(3, 10, x) > (3, 10)`` is True by tuple length), so
     pinning anything above 3.9 still hits the broken import.
+
+    9230/9281 originally pinned in #240; 9229/9320/9367/9461 added in #259
+    after the 2026-05-16 baseline validation sweep found the same signature
+    on those instances.
     """
-    for instance_id in ("sphinx-doc__sphinx-9230", "sphinx-doc__sphinx-9281"):
+    for instance_id in (
+        "sphinx-doc__sphinx-9229",
+        "sphinx-doc__sphinx-9230",
+        "sphinx-doc__sphinx-9281",
+        "sphinx-doc__sphinx-9320",
+        "sphinx-doc__sphinx-9367",
+        "sphinx-doc__sphinx-9461",
+    ):
         assert _INSTANCE_PYTHON.get(instance_id) == "python3.9", (
             f"{instance_id} must use python3.9 to skip the broken "
             "`from types import Union` branch in sphinx/util/typing.py"
         )
+
+
+def test_sphinx_roman_module_instances_pin_roman() -> None:
+    """sphinx 2.x–3.x era: instances whose ``sphinx/writers/latex.py`` imports
+    the ``roman`` package must have it installed in the venv.
+
+    Modern docutils dropped ``docutils.utils.roman``; sphinx's fallback
+    ``from roman import toRoman`` then fails because the standalone ``roman``
+    PyPI package isn't pulled in transitively. Without the pin, pytest crashes
+    during conftest load.
+
+    8056 originally pinned in #241; the remaining 8 added in #258 after the
+    2026-05-16 baseline validation sweep found the same signature.
+    """
+    for instance_id in (
+        "sphinx-doc__sphinx-7590",
+        "sphinx-doc__sphinx-7748",
+        "sphinx-doc__sphinx-7757",
+        "sphinx-doc__sphinx-7985",
+        "sphinx-doc__sphinx-8035",
+        "sphinx-doc__sphinx-8056",
+        "sphinx-doc__sphinx-8475",
+        "sphinx-doc__sphinx-8551",
+        "sphinx-doc__sphinx-8721",
+    ):
+        pins = _INSTANCE_PRE_INSTALL.get(instance_id)
+        assert pins is not None, f"No pre-install pins for {instance_id}"
+        assert "roman" in pins, (
+            f"{instance_id} must pin the `roman` package; got pins={pins!r}"
+        )
+
+
+_SPHINXCONTRIB_LOW_PIN_INSTANCES = (
+    "sphinx-doc__sphinx-8035",
+    "sphinx-doc__sphinx-8269",
+    "sphinx-doc__sphinx-8475",
+    "sphinx-doc__sphinx-8551",
+    "sphinx-doc__sphinx-8721",
+    "sphinx-doc__sphinx-9230",
+)
+
+
+def test_sphinx_3x_4x_sphinxcontrib_low_pins() -> None:
+    """sphinx 3.x/4.x era: the modern (2.x) sphinxcontrib-* extensions require
+    Sphinx ≥5.0 and fail fixture setup with ``VersionRequirementError`` on
+    these older Sphinx revisions. Pin them BOTH at pre-install (so pip resolves
+    the right versions during editable install) AND post-install (because
+    ``pip install -e .`` re-resolves Sphinx's runtime deps and would otherwise
+    re-upgrade them). 5 pins each, same set, mirrored in both tables.
+    (Issue #260, surfaced by the 2026-05-16 baseline validation sweep.)
+    """
+    expected = [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ]
+    for instance_id in _SPHINXCONTRIB_LOW_PIN_INSTANCES:
+        pre = _INSTANCE_PRE_INSTALL.get(instance_id)
+        post = _INSTANCE_POST_INSTALL.get(instance_id)
+        assert pre is not None, f"No pre-install pins for {instance_id}"
+        assert post is not None, f"No post-install pins for {instance_id}"
+        for pin in expected:
+            assert pin in pre, f"{instance_id} pre-install missing {pin!r}"
+            assert pin in post, f"{instance_id} post-install missing {pin!r}"
+
+
+def test_sphinx_9698_serializinghtml_floor_bumped() -> None:
+    """sphinx-9698's base_commit deleted ``RemovedInSphinx40Warning`` from
+    ``sphinx.deprecation``. ``sphinxcontrib-serializinghtml==1.1.4`` still
+    imports that symbol, so the LOW pin (<1.1.5) used by other sphinx 3.x/4.x
+    instances is too old here — it forces an unimportable version. The floor
+    is bumped to >=1.1.5,<1.1.10 in BOTH pre- and post-install for 9698 only.
+    (Issue #261, follow-up to #241.)
+    """
+    target_pin = "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10"
+    pre = _INSTANCE_PRE_INSTALL.get("sphinx-doc__sphinx-9698")
+    post = _INSTANCE_POST_INSTALL.get("sphinx-doc__sphinx-9698")
+    assert pre is not None and post is not None
+    assert target_pin in pre, f"9698 pre-install missing {target_pin!r}; got {pre!r}"
+    assert target_pin in post, f"9698 post-install missing {target_pin!r}; got {post!r}"
+    # Must NOT also carry the LOW pin — that would be self-contradictory.
+    assert "sphinxcontrib-serializinghtml<1.1.5" not in pre
+    assert "sphinxcontrib-serializinghtml<1.1.5" not in post
 
 
 def test_astropy_5x_pre_install_pins() -> None:
