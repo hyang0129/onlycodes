@@ -35,7 +35,14 @@ class Problem:
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            yaml.dump(
+                data,
+                f,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+                width=10 ** 6,
+            )
 
     @classmethod
     def from_yaml(cls, path: Path) -> Problem:

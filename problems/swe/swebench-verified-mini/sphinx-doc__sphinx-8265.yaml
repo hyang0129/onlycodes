@@ -1,7 +1,7 @@
 instance_id: sphinx-doc__sphinx-8265
 repo: sphinx-doc/sphinx
 base_commit: b428cd2404675475a5c3dc2a2b0790ba57676202
-test_cmd: python -m pytest tests/test_pycode_ast.py::test_unparse[(1,
+test_cmd: 'python -m pytest "tests/test_pycode_ast.py::test_unparse[(1, 2, 3)-(1, 2, 3)]"'
 patch_file: patches/sphinx-doc__sphinx-8265_tests.patch
 problem_statement: "docstring default arg is broken\n**Describe the bug**\r\ndocstring\
   \ default arg is broken in html.\r\nPython class method\r\n>     def add_lines(self,\
