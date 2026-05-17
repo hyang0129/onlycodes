@@ -519,7 +519,12 @@ def test_sphinx_9698_uses_low_pins_with_source_seed() -> None:
 
 
 def test_astropy_5x_pre_install_pins() -> None:
-    """Test 15: astropy 5.x instances have the required pre-install pins."""
+    """Test 15: astropy 5.x instances have the required pre-install pins.
+    `pytest-astropy` pulls in the full test plugin bundle (hypothesis,
+    pytest-doctestplus, pytest-remotedata, pytest-openfiles, pytest-arraydiff,
+    pytest-astropy-header) that the conftest + test_cmd need.
+    (Issue #270 rounds 2-4.)
+    """
     for instance_id in ("astropy__astropy-12962", "astropy__astropy-13842"):
         pins = _INSTANCE_PRE_INSTALL.get(instance_id)
         assert pins is not None, f"No instance pins for {instance_id}"
@@ -527,6 +532,11 @@ def test_astropy_5x_pre_install_pins() -> None:
         assert any("numpy<2" in p for p in pins), f"Missing numpy<2 in {instance_id}"
         assert any("cython<3" in p for p in pins), f"Missing cython<3 in {instance_id}"
         assert any("extension-helpers" in p for p in pins), f"Missing extension-helpers in {instance_id}"
+        assert "pytest-astropy" in pins, (
+            f"{instance_id} must pin pytest-astropy (meta-package pulls in the "
+            f"test plugins that conftest + --doctest-rst + remote_data need); "
+            f"got {pins!r}"
+        )
 
 
 def test_xarray_pre_2_numpy_pins() -> None:

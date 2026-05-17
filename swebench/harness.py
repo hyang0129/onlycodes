@@ -96,8 +96,14 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # astropy 5.x era (2022): same issue. setuptools_scm is required at test-import
     # time because astropy/version.py calls scm_version.get_version() during
     # `import astropy`. Without it, every test errors with "No module named 'setuptools_scm'".
-    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
-    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm"],
+    # astropy 5.x: conftest + test_cmd need the full pytest-astropy plugin
+    # bundle (hypothesis, pytest-doctestplus, pytest-remotedata,
+    # pytest-openfiles, pytest-arraydiff, pytest-astropy-header). Each was
+    # surfaced one-by-one in rounds 2/3/4 of #270 after --no-build-isolation
+    # unblocked the reinstall_editable failure; `pytest-astropy` pulls them
+    # all in transitively.
+    "astropy__astropy-12962": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm", "pytest-astropy"],
+    "astropy__astropy-13842": ["setuptools<69", "numpy<2", "cython<3", "extension-helpers", "setuptools_scm", "pytest-astropy"],
     # matplotlib 3.5–3.6 era (2022): setuptools_scm 7.x deprecated get_version()
     # and emits DeprecationWarning when mpl.__version__ is accessed.  Pytest's
     # `filterwarnings = error` promotes this to an error, breaking SVG backend
