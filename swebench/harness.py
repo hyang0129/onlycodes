@@ -1112,6 +1112,7 @@ def run_claude(
     tools_flags: list[str],
     result_file: str,
     claude_binary: str,
+    wall_timeout_seconds: int = 3600,
 ) -> None:
     """Shim — delegates to ClaudeRunner.invoke(). Non-zero exit does not raise."""
     _ClaudeRunner().invoke(
@@ -1121,6 +1122,7 @@ def run_claude(
         tools_flags=tools_flags,
         result_file=result_file,
         binary=claude_binary,
+        wall_timeout_seconds=wall_timeout_seconds,
     )
 
 

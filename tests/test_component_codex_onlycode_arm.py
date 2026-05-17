@@ -195,7 +195,7 @@ class _FakeCodexRunner:
         if self._preflight_raises is not None:
             raise self._preflight_raises
 
-    def invoke(self, *, prompt, cwd, system_prompt, tools_flags, result_file, binary, mcp_config_path=None):
+    def invoke(self, *, prompt, cwd, system_prompt, tools_flags, result_file, binary, mcp_config_path=None, wall_timeout_seconds: int = 3600):
         Path(cwd, "answer.txt").write_text("ok\n")
         with open(result_file, "a") as f:
             f.write('{"type":"result","total_cost_usd":0.0,"num_turns":1}\n')

@@ -91,7 +91,8 @@ class _FakeRunner:
         return ClaudeRunner().build_tools_flags(arm, mcp_config_path)
 
     def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
-               result_file, binary, mcp_config_path=None):
+               result_file, binary, mcp_config_path=None,
+               wall_timeout_seconds: int = 3600):
         Path(cwd, "answer.txt").write_text("42\n")
         with open(result_file, "a") as f:
             f.write('{"type":"result","total_cost_usd":0.01,"num_turns":2}\n')

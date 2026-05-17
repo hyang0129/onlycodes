@@ -94,6 +94,7 @@ def run_artifact_arm(
     claude_binary: str | None = None,
     mcp_config_path: str | None = None,
     echo: Callable[[str], None] | None = None,
+    wall_timeout_seconds: int = 3600,
 ) -> ArtifactArmResult:
     """Run one (task, arm, run_idx) triple and write result.json + agent.jsonl.
 
@@ -155,6 +156,7 @@ def run_artifact_arm(
             result_file=str(agent_jsonl),
             binary=binary,
             mcp_config_path=mcp_config_path,
+            wall_timeout_seconds=wall_timeout_seconds,
         )
         wall_secs = int(time.time() - start)
         echo(f"  [{task.instance_id} {arm} run{run_idx}] Grading...")
