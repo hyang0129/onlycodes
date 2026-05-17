@@ -1,0 +1,21 @@
+diff --git a/sphinx/deprecation.py b/sphinx/deprecation.py
+index 3963e6361..8946ae9c9 100644
+--- a/sphinx/deprecation.py
++++ b/sphinx/deprecation.py
+@@ -14,6 +14,16 @@ from importlib import import_module
+ from typing import Any, Dict, Type
+ 
+ 
++# Re-added as a no-op shim. sphinx-9698's base_commit
++# (f050a7775dfc9000f55d023d36d925a8d02ccfa8) deleted ``RemovedInSphinx40Warning``
++# from this module, but every old sphinxcontrib-* extension in the version
++# range compatible with Sphinx 4.3 still imports it at module-init time. No
++# replacement version exists (sphinxcontrib-htmlhelp 1.x maxes at 1.0.3 which
++# still has the import; 2.0+ requires Sphinx >= 5.0). (Issue #261)
++class RemovedInSphinx40Warning(DeprecationWarning):
++    pass
++
++
+ class RemovedInSphinx50Warning(DeprecationWarning):
+     pass
+ 

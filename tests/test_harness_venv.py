@@ -420,13 +420,37 @@ def test_sphinx_roman_module_instances_pin_roman() -> None:
 
 
 _SPHINXCONTRIB_LOW_PIN_INSTANCES = (
+    "sphinx-doc__sphinx-7748",
     "sphinx-doc__sphinx-8035",
     "sphinx-doc__sphinx-8269",
     "sphinx-doc__sphinx-8475",
     "sphinx-doc__sphinx-8551",
     "sphinx-doc__sphinx-8721",
+    "sphinx-doc__sphinx-9229",
     "sphinx-doc__sphinx-9230",
 )
+
+
+def test_old_sphinx_pins_alabaster() -> None:
+    """Sphinx versions <3.4 — alabaster 0.7.13+ raises
+    ``VersionRequirementError("3.4")`` because the modern theme needs Sphinx
+    >=3.4 (and 0.7.16 needs >=5.0). Pin the alabaster ceiling alongside the
+    sphinxcontrib-* set. 8269 surfaced in round 2; 7748 in round 3 after the
+    sphinxcontrib pins unblocked fixture setup.
+    """
+    for instance_id in ("sphinx-doc__sphinx-7748", "sphinx-doc__sphinx-8269"):
+        for table_name, table in (
+            ("pre", _INSTANCE_PRE_INSTALL),
+            ("post", _INSTANCE_POST_INSTALL),
+        ):
+            pins = table.get(instance_id)
+            assert pins is not None, f"{instance_id} missing from {table_name}-install"
+            assert "alabaster<0.7.13" in pins, (
+                f"{instance_id} {table_name}-install missing alabaster<0.7.13; "
+                f"got {pins!r}"
+            )
+
+
 
 
 def test_sphinx_3x_4x_sphinxcontrib_low_pins() -> None:
@@ -455,23 +479,43 @@ def test_sphinx_3x_4x_sphinxcontrib_low_pins() -> None:
             assert pin in post, f"{instance_id} post-install missing {pin!r}"
 
 
-def test_sphinx_9698_serializinghtml_floor_bumped() -> None:
+def test_sphinx_9698_uses_low_pins_with_source_seed() -> None:
     """sphinx-9698's base_commit deleted ``RemovedInSphinx40Warning`` from
-    ``sphinx.deprecation``. ``sphinxcontrib-serializinghtml==1.1.4`` still
-    imports that symbol, so the LOW pin (<1.1.5) used by other sphinx 3.x/4.x
-    instances is too old here — it forces an unimportable version. The floor
-    is bumped to >=1.1.5,<1.1.10 in BOTH pre- and post-install for 9698 only.
-    (Issue #261, follow-up to #241.)
+    ``sphinx.deprecation``, but every old sphinxcontrib-* still imports it and
+    no PyPI version exists in the safe zone (htmlhelp 1.x maxes at 1.0.3 which
+    has the import; 2.0+ needs Sphinx≥5.0). The fix is a source-seed patch
+    that re-adds the symbol as a no-op shim — letting the LOW pin set work
+    like every other sphinx 3.x/4.x entry. This test locks both halves of
+    the contract: pin shape + source-seed registration.
+    (Issue #261, redesigned round 2.)
     """
-    target_pin = "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10"
-    pre = _INSTANCE_PRE_INSTALL.get("sphinx-doc__sphinx-9698")
-    post = _INSTANCE_POST_INSTALL.get("sphinx-doc__sphinx-9698")
-    assert pre is not None and post is not None
-    assert target_pin in pre, f"9698 pre-install missing {target_pin!r}; got {pre!r}"
-    assert target_pin in post, f"9698 post-install missing {target_pin!r}; got {post!r}"
-    # Must NOT also carry the LOW pin — that would be self-contradictory.
-    assert "sphinxcontrib-serializinghtml<1.1.5" not in pre
-    assert "sphinxcontrib-serializinghtml<1.1.5" not in post
+    expected_low_pins = {
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    }
+    for table_name, table in (
+        ("pre", _INSTANCE_PRE_INSTALL),
+        ("post", _INSTANCE_POST_INSTALL),
+    ):
+        pins = table.get("sphinx-doc__sphinx-9698")
+        assert pins is not None, f"9698 missing from {table_name}-install"
+        missing = expected_low_pins - set(pins)
+        assert not missing, f"9698 {table_name}-install missing {missing}"
+    # Source seed must be registered AND the patch file must exist.
+    from swebench.harness import _INSTANCE_SOURCE_SEEDS
+    from swebench import repo_root
+    seed_rel = _INSTANCE_SOURCE_SEEDS.get("sphinx-doc__sphinx-9698")
+    assert seed_rel is not None, "9698 must have a source-seed registered"
+    seed_path = repo_root() / seed_rel
+    assert seed_path.is_file(), f"source seed not found at {seed_path}"
+    # Sanity check the patch content actually defines the missing symbol.
+    text = seed_path.read_text()
+    assert "RemovedInSphinx40Warning" in text, (
+        f"source seed at {seed_path} does not define RemovedInSphinx40Warning"
+    )
 
 
 def test_astropy_5x_pre_install_pins() -> None:

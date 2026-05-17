@@ -166,7 +166,17 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # Nine instances confirmed by the 2026-05-16 baseline validation sweep
     # (Issue #258); 8056 originally pinned in #241.
     "sphinx-doc__sphinx-7590": ["roman"],
-    "sphinx-doc__sphinx-7748": ["roman"],
+    "sphinx-doc__sphinx-7748": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+        # Same alabaster gate as 8269 — round-2 sweep surfaced this after the
+        # sphinxcontrib pins unblocked fixture setup. (Issue #260, round 3.)
+        "alabaster<0.7.13",
+    ],
     "sphinx-doc__sphinx-7757": ["roman"],
     "sphinx-doc__sphinx-7985": ["roman"],
     # sphinx 3.x era: needs `roman` AND the sphinxcontrib-* version pins, since
@@ -188,6 +198,11 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-qthelp<1.0.4",
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
+        # alabaster 0.7.13+ raises VersionRequirementError("3.4") on this
+        # sphinx 3.3.0 base_commit; the LOW pin keeps the older theme that
+        # works. Round 2 of #260 (surfaced after the sphinxcontrib pin
+        # unblocked fixture setup).
+        "alabaster<0.7.13",
     ],
     "sphinx-doc__sphinx-8475": [
         "roman",
@@ -213,8 +228,17 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
-    # sphinx 4.1: same sphinxcontrib-* 5.0-gate; already has _INSTANCE_PYTHON
-    # pin to 3.9 from #240 — pin is purely additive on top. (Issue #260)
+    # sphinx 4.0/4.1: same sphinxcontrib-* 5.0-gate; both also carry the
+    # _INSTANCE_PYTHON pin to 3.9 from #240/#259 — pin is purely additive.
+    # (Issue #260; 9229 added round 2 after baseline FAIL surfaced the
+    # VersionRequirementError once the python pin unblocked collection.)
+    "sphinx-doc__sphinx-9229": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-9230": [
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
@@ -222,15 +246,20 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
-    # sphinx 4.3 era: applehelp and devhelp both enforce Sphinx ≥5.0 in their
-    # version checks during fixture setup; markupsafe 2.1+ removed soft_unicode
-    # breaking jinja2 2.x import. serializinghtml floor bumped >=1.1.5 because
-    # 1.1.4 still imports the deleted RemovedInSphinx40Warning symbol at this
-    # base_commit. (Issue #261, originally #241.)
+    # sphinx 4.3 era (9698): base_commit DELETED RemovedInSphinx40Warning from
+    # sphinx.deprecation. Every old sphinxcontrib-* still imports it at module
+    # init, and no replacement version exists for htmlhelp (1.x maxes at 1.0.3
+    # which has the import; 2.0+ requires Sphinx≥5.0). Solved by a source-seed
+    # patch (_INSTANCE_SOURCE_SEEDS below) that re-adds the symbol as a no-op
+    # shim — letting the LOW pin set work like every other sphinx 3.x/4.x
+    # entry. markupsafe<2.1 keeps jinja2 2.x compat. (Issue #261, originally
+    # #241; redesigned round 2.)
     "sphinx-doc__sphinx-9698": [
-        "sphinxcontrib.applehelp<1.0.5",
+        "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
-        "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
         "markupsafe<2.1",
     ],
     # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
@@ -256,6 +285,13 @@ _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
     # astropy/tests/helper.py, causing collection to ERROR before any test runs.
     # This patch adds Python 3.9 to the ignore list.  (Issue #246)
     "astropy__astropy-6938": "patches/astropy__astropy-6938_py39_compat.patch",
+    # sphinx 4.3 (9698): re-add ``RemovedInSphinx40Warning`` to
+    # ``sphinx/deprecation.py``. The base_commit deleted the symbol but every
+    # sphinxcontrib-* extension version compatible with this Sphinx still
+    # imports it; no PyPI version is in the safe zone (htmlhelp 1.x maxes at
+    # 1.0.3 which has the import; 2.0+ needs Sphinx≥5.0). The seed is a no-op
+    # shim class so the imports succeed. (Issue #261, redesigned round 2.)
+    "sphinx-doc__sphinx-9698": "patches/sphinx-doc__sphinx-9698_deprecation_seed.patch",
 }
 
 # ---------------------------------------------------------------------------
@@ -272,6 +308,14 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
     # imports the deleted RemovedInSphinx40Warning symbol at THAT base_commit.
     # The earlier base_commits below still ship the symbol, so the LOW pin
     # works. (Issues #260, #261)
+    "sphinx-doc__sphinx-7748": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+        "alabaster<0.7.13",
+    ],
     "sphinx-doc__sphinx-8035": [
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
@@ -285,6 +329,7 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-qthelp<1.0.4",
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
+        "alabaster<0.7.13",
     ],
     "sphinx-doc__sphinx-8475": [
         "sphinxcontrib-applehelp<1.0.5",
@@ -307,6 +352,13 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+    "sphinx-doc__sphinx-9229": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-9230": [
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
@@ -315,10 +367,11 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
     "sphinx-doc__sphinx-9698": [
+        "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
         "sphinxcontrib-qthelp<1.0.4",
         "sphinxcontrib-htmlhelp<2.0.0",
-        "sphinxcontrib-serializinghtml>=1.1.5,<1.1.10",
+        "sphinxcontrib-serializinghtml<1.1.5",
     ],
     # matplotlib 3.5–3.6 era (2022): matplotlib/__init__.py calls
     # ``setuptools_scm.get_version()`` at runtime to compute ``mpl.__version__``
