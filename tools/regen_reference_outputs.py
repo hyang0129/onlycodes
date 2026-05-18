@@ -1,34 +1,42 @@
 #!/usr/bin/env python3
-"""Regenerate ``grader/reference_output.json`` for every algorithmic task.
+"""Regenerate or verify committed grader reference outputs.
 
-For each task in ``problems/artifact/algorithmic/<slug>/``:
+Two task families are handled, both keyed on the canonical seed
+``int(sha256(instance_id)[:8], 16)`` that the runtime materializer uses
+(see ``swebench.artifact_materialize._seed_for_instance``):
 
-  1. Compute the canonical seed = int(sha256(instance_id)[:8], 16).
-  2. Run ``workspace/generator.py`` with that seed against a scratch dir,
-     in a scrubbed env that matches SCHEMA §5.1 (only PATH and
-     PYTHONDONTWRITEBYTECODE pass through).
-  3. Recompute the optimal answer with the corresponding algorithm in this
-     script — it mirrors what each task's grader/hidden.py does at grade
-     time.
-  4. Write the result to ``grader/reference_output.json``.
+  1. **Algorithmic** (``problems/artifact/algorithmic/*``). Generator emits
+     an input JSON; this script recomputes the optimum with the algorithm
+     in ``COMPUTER[slug]`` (mirrors what each grader does at grade time),
+     and writes ``grader/reference_output.json``.
 
-This script exists for two reasons:
+  2. **Generator-native**. Any task whose ``workspace/generator.py``
+     declares a ``--reference-output`` flag — the generator itself writes
+     the reference (currently the three ``ml_engineering__aggregate_predictions_*``
+     tasks). Discovered automatically by scanning generator sources.
 
-  * The acceptance criteria in #172 require a committed regeneration
-    entry point so the reference can be re-derived after any generator
-    edit, without having to remember which algorithm each task uses.
-  * It documents in one place how each algorithmic task's reference is
-    computed from its workspace input — a future task author touching a
-    generator can confirm here whether their change will invalidate the
-    committed reference (it almost certainly will; regenerate after any
-    generator edit).
+Two modes:
+
+  * **regen** (default): overwrite each committed reference in place.
+  * **check** (``--check``): regenerate into a tmpfile and byte-compare to
+    the committed reference. Exit 1 if any drift is detected. This is the
+    CI gate that catches the failure mode in which a reference is generated
+    with the wrong seed (or with a stale generator) and silently disagrees
+    with what the runtime produces.
 
 Usage::
 
-    python tools/regen_reference_outputs.py            # all tasks
-    python tools/regen_reference_outputs.py knapsack_01 graph_min_vertex_cover
+    python tools/regen_reference_outputs.py                       # regen all
+    python tools/regen_reference_outputs.py knapsack_01           # regen one
+    python tools/regen_reference_outputs.py --check               # verify all
+    python tools/regen_reference_outputs.py --check aggregate_predictions_easy
 
-The script is stdlib-only and runs in a fraction of a second per task.
+Exit codes (``--check`` mode):
+  0 — all references match canonical regeneration
+  1 — at least one reference drifted (or a generator failed)
+  2 — discovery/parse error
+
+The script is stdlib-only and runs in a few seconds across the whole suite.
 """
 
 from __future__ import annotations
@@ -46,6 +54,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ALGO_ROOT = ROOT / "problems" / "artifact" / "algorithmic"
+
+# Allow running as ``python tools/regen_reference_outputs.py`` without
+# editable-installing swebench. Mirrors tools/verify_graders.py.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 # Map slug -> (input filename, computer function).
 INPUT_FILE = {
@@ -304,43 +317,183 @@ COMPUTER = {
 }
 
 
-def regen_one(task: str) -> None:
+_GEN_ENV = {"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def _compute_algo_reference(task: str) -> str:
+    """Run the algorithmic generator with the canonical seed and return the
+    serialized JSON reference (the same content that would be written to
+    ``grader/reference_output.json``).
+    """
     task_dir = ALGO_ROOT / task
     generator = task_dir / "workspace" / "generator.py"
-    out = task_dir / "grader" / "reference_output.json"
     instance_id = f"algorithmic__{task}"
     seed = canonical_seed(instance_id)
-
     with tempfile.TemporaryDirectory() as td:
         scratch = Path(td)
-        env = {"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
         rc = subprocess.call(
             [sys.executable, str(generator),
              "--seed", str(seed),
              "--output-dir", str(scratch),
              "--instance-id", instance_id],
-            env=env,
+            env=_GEN_ENV,
         )
         if rc != 0:
             raise SystemExit(f"generator for {task} exited {rc}")
         inp = json.loads((scratch / INPUT_FILE[task]).read_text())
         ref = COMPUTER[task](inp)
-        out.write_text(json.dumps(ref, indent=2) + "\n")
-        print(f"  regen {task}: {INPUT_FILE[task]} -> reference_output.json")
+    return json.dumps(ref, indent=2) + "\n"
+
+
+def regen_algo(task: str) -> None:
+    out = ALGO_ROOT / task / "grader" / "reference_output.json"
+    out.write_text(_compute_algo_reference(task))
+    print(f"  regen algorithmic/{task}: -> {out.relative_to(ROOT)}")
+
+
+def check_algo(task: str) -> bool:
+    """Return True if committed reference matches canonical regeneration."""
+    out = ALGO_ROOT / task / "grader" / "reference_output.json"
+    expected = _compute_algo_reference(task)
+    actual = out.read_text() if out.is_file() else ""
+    if expected == actual:
+        print(f"  ok    algorithmic/{task}")
+        return True
+    print(f"  DRIFT algorithmic/{task}: committed reference != regenerated")
+    return False
+
+
+# Back-compat alias: prior versions of this module exposed ``regen_one``.
+regen_one = regen_algo
+
+
+# ── Generator-native tasks (generator owns --reference-output) ──────────────
+
+ARTIFACT_ROOT = ROOT / "problems" / "artifact"
+
+
+def _discover_generator_native() -> list[tuple[str, Path, Path, Path]]:
+    """Return [(instance_id, generator_path, ref_path, task_dir), ...].
+
+    A task is "generator-native" when its workspace/generator.py declares a
+    ``--reference-output`` argparse flag. We detect the flag by string scan
+    of the source (cheap, no subprocess) to avoid an --help round-trip.
+    """
+    out: list[tuple[str, Path, Path, Path]] = []
+    for task_yaml in sorted(ARTIFACT_ROOT.glob("*/*/task.yaml")):
+        task_dir = task_yaml.parent
+        gen = task_dir / "workspace" / "generator.py"
+        if not gen.is_file():
+            continue
+        src = gen.read_text(errors="replace")
+        if '"--reference-output"' not in src and "'--reference-output'" not in src:
+            continue
+        # Parse just enough from task.yaml to get instance_id + reference_output
+        # path. Use the shared loader so the contract stays in one place.
+        from swebench.artifact_loader import _parse_task_yaml
+        try:
+            task = _parse_task_yaml(task_yaml)
+        except Exception as exc:  # pragma: no cover — invalid task.yaml
+            print(f"  WARN skipping {task_yaml}: {exc}", file=sys.stderr)
+            continue
+        ref = task_dir / task.reference_output
+        out.append((task.instance_id, gen, ref, task_dir))
+    return out
+
+
+def _run_native_generator(generator: Path, instance_id: str, ref_out: Path) -> None:
+    seed = canonical_seed(instance_id)
+    with tempfile.TemporaryDirectory() as td:
+        rc = subprocess.call(
+            [sys.executable, str(generator),
+             "--seed", str(seed),
+             "--output-dir", str(td),
+             "--instance-id", instance_id,
+             "--reference-output", str(ref_out)],
+            env=_GEN_ENV,
+        )
+    if rc != 0:
+        raise SystemExit(f"generator for {instance_id} exited {rc}")
+
+
+def regen_native(instance_id: str, generator: Path, ref: Path) -> None:
+    _run_native_generator(generator, instance_id, ref)
+    print(f"  regen {instance_id}: -> {ref.relative_to(ROOT)}")
+
+
+def check_native(instance_id: str, generator: Path, ref: Path) -> bool:
+    with tempfile.NamedTemporaryFile(
+        prefix="ref_check_", suffix=ref.suffix, delete=False
+    ) as fh:
+        tmp = Path(fh.name)
+    try:
+        _run_native_generator(generator, instance_id, tmp)
+        expected = tmp.read_bytes()
+        actual = ref.read_bytes() if ref.is_file() else b""
+        if expected == actual:
+            print(f"  ok    {instance_id}")
+            return True
+        print(f"  DRIFT {instance_id}: committed {ref.relative_to(ROOT)} "
+              f"!= regenerated ({len(actual)} vs {len(expected)} bytes)")
+        return False
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────────
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("tasks", nargs="*", help="Slugs to regen; default: all.")
+    ap.add_argument(
+        "tasks", nargs="*",
+        help="Slugs or instance_ids to act on; default: all.",
+    )
+    ap.add_argument(
+        "--check", action="store_true",
+        help="Diff-only: regenerate to a tmpfile and compare to the committed "
+             "reference. Exit 1 on any drift.",
+    )
     args = ap.parse_args()
-    targets = args.tasks or list(COMPUTER.keys())
-    unknown = [t for t in targets if t not in COMPUTER]
-    if unknown:
-        print(f"Unknown task(s): {unknown}", file=sys.stderr)
-        print(f"Known: {sorted(COMPUTER)}", file=sys.stderr)
-        return 2
-    for t in targets:
-        regen_one(t)
+
+    algo_targets = list(COMPUTER.keys())
+    native_targets = _discover_generator_native()  # list of tuples
+
+    if args.tasks:
+        # Filter by either bare slug (algo) or instance_id substring (native).
+        wanted = set(args.tasks)
+        algo_targets = [t for t in algo_targets if t in wanted]
+        native_targets = [
+            tup for tup in native_targets
+            if tup[0] in wanted or any(w in tup[0] for w in wanted)
+        ]
+        if not algo_targets and not native_targets:
+            print(f"No tasks matched: {sorted(wanted)}", file=sys.stderr)
+            print(f"Known algorithmic: {sorted(COMPUTER)}", file=sys.stderr)
+            print(
+                "Known generator-native: "
+                f"{sorted(t[0] for t in _discover_generator_native())}",
+                file=sys.stderr,
+            )
+            return 2
+
+    if args.check:
+        drift = 0
+        for t in algo_targets:
+            if not check_algo(t):
+                drift += 1
+        for iid, gen, ref, _ in native_targets:
+            if not check_native(iid, gen, ref):
+                drift += 1
+        if drift:
+            print(f"\n{drift} reference(s) drifted.", file=sys.stderr)
+            return 1
+        return 0
+
+    for t in algo_targets:
+        regen_algo(t)
+    for iid, gen, ref, _ in native_targets:
+        regen_native(iid, gen, ref)
     return 0
 
 

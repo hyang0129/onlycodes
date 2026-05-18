@@ -1,6 +1,6 @@
 # Batched Artifact Run
 
-63 problems split into 7 batches (one category per batch). All batches write to the same output dir so `artifact analyze` sees a single cohesive run at the end.
+93 problems split into 9 batches (one category per batch). All batches write to the same output dir so `artifact analyze` sees a single cohesive run at the end.
 
 ## How it works
 
@@ -71,6 +71,22 @@ python -m swebench artifact run \
   --filter "data_engineering__customer_orders_join_easy,data_engineering__dedup_event_log_priority_hard,data_engineering__dedup_inventory_snapshots_medium,data_engineering__dedup_user_profiles_easy,data_engineering__events_cross_region_join_hard,data_engineering__filter_aggregate_sales_easy,data_engineering__filter_aggregate_support_tickets_medium,data_engineering__filter_aggregate_transactions_hard,data_engineering__normalize_audit_log_dedup_hard,data_engineering__normalize_login_timestamps_easy,data_engineering__normalize_order_timestamps_medium,data_engineering__orders_lookup_join_medium,data_engineering__repair_transactions_export_hard,data_engineering__repair_user_directory_medium,data_engineering__transactions_union_medium"
 ```
 
+### Batch 8 — data_science (15 tasks)
+
+```bash
+python -m swebench artifact run \
+  --output-dir runs/artifact/full_run_seed_1 \
+  --filter "data_science__classification_metrics_easy,data_science__cohort_ttest_medium,data_science__consecutive_change_anomaly_hard,data_science__expanding_percentile_multimetric_hard,data_science__feature_select_then_fit_medium,data_science__iqr_anomaly_flagging_easy,data_science__iterative_outlier_refit_hard,data_science__multiclass_metrics_per_class_hard,data_science__multigroup_mannwhitney_hard,data_science__regression_metrics_grouped_medium,data_science__rolling_mean_simple_easy,data_science__rolling_p95_aggregation_medium,data_science__train_test_split_evaluate_easy,data_science__twogroup_ttest_easy,data_science__zscore_anomaly_windowed_medium"
+```
+
+### Batch 9 — ml_engineering (15 tasks)
+
+```bash
+python -m swebench artifact run \
+  --output-dir runs/artifact/full_run_seed_1 \
+  --filter "ml_engineering__aggregate_predictions_easy,ml_engineering__aggregate_predictions_hard,ml_engineering__aggregate_predictions_medium,ml_engineering__curve_queries_easy,ml_engineering__curve_queries_hard,ml_engineering__curve_queries_medium,ml_engineering__find_broken_runs_easy,ml_engineering__find_broken_runs_hard,ml_engineering__find_broken_runs_medium,ml_engineering__repair_config_easy,ml_engineering__repair_config_hard,ml_engineering__repair_config_medium,ml_engineering__select_constrained_easy,ml_engineering__select_constrained_hard,ml_engineering__select_constrained_medium"
+```
+
 ## Intermediate analysis
 
 Run at any point — tasks with no results yet simply won't appear:
@@ -81,7 +97,7 @@ python -m swebench artifact analyze --results-dir runs/artifact/full_run_seed_1
 
 ## Final analysis
 
-Same command once all 7 batches are done:
+Same command once all 9 batches are done:
 
 ```bash
 python -m swebench artifact analyze \

@@ -272,6 +272,11 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-serializinghtml<1.1.5",
         "markupsafe<2.1",
     ],
+    # sphinx 5.x era (11510): pyproject.toml uses flit as build backend.
+    # flit_core is not installed into the venv by the default build-isolated
+    # pip install, so the venv-reuse path (--no-build-isolation) fails on
+    # subsequent seeds. Pre-installing it ensures it's always present.
+    "sphinx-doc__sphinx-11510": ["flit_core>=3.2,<4"],
     # seaborn 0.12 era (2022): numpy 2.x removed np.str_ etc. used in cm.py;
     # flit_core is required at build time for this instance's pyproject.toml.
     "mwaskom__seaborn-2946": ["matplotlib<3.7", "numpy<2", "flit_core>=3.2,<4"],
