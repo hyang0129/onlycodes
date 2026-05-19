@@ -162,6 +162,37 @@ runs/swebench/_analysis/<run_id>/
 
 ---
 
+## Remote Execution: Codex Experiments on Serg's MacBook
+
+Codex experiments are run on `sergmac` (Serg's MacBook Pro, `100.85.246.67`, user `hong`) reached over the `huddlenet` Tailscale network. This dev container is not a permanent member of huddlenet — it joins via an ephemeral, tagged auth key minted from an OAuth client whose creds live in `.env` (gitignored).
+
+### One-shot connect
+
+```bash
+bash scripts/ts_connect.sh   # idempotent: installs tailscale, joins huddlenet, sets up ~/.ssh/config
+ssh sergmac                  # → hong@SERGBOOK.local
+```
+
+`ts_connect.sh` reads `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_CLIENT_SECRET` from `.env`, starts `tailscaled` in userspace-networking mode (no `/dev/net/tun` in this container) with a SOCKS5 proxy on `localhost:1055`, then SSH uses `ProxyCommand nc -X 5 -x localhost:1055 %h %p` to reach huddlenet IPs.
+
+### What's already configured
+
+- `tag:cibox` in huddlenet's ACL (owner `autogroup:admin`) — lets the OAuth client mint auth keys for this container.
+- `~/.ssh/tower_huddlenet` keypair — public half is in `/Users/hong/.ssh/authorized_keys` on sergmac.
+- `Host sergmac` (primary) and `Host tower` (kept for future Unraid use) in `~/.ssh/config`.
+
+### After container rebuild
+
+`~/.ssh/` is wiped, so `ts_connect.sh` generates a fresh keypair → that new pubkey must be re-added to sergmac. To avoid this, persist the keypair (e.g. commit-encrypted via `git-crypt`, or store under a mounted volume). Do **not** check in raw private keys.
+
+### Gotchas
+
+- Userspace-networking means **no `ping`, no MagicDNS**. Use raw `100.x.y.z` Tailscale IPs only.
+- Auth keys are ephemeral with 1-hour TTL — fine, since `ts_connect.sh` re-mints on each invocation. The node deregisters on `tailscaled` exit.
+- `tailscale ssh` is **not** the auth path; Tailscale SSH (`sshEnabled`) is off on huddlenet nodes. We use standard sshd over Tailscale (TCP through SOCKS5).
+
+---
+
 ## Legacy Scripts
 
 `scripts/run_prevalidation.sh`, `scripts/run_mcp_integration_test.sh` — original fixture-based benchmarks (5-task suite in `data/fixtures/`). Still valid as a fast smoke test.
