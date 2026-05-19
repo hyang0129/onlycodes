@@ -233,6 +233,16 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
     setuptools, which has removed APIs older instances depend on (e.g.,
     ``setuptools.dep_util`` used by astropy ``setup_package.py``). (Issue #270.)
 
+    After the pip install, ``easy-install.pth`` is pruned so it contains only
+    *repo_dir*. The initial cache-build ``pip install -e`` (against the lowerdir)
+    leaves the lowerdir path in ``easy-install.pth``; the subsequent install
+    against the merged overlay path *appends* rather than replaces, leaving both
+    entries with the lowerdir listed first. Python iterates ``.pth`` entries in
+    order, so ``import <pkg>`` resolves to the unmodified lowerdir copy and the
+    agent's edits in the overlay are silently masked — every test runs against
+    stock code. Rewriting the file with only the merged path makes the agent's
+    edits actually observable. (Issue #271.)
+
     Raises ``OverlayError`` on non-zero pip exit — a silent failure here would
     leave the venv's egg-link pointing at a path with no egg-info, causing
     confusing ImportErrors at test time.
@@ -248,6 +258,34 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
             f"reinstall_editable failed for {repo_dir}: "
             f"{result.stderr.strip() or result.stdout.strip() or 'pip returned non-zero'}"
         )
+
+    _prune_easy_install_pth(venv_dir, repo_dir)
+
+
+def _prune_easy_install_pth(venv_dir: str, repo_dir: str) -> None:
+    """Rewrite ``easy-install.pth`` to contain only *repo_dir*.
+
+    See ``reinstall_editable`` docstring for why this is required. No-op if no
+    ``easy-install.pth`` exists (package wasn't installed via the legacy
+    editable mechanism that writes one).
+    """
+    site_packages_glob = os.path.join(venv_dir, "lib", "python*", "site-packages")
+    import glob as _glob
+
+    target = os.path.realpath(repo_dir)
+    for sp in _glob.glob(site_packages_glob):
+        pth = os.path.join(sp, "easy-install.pth")
+        if not os.path.isfile(pth):
+            continue
+        with open(pth, "r", encoding="utf-8") as f:
+            existing = [ln.rstrip("\n") for ln in f.readlines()]
+        # Keep any non-path comment/blank lines (rare in easy-install.pth);
+        # replace path lines with the single canonical merged path.
+        preserved = [ln for ln in existing if ln.startswith(("#", "import")) or ln.strip() == ""]
+        with open(pth, "w", encoding="utf-8") as f:
+            for ln in preserved:
+                f.write(ln + "\n")
+            f.write(target + "\n")
 
 
 # -- Overlay mount -----------------------------------------------------------

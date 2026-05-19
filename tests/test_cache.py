@@ -243,6 +243,41 @@ def test_reinstall_editable_raises_on_pip_failure(tmp_path):
         cache.reinstall_editable(str(venv_dir), str(not_a_package))
 
 
+def test_reinstall_editable_prunes_easy_install_pth(tmp_path, monkeypatch):
+    """After ``pip install -e merged`` the lowerdir entry must not survive in
+    ``easy-install.pth`` — otherwise Python iterates it first and resolves
+    ``import <pkg>`` to the unmodified cached lowerdir, masking the agent's
+    edits in the overlay merged path. (Issue #271.)
+    """
+    # Simulate a venv layout the function expects.
+    venv_dir = tmp_path / "venv"
+    site_packages = venv_dir / "lib" / "python3.11" / "site-packages"
+    site_packages.mkdir(parents=True)
+    lowerdir = "/tmp/swebench-cache/instances/fake/repo"
+    merged = str(tmp_path / "merged")
+    os.makedirs(merged)
+
+    pth = site_packages / "easy-install.pth"
+    # Pre-seed with the initial cache-build entry (lowerdir) — this is the
+    # bug condition reinstall_editable must repair.
+    pth.write_text(f"{lowerdir}\n")
+
+    def _fake_run(cmd, **kw):
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return _R()
+
+    monkeypatch.setattr(cache.subprocess, "run", _fake_run)
+    cache.reinstall_editable(str(venv_dir), merged)
+
+    contents = pth.read_text().splitlines()
+    assert contents == [os.path.realpath(merged)], (
+        f"easy-install.pth must contain only the merged path; got {contents!r}"
+    )
+
+
 def test_reinstall_editable_uses_no_build_isolation(tmp_path, monkeypatch):
     """``--no-build-isolation`` must be passed so the cached venv's pinned
     build deps (e.g. setuptools<69 for astropy) are used — not a fresh
