@@ -320,6 +320,26 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
+class _NoopRunner:
+    """Stub AgentRunner — see Issue #287. Needed because the post-agent
+    pre-flight ordering means tests must run past ``runner.invoke()`` before
+    they can observe the pre-flight subprocess calls."""
+
+    surface = "claude_code"
+
+    def build_tools_flags(self, arm, mcp_config_path):
+        return []
+
+    def get_version(self, binary):
+        return "stub"
+
+    def invoke(self, **kw):
+        pass
+
+    def extract_metadata(self, path):
+        return (None, None)
+
+
 @pytest.mark.component
 class TestRunArmExtraPytestArgsForwardedToPreflight:
     """_run_arm must pass _INSTANCE_EXTRA_PYTEST_ARGS[instance_id] as extra_pytest_args
@@ -392,13 +412,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
 
         # Double run.py I/O seams that are not part of this boundary.
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(
-            run_mod,
-            "run_claude",
-            lambda **kw: (_ for _ in ()).throw(
-                AssertionError("run_claude must not be called when preflight fails")
-            ),
-        )
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = self._make_problem()
         verdict = run_mod._run_arm(
@@ -411,6 +425,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         # _run_arm must have taken the env_fail path (0 collected → env_fail).
@@ -451,7 +466,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
 
         monkeypatch.setattr(_harness_mod.subprocess, "run", _recording_subprocess_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = self._make_problem()
         run_mod._run_arm(
@@ -464,6 +479,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         assert len(preflight_calls) >= 1, "No --collect-only subprocess call observed"
@@ -503,7 +519,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
 
         monkeypatch.setattr(_harness_mod.subprocess, "run", _recording_subprocess_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         # Use an instance NOT in _INSTANCE_EXTRA_PYTEST_ARGS.
         problem = Problem(
@@ -532,6 +548,7 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         assert len(preflight_calls) >= 1
@@ -637,14 +654,14 @@ class TestRunArmWritesCodexModelToMeta:
 
         Claude's USD cost comes from `total_cost_usd` in its own stream-json
         output. A `model` field would be misleading and is therefore omitted.
+
+        Under Issue #287 the agent runs before pre-flight, so we install a
+        claude_code-flavoured ``_NoopRunner`` rather than the real
+        ``ClaudeRunner`` (which would try to spawn ``/usr/bin/claude``).
         """
         repo_dir, venv_dir, results_dir = self._dirs(tmp_path)
         self._patch_to_env_fail(monkeypatch)
-
-        # No runner override → defaults to ClaudeRunner inside _run_arm.
-        # But we exercise the env_fail short-circuit which uses the `runner`
-        # arg directly to read surface. Pass a Claude-shaped stub.
-        from swebench.runner import ClaudeRunner
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         verdict = run_mod._run_arm(
             problem=self._problem(),
@@ -656,7 +673,7 @@ class TestRunArmWritesCodexModelToMeta:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
-            runner=ClaudeRunner(),
+            runner=_NoopRunner(),  # surface == "claude_code"
             codex_model=None,
         )
 

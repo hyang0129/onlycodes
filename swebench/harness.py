@@ -293,19 +293,28 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
 # Per-instance source seed patches
 # ---------------------------------------------------------------------------
 # Paths are relative to the problems root (same convention as patch_file in
-# YAML). Applied to the repo BEFORE the test patch so that test-patch imports
-# of agent-created modules succeed at pre-flight collection time.
+# YAML). Applied to the repo BEFORE the agent runs.
+#
+# Scope (Issue #287 audit): only *environment* fixes — patches that make the
+# base repository's own pytest collection succeed regardless of the test_patch.
+# Seeds that stubbed modules the agent is expected to author have been removed
+# because, under the post-agent test-patch protocol, the agent is the one that
+# creates those modules; pre-stubbing them would either short-circuit the work
+# or read as the agent reusing a leaked hint.
+#
+# Removed (legacy under the pre-#287 protocol):
+#   - ``scikit-learn__scikit-learn-10427``: stubbed ``sklearn.externals._pilutil``
+#     so the pre-agent --collect-only would succeed.  Module is agent-authored.
+#   - ``scikit-learn__scikit-learn-11596``: stubbed ``sklearn.utils._show_versions``
+#     for the same reason.  Module is agent-authored.
 _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
-    # sklearn 0.20-era: the test patch imports sklearn.externals._pilutil which
-    # the agent is expected to create as its fix. Without a stub the pre-flight
-    # --collect-only fails before the agent ever runs.
-    "scikit-learn__scikit-learn-10427": "patches/scikit-learn__scikit-learn-10427_source_seed.patch",
     # astropy 3.x / Python 3.9: conftest.py calls enable_deprecations_as_exceptions()
     # which turns all DeprecationWarnings into errors. On Python 3.9, the
     # collections ABCs (e.g. collections.MutableSequence) and pkg_resources both
     # issue DeprecationWarnings not covered by the 3.5/3.6 ignore lists in
     # astropy/tests/helper.py, causing collection to ERROR before any test runs.
-    # This patch adds Python 3.9 to the ignore list.  (Issue #246)
+    # This patch adds Python 3.9 to the ignore list.  (Issue #246)  Kept under
+    # #287 because it is an environment fix independent of the test patch.
     "astropy__astropy-6938": "patches/astropy__astropy-6938_py39_compat.patch",
     # sphinx 4.3 (9698): re-add ``RemovedInSphinx40Warning`` to
     # ``sphinx/deprecation.py``. The base_commit deleted the symbol but every
@@ -313,13 +322,9 @@ _INSTANCE_SOURCE_SEEDS: dict[str, str] = {
     # imports it; no PyPI version is in the safe zone (htmlhelp 1.x maxes at
     # 1.0.3 which has the import; 2.0+ needs Sphinx≥5.0). The seed is a no-op
     # shim class so the imports succeed. (Issue #261, redesigned round 2.)
+    # Kept under #287: it patches sphinx itself so any pytest run — including
+    # the agent's own test invocations — can import the package at all.
     "sphinx-doc__sphinx-9698": "patches/sphinx-doc__sphinx-9698_deprecation_seed.patch",
-    # sklearn 0.21.dev: the test patch imports `_get_sys_info`,
-    # `_get_deps_info`, `show_versions` from `sklearn.utils._show_versions`,
-    # a module the agent is expected to create. The stub has no-op bodies
-    # so the new tests collect but still FAIL until the agent does real
-    # work. (Issue #266.)
-    "scikit-learn__scikit-learn-11596": "patches/scikit-learn__scikit-learn-11596_source_seed.patch",
 }
 
 # ---------------------------------------------------------------------------
@@ -1055,14 +1060,90 @@ def setup_venv(
     Path(_venv_sentinel(venv_dir)).write_text(python_bin + "\n")
 
 
+def _parse_patch_targets(patch_path: str) -> tuple[list[str], list[str]]:
+    """Return ``(modified_paths, created_paths)`` for a unified-diff patch.
+
+    *modified_paths*: existing files the patch touches; the agent may have
+    edited these during its run, so we must reset them to HEAD before
+    ``git apply`` can succeed.
+
+    *created_paths*: new files the patch introduces (``--- /dev/null``);
+    if the agent created a file at the same path for unrelated reasons
+    ``git apply`` will fail with "already exists" — we ``rm -f`` those
+    before applying.
+
+    The state machine only treats ``--- ``/``+++ `` as file headers when
+    they appear between a ``diff --git`` line and the first ``@@`` hunk
+    marker, so a removed source line that happens to start with ``---``
+    inside a hunk body won't be misread as a header.
+    """
+    modified: list[str] = []
+    created: list[str] = []
+    in_header = False
+    last_source: str | None = None
+    with open(patch_path) as f:
+        for line in f:
+            if line.startswith("diff --git "):
+                in_header = True
+                last_source = None
+            elif line.startswith("@@"):
+                in_header = False
+            elif in_header and line.startswith("--- "):
+                last_source = line[4:].rstrip("\n").rstrip("\r")
+            elif in_header and line.startswith("+++ "):
+                target = line[4:].rstrip("\n").rstrip("\r")
+                if target == "/dev/null":
+                    # Patch deletes a file; treat as modify so we restore it
+                    # to HEAD before apply (apply will then re-delete it).
+                    if last_source and last_source.startswith("a/"):
+                        modified.append(last_source[2:])
+                else:
+                    path = target[2:] if target.startswith("b/") else target
+                    if last_source == "/dev/null":
+                        created.append(path)
+                    else:
+                        modified.append(path)
+                last_source = None
+    return modified, created
+
+
 def apply_test_patch(repo_dir: str, patch_path: str) -> bool:
     """Apply a test patch to the repo and commit it. Returns True if successful.
 
     Committing the patch (rather than leaving it as an unstaged diff) prevents
     agents from reading the test assertions via ``git diff`` — Issue #226.
+
+    Under the Issue #287 post-agent ordering the agent may have edited the
+    test files during its run, which would make ``git apply`` fail with a
+    conflict.  To keep the held-out tests authoritative we force-reset the
+    patch's modified files to HEAD and ``rm`` any agent-created files at the
+    patch's "new file" paths *before* applying.  A patch that still fails
+    after this — e.g. the agent edited a file the patch creates from
+    ``--- /dev/null`` and ``rm`` could not clear it — returns ``False`` and
+    the caller scores the run as FAIL rather than trusting ``run_tests``
+    against a contaminated tree.
     """
     if not os.path.isfile(patch_path):
         return False
+
+    # 1. Force the agent's edits out of the patch's blast radius.
+    modified, created = _parse_patch_targets(patch_path)
+    if modified:
+        subprocess.run(
+            ["git", "-C", repo_dir, "checkout", "HEAD", "--", *modified],
+            capture_output=True,
+        )
+    for rel in created:
+        full = os.path.join(repo_dir, rel)
+        try:
+            if os.path.isfile(full) or os.path.islink(full):
+                os.remove(full)
+        except OSError:
+            # Best-effort: if removal fails, the apply step below will fail
+            # cleanly and the caller treats that as FAIL.
+            pass
+
+    # 2. Apply the patch.
     result = subprocess.run(
         ["git", "-C", repo_dir, "apply", patch_path],
         capture_output=True,
