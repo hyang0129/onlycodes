@@ -1,5 +1,19 @@
 # SWE-bench Mini — Batched Run Results (verified-mini, partial)
 
+> **⚠️ LEGACY — pre-#287 protocol.**
+> The runs reported below were produced under the pre-Issue #287 evaluation
+> protocol, where `apply_test_patch` ran *before* the agent and the hidden
+> test files sat on disk during the agent's execution.  Under that protocol
+> a baseline / bash_only / onlycode agent could read the held-out assertions
+> directly via `cat tests/test_added.py`, `ls tests/`, or `grep -r`, even
+> after #226 closed the `git diff` vector.  Numbers here therefore conflate
+> "agent fixed the bug" with "agent read the leaked tests" and must NOT be
+> compared against post-#287 runs.  The legacy run directories have been
+> moved to `runs/swebench/_legacy_pre_287/` for archival.
+>
+> Post-#287 numbers will be reported in a separate document once the
+> corrected protocol is re-run end-to-end.
+
 Status as of 2026-05-10. Companion to [BATCHED_RUN_SWE.md](BATCHED_RUN_SWE.md).
 
 ## Scope

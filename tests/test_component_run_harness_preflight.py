@@ -8,14 +8,19 @@ Boundary: ``swebench/run.py._run_arm`` calls two real functions from
 
 Both functions are exercised as their *real* harness implementations — no
 harness-level doubles.  The only seam doubled is ``subprocess.run`` inside
-the harness module (an I/O boundary), and the git/Claude/test-runner I/O
-boundaries in ``run.py`` (``git_reset``, ``run_claude``, ``run_tests``).
+the harness module (an I/O boundary), and the git/runner/test-runner I/O
+boundaries in ``run.py`` (``git_reset``, the stub ``AgentRunner``, ``run_tests``).
 
 These tests assert the cross-module contract that:
   - when preflight returns False via the real harness path, ``_run_arm``
     writes ``env_fail`` to both output files and returns ``"env_fail"``.
   - when preflight returns True via the real harness path, ``_run_arm``
-    continues past the pre-flight gate and invokes the agent.
+    continues past the pre-flight gate and finishes ``run_tests``.
+
+Under the Issue #287 protocol, ``apply_test_patch`` and the pre-flight
+collect run *after* the agent terminates, so each test installs a stub
+``AgentRunner`` whose ``invoke()`` is a no-op — without one, ``_run_arm``
+would try to spawn ``/usr/bin/claude`` before pre-flight is reached.
 
 The critical difference from the unit tests in ``test_run_preflight.py``
 (which double ``run_mod.run_preflight_collect`` entirely) is that *here*
@@ -81,6 +86,30 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
+class _NoopRunner:
+    """Stub AgentRunner for tests that don't care about the agent transcript.
+
+    Issue #287 moved ``apply_test_patch`` + the pre-flight collect to *after*
+    the agent runs, so tests reaching ``_run_arm`` need an invoke() seam that
+    finishes without spawning a real binary.
+    """
+
+    surface = "claude_code"
+
+    def build_tools_flags(self, arm, mcp_config_path):
+        return []
+
+    def get_version(self, binary):
+        return "stub"
+
+    def invoke(self, **kw):  # noqa: D401 — protocol stub
+        # No-op: don't append anything; tests assert verdict + file shape only.
+        pass
+
+    def extract_metadata(self, path):
+        return (None, None)
+
+
 # ---------------------------------------------------------------------------
 # Boundary 1: real harness.run_preflight_collect returns False → env_fail
 # ---------------------------------------------------------------------------
@@ -102,6 +131,10 @@ class TestRunArmPrefailViaRealHarness:
         We double subprocess.run inside the harness to return 'no tests ran'
         (exit 5).  Everything else — the harness preflight logic, the run.py
         env_fail write path — runs for real.
+
+        Under Issue #287 the pre-flight runs *after* ``runner.invoke()``,
+        so the test installs a ``_NoopRunner`` to keep ``_run_arm`` from
+        spawning a real Claude binary before reaching the pre-flight gate.
         """
         repo_dir, venv_dir, results_dir = _make_dirs(tmp_path)
 
@@ -123,11 +156,7 @@ class TestRunArmPrefailViaRealHarness:
 
         # Double the I/O seams in run.py that are not part of this boundary.
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-
-        def _boom_run_claude(**kw):  # pragma: no cover
-            raise AssertionError("run_claude must not be called when preflight fails")
-
-        monkeypatch.setattr(run_mod, "run_claude", _boom_run_claude)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = _make_problem(tmp_path)
 
@@ -141,6 +170,7 @@ class TestRunArmPrefailViaRealHarness:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         # _run_arm must return "env_fail".
@@ -175,7 +205,7 @@ class TestRunArmPrefailViaRealHarness:
 
         monkeypatch.setattr(_harness_mod.subprocess, "run", _fake_subprocess_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = _make_problem(tmp_path)
         run_mod._run_arm(
@@ -188,6 +218,7 @@ class TestRunArmPrefailViaRealHarness:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         jsonl = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
@@ -213,7 +244,7 @@ class TestRunArmPrefailViaRealHarness:
 
         monkeypatch.setattr(_harness_mod.subprocess, "run", _fake_subprocess_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = _make_problem(tmp_path)
         run_mod._run_arm(
@@ -226,6 +257,7 @@ class TestRunArmPrefailViaRealHarness:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         test_txt = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
@@ -261,11 +293,7 @@ class TestRunArmEnvFailAgentBinaryPropagation:
         monkeypatch.setattr(
             run_mod, "run_preflight_collect", lambda **kw: (False, "0 items collected")
         )
-
-        def _boom_run_claude(**kw):  # pragma: no cover
-            raise AssertionError("run_claude must not be called when preflight fails")
-
-        monkeypatch.setattr(run_mod, "run_claude", _boom_run_claude)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = _make_problem(tmp_path)
         verdict = run_mod._run_arm(
@@ -278,6 +306,7 @@ class TestRunArmEnvFailAgentBinaryPropagation:
             agent_binary="/fake/binary",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         assert verdict == "env_fail"
@@ -299,7 +328,7 @@ class TestRunArmEnvFailAgentBinaryPropagation:
         monkeypatch.setattr(
             run_mod, "run_preflight_collect", lambda **kw: (False, "no tests ran\n")
         )
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = _make_problem(tmp_path)
         run_mod._run_arm(
@@ -312,6 +341,7 @@ class TestRunArmEnvFailAgentBinaryPropagation:
             agent_binary="/fake/binary",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         test_txt = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
@@ -354,7 +384,7 @@ class TestRunArmResolverFeedsIntoPreflightViaRealHarness:
 
         monkeypatch.setattr(_harness_mod.subprocess, "run", _recording_subprocess_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
-        monkeypatch.setattr(run_mod, "run_claude", lambda **kw: None)
+        monkeypatch.setattr(run_mod, "run_tests", lambda **kw: "FAIL")
 
         problem = Problem(
             instance_id="django__django-16379",
@@ -377,6 +407,7 @@ class TestRunArmResolverFeedsIntoPreflightViaRealHarness:
             agent_binary="/usr/bin/claude",
             mcp_config_path=str(tmp_path / "mcp.json"),
             root=tmp_path,
+            runner=_NoopRunner(),
         )
 
         # The resolver must not have triggered a subprocess.run --collect-only call

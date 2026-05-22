@@ -596,21 +596,26 @@ def test_seaborn_3069_3202_flit_pins() -> None:
     )
 
 
-def test_sklearn_11596_has_source_seed() -> None:
-    """sklearn-11596 needs a source-seed patch creating a stub for
-    ``sklearn.utils._show_versions``. The test patch imports symbols from
-    that module which the agent is expected to create. (Issue #266.)
+def test_sklearn_agent_authored_modules_have_no_source_seed() -> None:
+    """Under Issue #287, modules the agent is expected to author must NOT be
+    pre-seeded.  The test patch is held back until after the agent runs, so
+    pre-stubbing the agent's deliverable would defeat the evaluation:
+
+    - sklearn-10427: ``sklearn.externals._pilutil`` (Issue #266).
+    - sklearn-11596: ``sklearn.utils._show_versions`` (Issue #266).
+
+    Both legacy seed entries were removed during the #287 audit.  This test
+    is the canary that catches anyone re-adding them.
     """
     from swebench.harness import _INSTANCE_SOURCE_SEEDS
-    from swebench import repo_root
-    seed_rel = _INSTANCE_SOURCE_SEEDS.get("scikit-learn__scikit-learn-11596")
-    assert seed_rel is not None, "11596 must have a source-seed registered"
-    seed_path = repo_root() / seed_rel
-    assert seed_path.is_file(), f"source seed not found at {seed_path}"
-    text = seed_path.read_text()
-    # Must define the three symbols imported by the test patch.
-    for symbol in ("_get_sys_info", "_get_deps_info", "show_versions"):
-        assert symbol in text, f"source seed missing symbol {symbol}"
+    for instance_id in (
+        "scikit-learn__scikit-learn-10427",
+        "scikit-learn__scikit-learn-11596",
+    ):
+        assert _INSTANCE_SOURCE_SEEDS.get(instance_id) is None, (
+            f"{instance_id} must NOT have a source seed under Issue #287 — "
+            "the agent is expected to author the missing module."
+        )
 
 
 def test_matplotlib_26160_instance_pins() -> None:

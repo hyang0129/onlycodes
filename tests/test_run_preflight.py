@@ -1,9 +1,12 @@
 """Tests for the pre-flight ``pytest --collect-only`` integration in run.py.
 
-Issue #238 / #234.  The pre-flight check must:
-  - Run after ``apply_test_patch`` and before ``run_claude``.
-  - Record ``env_fail`` and skip the agent when zero items collect.
+Issue #238 / #234 (and Issue #287).  The pre-flight check must:
+  - Run after ``apply_test_patch`` — both now happen *post*-agent (#287).
+  - Record ``env_fail`` and skip ``run_tests`` when zero items collect.
   - Mark the run as a "complete" triple for ``--resume`` purposes.
+  - Preserve the agent transcript already appended to the .jsonl on env_fail
+    (#287 ordering change): only the meta record on line 1 gets its
+    ``verdict`` field updated to ``env_fail``.
 """
 
 from __future__ import annotations
@@ -84,11 +87,16 @@ def _make_problem(tmp_path: Path) -> Problem:
 
 
 def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Path):
-    """When pre-flight reports 0 items, _run_arm must skip the agent and
-    write ``env_fail`` to both the jsonl and the test file."""
+    """When pre-flight reports 0 items, _run_arm must skip ``run_tests`` and
+    write ``env_fail`` to both the jsonl and the test file.
+
+    Under Issue #287 the agent runs *before* pre-flight, so the agent
+    transcript must be preserved in the .jsonl; only the meta record on
+    line 1 gets its ``verdict`` field flipped to ``env_fail``.
+    """
     from swebench import run as run_mod
 
-    # Pre-flight returns False (0 items collected).
+    # Pre-flight returns False (0 items collected) post-agent.
     monkeypatch.setattr(
         run_mod,
         "run_preflight_collect",
@@ -100,15 +108,37 @@ def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Pat
         "resolve_test_node_ids",
         lambda cmd, **kw: cmd,
     )
-    # If git_reset or run_claude is called we want the test to fail.
     monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
 
-    def _boom(*a, **kw):  # pragma: no cover
+    # ``run_tests`` must not be invoked when post-agent preflight fails.
+    def _boom_run_tests(**kw):  # pragma: no cover
         raise AssertionError(
-            "run_claude must not be invoked when pre-flight fails"
+            "run_tests must not be invoked when post-agent pre-flight fails"
         )
 
-    monkeypatch.setattr(run_mod, "run_claude", _boom)
+    monkeypatch.setattr(run_mod, "run_tests", _boom_run_tests)
+
+    # Stub runner that appends a fake transcript line, simulating a real agent.
+    class _TranscriptRunner:
+        surface = "claude_code"
+
+        def build_tools_flags(self, arm, cfg):
+            return []
+
+        def get_version(self, binary):
+            return "test"
+
+        def extract_metadata(self, path):
+            return (None, None)
+
+        def invoke(self, **kw):
+            # Append a fake transcript record after the meta line, so the
+            # test can verify it survives the env_fail rewrite.
+            with open(kw["result_file"], "a") as out:
+                out.write(
+                    '{"type":"assistant","content":"thinking"}\n'
+                    '{"type":"result","total_cost_usd":0.0,"num_turns":1}\n'
+                )
 
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
@@ -129,6 +159,7 @@ def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Pat
         agent_binary="/usr/bin/claude",
         mcp_config_path=str(tmp_path / "mcp.json"),
         root=tmp_path,
+        runner=_TranscriptRunner(),
     )
 
     assert verdict == "env_fail"
@@ -141,11 +172,16 @@ def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Pat
 
     jsonl = results_dir / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
     assert jsonl.exists()
-    # Meta record present and well-formed JSON.
+    # Meta record present and carries env_fail verdict (line 1).
     import json
-    first = json.loads(jsonl.read_text().splitlines()[0])
+    lines = jsonl.read_text().splitlines()
+    first = json.loads(lines[0])
     assert first["verdict"] == "env_fail"
     assert first["instance_id"] == INSTANCE
+    # Agent transcript still present after the meta line (#287 invariant).
+    assert any("assistant" in ln or "result" in ln for ln in lines[1:]), (
+        f"Agent transcript was wiped on env_fail; lines: {lines}"
+    )
 
 
 def test_run_arm_proceeds_when_preflight_passes(monkeypatch, tmp_path: Path):

@@ -205,8 +205,11 @@ def _run_arm(
     if needs_editable_reinstall:
         reinstall_editable(venv_dir, repo_dir)
 
-    # Apply source seed patch (if any) before the test patch so that
-    # test-patch imports of agent-created modules succeed at pre-flight time.
+    # Apply source seed patch (if any) before the agent runs. These patches
+    # are reserved for pre-agent *environment* fixes (e.g. Python 3.9 compat
+    # for astropy, missing deprecation shims for sphinxcontrib-* imports) —
+    # they do NOT seed modules the agent is expected to author. See
+    # ``_INSTANCE_SOURCE_SEEDS`` in harness.py for the per-instance rationale.
     seed_rel = _INSTANCE_SOURCE_SEEDS.get(problem.instance_id)
     if seed_rel:
         seed_path = str(root / seed_rel)
@@ -215,77 +218,14 @@ def _run_arm(
         else:
             _echo(f"  [{arm} run {run_idx}] WARNING: source seed patch failed to apply.")
 
-    # Apply test patch
-    if problem.patch_file:
-        patch_path = str(root / problem.patch_file)
-        if apply_test_patch(repo_dir, patch_path):
-            _echo(f"  [{arm} run {run_idx}] Applied test patch.")
-        else:
-            _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
-
-    # ------------------------------------------------------------------
-    # Pre-flight: pytest --collect-only (Issue #238 / #234)
-    # ------------------------------------------------------------------
-    # Resolve the test command first (sympy bare-name → file::test node IDs)
-    # so the collection check sees the same final command the test run will
-    # use.  If zero items collect, record env_fail and skip the agent
-    # entirely — there is nothing for the agent to fix, and counting this
-    # as FAIL silently corrupts pass-rate aggregates.
-    resolved_test_cmd = resolve_test_node_ids(
-        problem.test_cmd,
-        repo_dir=repo_dir,
-        venv_dir=venv_dir,
-        repo_slug=problem.repo_slug,
-    )
-    collected_ok, preflight_output = run_preflight_collect(
-        repo_dir=repo_dir,
-        test_cmd=resolved_test_cmd,
-        venv_dir=venv_dir,
-        extra_env=_INSTANCE_ENV.get(problem.instance_id),
-        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
-    )
-    if not collected_ok:
-        _echo(
-            f"  [{arm} run {run_idx}] Pre-flight collect FAILED — recording env_fail "
-            f"(0 items collected; skipping agent)."
-        )
-        result_file = os.path.join(
-            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl"
-        )
-        # Write a minimal meta record so downstream tools (analyze, summary,
-        # _is_triple_complete) see a properly-shaped jsonl file.
-        _meta_surface = runner.surface if runner is not None else "claude_code"
-        _meta_record: dict[str, object] = {
-            "type": "meta",
-            "instance_id": problem.instance_id,
-            "arm": arm,
-            "run": run_idx,
-            "agent_surface": _meta_surface,
-            "agent_binary": agent_binary,
-            "verdict": "env_fail",
-            "reason": "pytest --collect-only returned 0 items",
-        }
-        # Pin the model for codex_cli runs so extract_metadata can price the
-        # (empty) usage record and so the result file is self-describing.
-        if _meta_surface == "codex_cli" and codex_model is not None:
-            _meta_record["model"] = codex_model
-        with open(result_file, "w") as _meta_f:
-            _meta_f.write(json.dumps(_meta_record) + "\n")
-        test_result_file = os.path.join(
-            results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
-        )
-        with open(test_result_file, "w") as out:
-            out.write(
-                "# pre-flight pytest --collect-only (Issue #238) — "
-                "0 items collected; agent was not invoked.\n"
-            )
-            if preflight_output:
-                out.write("\n--- pytest --collect-only output ---\n")
-                out.write(preflight_output)
-                out.write("\n--- end ---\n")
-            out.write("\nenv_fail\n")
-        _echo(f"  [{arm} run {run_idx}] Verdict: env_fail")
-        return "env_fail"
+    # NOTE: ``apply_test_patch`` and the pre-flight ``pytest --collect-only``
+    # check are deliberately deferred until *after* the agent finishes (Issue
+    # #287).  Applying the test patch pre-agent left the hidden test files
+    # readable on disk via ``cat tests/test_added.py`` / ``ls tests/`` /
+    # ``grep -r``, defeating the #226 integrity invariant. Under the new
+    # protocol the agent never sees the test patch — it operates on the same
+    # tree the upstream developer faced — and the harness applies + collects
+    # post-agent so PASS/FAIL still reflects the held-out tests.
 
     # Build prompt from problem_statement — eliminates hardcoded text bug
     venv_python = os.path.join(venv_dir, "bin", "python")
@@ -392,6 +332,78 @@ def _run_arm(
     test_result_file = os.path.join(
         results_dir, f"{problem.instance_id}_{arm}_run{run_idx}_test.txt"
     )
+
+    # ------------------------------------------------------------------
+    # POST-AGENT: apply test patch (Issue #287)
+    # ------------------------------------------------------------------
+    # Applied only now, after the agent has terminated. Holding the patch
+    # until this point keeps tests/test_*.py invisible to ``cat`` / ``ls`` /
+    # ``grep -r`` during the agent's run, closing the leak vector that the
+    # #226 fix did not cover.
+    if problem.patch_file:
+        patch_path = str(root / problem.patch_file)
+        if apply_test_patch(repo_dir, patch_path):
+            _echo(f"  [{arm} run {run_idx}] Applied test patch (post-agent).")
+        else:
+            _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
+
+    # ------------------------------------------------------------------
+    # POST-AGENT: pre-flight pytest --collect-only (Issue #238 / #287)
+    # ------------------------------------------------------------------
+    # Moved alongside ``apply_test_patch`` because the pre-flight must see
+    # the test-patched tree. If zero items collect, record ``env_fail`` and
+    # skip ``run_tests``; the agent's transcript is preserved in the .jsonl.
+    resolved_test_cmd = resolve_test_node_ids(
+        problem.test_cmd,
+        repo_dir=repo_dir,
+        venv_dir=venv_dir,
+        repo_slug=problem.repo_slug,
+    )
+    collected_ok, preflight_output = run_preflight_collect(
+        repo_dir=repo_dir,
+        test_cmd=resolved_test_cmd,
+        venv_dir=venv_dir,
+        extra_env=_INSTANCE_ENV.get(problem.instance_id),
+        extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
+    )
+    if not collected_ok:
+        _echo(
+            f"  [{arm} run {run_idx}] Pre-flight collect FAILED (post-agent) — "
+            "recording env_fail (0 items collected; skipping run_tests)."
+        )
+        # Update the meta record on line 1 of the .jsonl to carry the
+        # env_fail verdict + reason, preserving the agent transcript that
+        # follows it. Downstream tools (analyze, summary) keep reading the
+        # first meta line and now see verdict=env_fail there.
+        try:
+            with open(result_file) as _rf:
+                _lines = _rf.readlines()
+        except OSError:
+            _lines = []
+        if _lines:
+            try:
+                _meta_loaded = json.loads(_lines[0])
+            except json.JSONDecodeError:
+                _meta_loaded = dict(_meta_record)
+        else:
+            _meta_loaded = dict(_meta_record)
+        _meta_loaded["verdict"] = "env_fail"
+        _meta_loaded["reason"] = "pytest --collect-only returned 0 items (post-agent)"
+        _lines[:1] = [json.dumps(_meta_loaded) + "\n"]
+        with open(result_file, "w") as _wf:
+            _wf.writelines(_lines)
+        with open(test_result_file, "w") as out:
+            out.write(
+                "# post-agent pytest --collect-only (Issue #287 / #238) — "
+                "0 items collected after applying test patch.\n"
+            )
+            if preflight_output:
+                out.write("\n--- pytest --collect-only output ---\n")
+                out.write(preflight_output)
+                out.write("\n--- end ---\n")
+            out.write("\nenv_fail\n")
+        _echo(f"  [{arm} run {run_idx}] Verdict: env_fail ({wall_secs}s wall)")
+        return "env_fail"
 
     _echo(f"  [{arm} run {run_idx}] Running test suite...")
 
