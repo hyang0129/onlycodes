@@ -340,12 +340,59 @@ def _run_arm(
     # until this point keeps tests/test_*.py invisible to ``cat`` / ``ls`` /
     # ``grep -r`` during the agent's run, closing the leak vector that the
     # #226 fix did not cover.
+    #
+    # ``apply_test_patch`` force-resets the patch's modified files to HEAD
+    # and removes any agent-created file at the patch's "new file" paths
+    # before invoking ``git apply``, so the typical contamination case (an
+    # agent that also edited a test file) lands cleanly.  If apply still
+    # fails — e.g. the agent created a colliding file we couldn't remove —
+    # we score the run as FAIL right here rather than trusting ``run_tests``
+    # against a tree that does not contain the held-out assertions.
     if problem.patch_file:
         patch_path = str(root / problem.patch_file)
         if apply_test_patch(repo_dir, patch_path):
             _echo(f"  [{arm} run {run_idx}] Applied test patch (post-agent).")
         else:
-            _echo(f"  [{arm} run {run_idx}] WARNING: test patch failed to apply.")
+            _echo(
+                f"  [{arm} run {run_idx}] Test patch FAILED to apply post-agent — "
+                "recording FAIL (the tree does not contain the held-out tests; "
+                "run_tests would be measuring the agent's own assertions)."
+            )
+            # Update the meta record's verdict + reason in place, mirroring
+            # the env_fail handler. Agent transcript on subsequent lines is
+            # preserved.
+            try:
+                with open(result_file) as _rf:
+                    _lines = _rf.readlines()
+            except OSError:
+                _lines = []
+            if _lines:
+                try:
+                    _meta_loaded = json.loads(_lines[0])
+                except json.JSONDecodeError:
+                    _meta_loaded = dict(_meta_record)
+            else:
+                _meta_loaded = dict(_meta_record)
+            _meta_loaded["verdict"] = "FAIL"
+            _meta_loaded["reason"] = (
+                "post-agent git apply failed; agent edits conflicted with the "
+                "held-out test patch"
+            )
+            _lines[:1] = [json.dumps(_meta_loaded) + "\n"]
+            with open(result_file, "w") as _wf:
+                _wf.writelines(_lines)
+            with open(test_result_file, "w") as out:
+                out.write(
+                    "# Test patch failed to apply post-agent (Issue #287).\n"
+                    "# The agent's edits conflicted with the held-out hunks even\n"
+                    "# after force-resetting the patch's modified files to HEAD.\n"
+                    "# We do NOT run pytest against this tree because it does not\n"
+                    "# contain the held-out assertions — any PASS would be\n"
+                    "# measuring the agent's own tests, not the upstream contract.\n"
+                    "\nFAIL\n"
+                )
+            _echo(f"  [{arm} run {run_idx}] Verdict: FAIL ({wall_secs}s wall)")
+            return "FAIL"
 
     # ------------------------------------------------------------------
     # POST-AGENT: pre-flight pytest --collect-only (Issue #238 / #287)

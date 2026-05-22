@@ -285,3 +285,124 @@ def test_apply_test_patch_leaves_empty_git_diff(tmp_path: Path) -> None:
     # History should now have exactly 2 commits (orphan base + test patch commit).
     count = _git(repo, "rev-list", "--all", "--count").stdout.strip()
     assert count == "2"
+
+
+def test_apply_test_patch_resets_agent_edits_to_modified_file(tmp_path: Path) -> None:
+    """Issue #287 contamination guard.
+
+    Under the post-agent ordering, the agent might edit the same test file
+    the held-out patch modifies.  ``apply_test_patch`` must force-reset
+    those files to HEAD before ``git apply`` so the patch lands cleanly —
+    otherwise the run would either silently fail-to-apply or, worse, score
+    PASS against a tree that doesn't contain the held-out assertions.
+    """
+    repo = _make_repo(tmp_path)
+    # Commit a file with a known body, then orphan-strip so HEAD is the only commit.
+    (Path(repo) / "test_target.py").write_text(
+        "def test_existing():\n    assert True\n"
+    )
+    _git(repo, "add", "test_target.py")
+    _git(repo, "commit", "-q", "-m", "add target")
+    strip_git_history(repo)
+
+    # The held-out patch ADDS an assertion to test_existing.
+    patch_path = tmp_path / "tests.patch"
+    patch_path.write_text(
+        "diff --git a/test_target.py b/test_target.py\n"
+        "--- a/test_target.py\n"
+        "+++ b/test_target.py\n"
+        "@@ -1,2 +1,3 @@\n"
+        " def test_existing():\n"
+        "     assert True\n"
+        "+    assert 42 == 42  # held-out assertion\n"
+    )
+
+    # Simulate the agent editing the same file with its own (conflicting) version.
+    (Path(repo) / "test_target.py").write_text(
+        "def test_existing():\n    pass  # I am the agent, I rewrote this\n"
+    )
+    # Important: don't commit the agent's edit; in the real harness the
+    # agent's edits are unstaged at the point apply_test_patch runs.
+
+    assert apply_test_patch(repo, str(patch_path)) is True, (
+        "apply_test_patch must reset the agent's conflicting edit before "
+        "git apply and land the patch successfully."
+    )
+
+    # The committed tree must reflect the held-out patch, not the agent's edit.
+    final = (Path(repo) / "test_target.py").read_text()
+    assert "held-out assertion" in final, (
+        f"Patch did not land — file contents: {final!r}"
+    )
+    assert "I am the agent" not in final, (
+        f"Agent's contamination survived — file contents: {final!r}"
+    )
+    # Working tree must be clean (patch was committed, not left as a diff).
+    assert _git(repo, "diff").stdout == ""
+    assert _git(repo, "diff", "HEAD").stdout == ""
+
+
+def test_apply_test_patch_removes_agent_created_file_collision(tmp_path: Path) -> None:
+    """If the patch creates a new file (``--- /dev/null``) and the agent
+    happened to write a file at the same path, ``git apply`` would normally
+    fail with "already exists in working directory".  ``apply_test_patch``
+    must rm the colliding file so the patch can land.
+    """
+    repo = _make_repo(tmp_path)
+    strip_git_history(repo)
+
+    # Patch creates tests/new_test.py from scratch.
+    patch_path = tmp_path / "tests.patch"
+    patch_path.write_text(
+        "diff --git a/tests/new_test.py b/tests/new_test.py\n"
+        "new file mode 100644\n"
+        "index 0000000..aaaaaaa\n"
+        "--- /dev/null\n"
+        "+++ b/tests/new_test.py\n"
+        "@@ -0,0 +1,2 @@\n"
+        "+def test_new():\n"
+        "+    assert True\n"
+    )
+
+    # Agent created a file at the same path with different content.
+    (Path(repo) / "tests").mkdir(exist_ok=True)
+    (Path(repo) / "tests" / "new_test.py").write_text("# agent's file\n")
+
+    assert apply_test_patch(repo, str(patch_path)) is True
+    final = (Path(repo) / "tests" / "new_test.py").read_text()
+    assert "test_new" in final
+    assert "agent's file" not in final
+
+
+def test_apply_test_patch_returns_false_when_unrecoverable(tmp_path: Path) -> None:
+    """If the patch references context the agent obliterated and reset can't
+    save us, ``apply_test_patch`` must return False so the caller can score
+    the run as FAIL rather than trust a contaminated tree.
+
+    Construct an unrecoverable case: the patch creates ``tests/`` as a file,
+    but the agent already created ``tests/`` as a directory containing other
+    files — ``os.remove`` will refuse a non-empty directory.
+    """
+    repo = _make_repo(tmp_path)
+    strip_git_history(repo)
+
+    # Patch creates a file at path "tests".
+    patch_path = tmp_path / "tests.patch"
+    patch_path.write_text(
+        "diff --git a/tests b/tests\n"
+        "new file mode 100644\n"
+        "index 0000000..aaaaaaa\n"
+        "--- /dev/null\n"
+        "+++ b/tests\n"
+        "@@ -0,0 +1 @@\n"
+        "+held-out content\n"
+    )
+    # Agent created "tests" as a directory with an unrelated file inside,
+    # so os.remove cannot clear the collision.
+    (Path(repo) / "tests").mkdir()
+    (Path(repo) / "tests" / "junk.py").write_text("# unrelated\n")
+
+    assert apply_test_patch(repo, str(patch_path)) is False, (
+        "apply_test_patch must return False when collision cannot be cleared, "
+        "so the caller knows to score the run as FAIL."
+    )
