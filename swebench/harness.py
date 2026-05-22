@@ -5,6 +5,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1356,6 +1357,70 @@ def run_preflight_collect(
     return False, proc.stdout + (("\n" + proc.stderr) if proc.stderr else "")
 
 
+# ---------------------------------------------------------------------------
+# Effective-pass classifier (Issue #273)
+# ---------------------------------------------------------------------------
+
+# Django runtests.py / stdlib unittest emit one terminal "Ran N test[s] in T.Ts".
+_UNITTEST_RAN_RE = re.compile(r"^Ran (\d+) tests? in [\d.]+s\s*$", re.MULTILINE)
+# Followed (when rc=0) by either "OK" or "OK (skipped=N[, expected_failures=K, ...])".
+_UNITTEST_OK_RE = re.compile(r"^OK(?:\s+\(([^)]*)\))?\s*$", re.MULTILINE)
+# pytest terminal summary: "===== <body> in <time> ====" or "===== no tests ran in <time> =====".
+_PYTEST_SUMMARY_RE = re.compile(
+    r"={2,}\s+(?P<body>.+?)\s+in\s+[\d.]+\s*\w*\s+={2,}\s*$",
+    re.MULTILINE,
+)
+
+
+def _classify_test_result(output: str) -> tuple[bool, str | None]:
+    """Decide whether *output* reflects at least one actually-executed, non-skipped test.
+
+    Returns ``(effective_pass, reason_if_not)``.
+
+    Recognises unittest and pytest terminal output.  Unknown formats fall through
+    to ``(True, None)`` so the caller continues to trust ``returncode == 0`` —
+    this keeps non-pytest/-unittest invocations and stubbed unit tests unchanged.
+    """
+    # Pick the LAST matching summary in the output: a Django runtests.py invocation
+    # can print "Ran 0 tests" once before the real suite runs (e.g. when warnings
+    # configuration is probed), so the trailing summary is the authoritative one.
+    unittest_matches = list(_UNITTEST_RAN_RE.finditer(output))
+    if unittest_matches:
+        last = unittest_matches[-1]
+        ran = int(last.group(1))
+        if ran == 0:
+            return False, "unittest reported 0 tests run"
+        # Look for the OK line that follows the last "Ran ..." marker.
+        tail = output[last.end():]
+        ok = _UNITTEST_OK_RE.search(tail)
+        if ok:
+            attrs_str = ok.group(1) or ""
+            # parse "skipped=3, expected_failures=1" → {skipped:3, ...}
+            attrs = {
+                k: int(v)
+                for k, v in re.findall(r"(\w+)=(\d+)", attrs_str)
+            }
+            skipped = attrs.get("skipped", 0)
+            if skipped >= ran:
+                return False, f"unittest skipped all {ran} tests"
+        return True, None
+
+    pytest_matches = list(_PYTEST_SUMMARY_RE.finditer(output))
+    if pytest_matches:
+        body = pytest_matches[-1].group("body").strip()
+        if "no tests ran" in body:
+            return False, "pytest reported no tests ran"
+        # Treat any of these as "a real test executed and did not fail":
+        # passed, xpassed (unexpected pass — still an executed test signalling a fix).
+        # Failures/errors would have set returncode != 0 already; we only reach here on rc=0.
+        has_passed = re.search(r"\b(\d+)\s+(passed|xpassed)\b", body)
+        if not has_passed:
+            return False, f"pytest summary has no passed tests ({body!r})"
+        return True, None
+
+    return True, None
+
+
 def run_tests(
     *,
     repo_dir: str,
@@ -1419,9 +1484,27 @@ def run_tests(
             env=env,
         )
 
-    verdict = "PASS" if proc.returncode == 0 else "FAIL"
+    if proc.returncode != 0:
+        verdict = "FAIL"
+        downgrade_note: str | None = None
+    else:
+        try:
+            captured = Path(result_file).read_text(errors="replace")
+        except OSError:
+            captured = ""
+        effective, reason = _classify_test_result(captured)
+        if effective:
+            verdict = "PASS"
+            downgrade_note = None
+        else:
+            verdict = "FAIL"
+            downgrade_note = (
+                f"[harness] returncode=0 but {reason}; scoring FAIL (Issue #273)"
+            )
 
     with open(result_file, "a") as out:
+        if downgrade_note:
+            out.write(f"\n{downgrade_note}\n")
         out.write(f"\n{verdict}\n")
 
     return verdict
