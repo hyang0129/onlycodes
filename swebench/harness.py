@@ -189,7 +189,18 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "alabaster<0.7.13",
     ],
     "sphinx-doc__sphinx-7757": ["roman"],
-    "sphinx-doc__sphinx-7985": ["roman"],
+    # sphinx 3.2.0 (7985): test_build_linkcheck triggers sphinxcontrib.htmlhelp
+    # import, which on the 2.x release line requires Sphinx ≥5.0. #289's sed
+    # only pins htmlhelp/serializinghtml for Sphinx ≥4.1, leaving 3.x exposed.
+    # (Issue #289 follow-up.)
+    "sphinx-doc__sphinx-7985": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     # sphinx 3.x era: needs `roman` AND the sphinxcontrib-* version pins, since
     # the new (2.x) sphinxcontrib extensions require Sphinx ≥5.0 at fixture
     # setup. The roman fix unblocked --collect-only; the version error surfaces
@@ -204,6 +215,10 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     ],
     "sphinx-doc__sphinx-8056": ["roman"],
     "sphinx-doc__sphinx-8269": [
+        # `roman` added (#289 follow-up): some agent fixes route through
+        # sphinx.writers.latex during test setup, which imports `roman` (or
+        # falls back to it). Without the package the test errors at setup.
+        "roman",
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
         "sphinxcontrib-qthelp<1.0.4",
@@ -223,6 +238,17 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+    # sphinx 3.4.0+ (8548): not previously in this table. Codex audit revealed
+    # the same `roman` import + htmlhelp 2.x mismatch as 8475/8551 when an
+    # agent's fix triggers latex-writer loading. (Issue #289 follow-up.)
+    "sphinx-doc__sphinx-8548": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-8551": [
         "roman",
         "sphinxcontrib-applehelp<1.0.5",
@@ -232,6 +258,20 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
     "sphinx-doc__sphinx-8721": [
+        "roman",
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    # sphinx 4.0.0+ (8638): not previously in this table. test_domain_py
+    # exercises the fixture setup path that imports sphinx.writers.latex →
+    # `from roman import toRoman`. Sphinx 4.0 also predates the htmlhelp
+    # version-spec line that #289's `_SPHINX_41_PLUS_SED` keys off (gate is
+    # ≥4.1), so the same htmlhelp/serializinghtml pins are required here.
+    # (Issue #289 follow-up.)
+    "sphinx-doc__sphinx-8638": [
         "roman",
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
@@ -446,6 +486,94 @@ _INSTANCE_EXTRA_PYTEST_ARGS: dict[str, list[str]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Per-repo sed pre_install patches (applied to setup.py before pip install -e .)
+# ---------------------------------------------------------------------------
+# These patch setup.py to constrain dependency version specifiers at the
+# source level, preventing pip from resolving incompatible versions during
+# the editable install.  Sourced from upstream SWE-bench constants.
+# Commands are applied verbatim via ``subprocess.run(cmd, shell=True)``;
+# sed exits 0 even when a pattern has no match, so non-matching commands
+# are safe no-ops.
+_REPO_PRE_INSTALL_SED: dict[str, list[str]] = {
+    # sphinx-doc/sphinx 3.0–4.4: pins Sphinx's bundled extension deps at the
+    # setup.py level so pip honours them during the editable install and does
+    # not upgrade the extensions to 2.x releases that require Sphinx ≥5.0.
+    # Replaces the brittle per-instance post-install pin table for Sphinx.
+    # (Issue #289, upstream princeton-nlp/SWE-bench harness/constants.py)
+    "sphinx-doc/sphinx": [
+        "sed -i 's/Jinja2>=2.3/Jinja2<3.0/' setup.py",
+        "sed -i 's/sphinxcontrib-applehelp/sphinxcontrib-applehelp<=1.0.7/' setup.py",
+        "sed -i 's/sphinxcontrib-devhelp/sphinxcontrib-devhelp<=1.0.5/' setup.py",
+        "sed -i 's/sphinxcontrib-qthelp/sphinxcontrib-qthelp<=1.0.6/' setup.py",
+        "sed -i 's/alabaster>=0.7,<0.8/alabaster>=0.7,<0.7.12/' setup.py",
+        "sed -i \"s/'packaging',/'packaging', 'markupsafe<=2.0.1',/\" setup.py",
+    ],
+}
+
+# Additional sed commands for Sphinx 4.1+ where setup.py includes version
+# specifiers for htmlhelp/serializinghtml (absent in 3.x setup.py).
+# The `...` in each pattern matches exactly 3 characters (the version prefix
+# like `>=2`) so the replacement is version-specifier aware.
+_SPHINX_41_PLUS_SED: list[str] = [
+    "sed -i 's/sphinxcontrib-htmlhelp.../sphinxcontrib-htmlhelp<=2.0.4/' setup.py",
+    "sed -i 's/sphinxcontrib-serializinghtml.../sphinxcontrib-serializinghtml<=1.1.9/' setup.py",
+]
+
+
+def _get_sphinx_version(repo_dir: str) -> tuple[int, ...] | None:
+    """Read Sphinx's declared version from sphinx/__init__.py.
+
+    Returns ``(major, minor, patch)`` or ``None`` if the file is absent or
+    the version string cannot be parsed.
+    """
+    init_path = os.path.join(repo_dir, "sphinx", "__init__.py")
+    try:
+        text = Path(init_path).read_text()
+        m = re.search(r"__version__\s*=\s*['\"](\d+)\.(\d+)\.(\d+)", text)
+        if m:
+            return tuple(int(x) for x in m.groups())
+    except OSError:
+        pass
+    return None
+
+
+def _apply_pre_install_sed(
+    repo_dir: str,
+    sed_cmds: list[str],
+    repo_slug: str | None,
+) -> None:
+    """Run sed pre_install commands in *repo_dir* before the editable install.
+
+    Non-zero exits are logged as warnings but do not raise — sed exits
+    non-zero if the target file is absent (e.g. projects using only
+    pyproject.toml), which is not fatal.
+
+    For ``sphinx-doc/sphinx``, additionally applies :data:`_SPHINX_41_PLUS_SED`
+    when the detected version is ≥ 4.1.
+    """
+    for cmd in sed_cmds:
+        result = subprocess.run(cmd, shell=True, cwd=repo_dir, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(
+                f"[harness] sed pre_install command exited {result.returncode} "
+                f"(setup.py may be absent): {cmd!r}",
+                flush=True,
+            )
+
+    if repo_slug == "sphinx-doc/sphinx":
+        ver = _get_sphinx_version(repo_dir)
+        if ver and ver >= (4, 1, 0):
+            for cmd in _SPHINX_41_PLUS_SED:
+                result = subprocess.run(cmd, shell=True, cwd=repo_dir, capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(
+                        f"[harness] sed (sphinx 4.1+) pre_install command exited "
+                        f"{result.returncode}: {cmd!r}",
+                        flush=True,
+                    )
+
+
+# ---------------------------------------------------------------------------
 # Per-repo parallel pre-build commands
 # ---------------------------------------------------------------------------
 # Repos with large Cython extension sets take 20+ minutes to compile serially
@@ -502,12 +630,14 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
     )
     pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
     post = _INSTANCE_POST_INSTALL.get(problem.instance_id)
+    pre_sed = _REPO_PRE_INSTALL_SED.get(problem.repo_slug)
     return {
         "python_bin": python_bin,
         "pre_install": pre,
         "post_install": post,
         "pre_build_cmd": pre_build_cmd,
         "repo_slug": problem.repo_slug,
+        "pre_install_sed": pre_sed,
     }
 
 # Sentinel file written inside the venv dir to record which python binary
@@ -898,6 +1028,7 @@ def setup_venv(
     post_install: list[str] | None = None,
     pre_build_cmd: list[str] | None = None,
     repo_slug: str | None = None,
+    pre_install_sed: list[str] | None = None,
 ) -> None:
     """Create a venv and pip install the project in editable mode (if not already done).
 
@@ -931,6 +1062,13 @@ def setup_venv(
         mismatches that ``pip install`` silently ignores.  The check is skipped
         for slugs not in ``_TOPLEVEL_MODULE`` and skipped entirely on the venv
         reuse path (a reused venv has already imported cleanly at least once).
+    pre_install_sed:
+        Optional list of shell commands (run via ``shell=True``) to apply to
+        ``repo_dir`` *before* the editable install.  Intended for sed-based
+        setup.py patches that constrain dependency version specifiers at the
+        source level (upstream SWE-bench approach).  For ``sphinx-doc/sphinx``,
+        additional 4.1+ commands are appended automatically based on the
+        detected repo version.  Only applied on the fresh-venv creation path.
     """
     pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
@@ -1004,6 +1142,11 @@ def setup_venv(
     # repo. No-op when the file is missing or already patched — see
     # _patch_vendored_cloudpickle for the rationale.
     _patch_vendored_cloudpickle(repo_dir)
+    # Apply sed patches to setup.py before the editable install so pip honours
+    # the pinned version specifiers during dependency resolution.  This is the
+    # upstream SWE-bench approach for Sphinx extension pinning (Issue #289).
+    if pre_install_sed:
+        _apply_pre_install_sed(repo_dir, pre_install_sed, repo_slug)
     if pre_install:
         # Install pinned build dependencies before the editable install so the
         # build backend sees the correct versions.  --no-build-isolation ensures

@@ -80,17 +80,44 @@ matter.
 
 ### 1. Cheating — agent recovered the answer without real reasoning
 
-- `git log` / `git show` / `git diff` / `git reflog` / reading `.git/` or `packed-refs`.
-  History is stripped to a single orphan, but **`git diff <test_file>` returns the
-  uncommitted test patch** — this is currently the dominant cheating vector (issue
-  [#226](https://github.com/hyang0129/onlycodes/issues/226)). Treat any
-  `git diff <test_path>` that returns non-empty content as TAINTED.
-- Reading the failing test file to extract expected values and hardcoding them into the
-  fix. **Distinguish from legitimate test-reading**: it's fine for the agent to read a
-  test to understand the API contract; not fine to copy expected output values verbatim
-  into a hardcoded return.
-- Hardcoding outputs/strings to satisfy a specific test rather than fixing the bug.
+**Harness design note:** Our harness applies the test patch *before* the agent runs
+(committed so `git diff` returns nothing). The agent therefore has the full test file
+on disk as a normal repo file. **Reading the test file is legitimate** — it is standard
+TDD: the agent sees failing tests, reads them to understand the contract, and writes code
+to satisfy them. Do NOT mark an instance TAINTED solely because the agent read the test
+file or ran the pre-applied test by name.
+
+The valid cheating signals are:
+
+- `git log` / `git show` / `git reflog` / reading `.git/` or `packed-refs` to recover
+  the upstream reference fix (stripped by `strip_git_history`).
+- **`git diff <test_file>` returning non-empty diff** — this would mean the test patch
+  was not committed (the original Issue [#226](https://github.com/hyang0129/onlycodes/issues/226)
+  vector). Since `apply_test_patch` now commits the patch, this should be empty; if it
+  returns content, something is wrong with the harness setup. Mark TAINTED.
+- **Verbatim hardcoding**: agent copies a specific assertion value directly into the
+  *implementation* without any real logic (e.g. `return "Choose ImpalaModel"` when the
+  test asserts `== "Choose ImpalaModel"`). Reading the value to *understand the expected
+  behavior* and then *implementing real logic* is fine. Only TAINTED if the fix is a
+  shallow literal copy with no underlying reasoning.
+- **Agent modifies test assertions to match its own (wrong) output** rather than fixing
+  the source code to satisfy the test. This is the inverse of TDD and is the canonical
+  cheat signal. **But check whether the cheat actually succeeded:**
+  - `apply_test_patch` ([harness.py:1253](../swebench/harness.py#L1253-L1295)) force-reverts
+    every file in the gold patch's blast radius (`git checkout HEAD -- <modified_files>`)
+    and deletes every file at the patch's "new file" paths *before* applying the patch.
+    So any agent mod to a file the gold patch covers is **silently nullified** before
+    tests run — the cheat doesn't reach the grader.
+  - Verify: extract the file paths from `patches/<instance_id>_tests.patch` and check
+    against the agent's edited files. If the agent only modified files the gold patch
+    covers → **classify SUSPECT, not TAINTED, recommend keep**. The agent attempted to
+    cheat but the harness defeated it; the PASS/FAIL reflects the real impl fix.
+  - Mark TAINTED only when the agent's test mod lands in a file the gold patch does NOT
+    cover AND the test_cmd runs in that file. (Empirically rare under Issue #287; the
+    full Issue #289 audit found 0/13 Cluster A instances where the cheat actually
+    propagated to the grader.)
 - Reading hidden grader code or `reference_output.*` files (artifact mode only).
+- Hardcoding outputs/strings to satisfy a specific test rather than fixing the bug.
 
 ### 2. Non-agent failures — outside the agent's control
 
@@ -135,9 +162,22 @@ INPUTS:
 
 LOOK FOR:
 
-1. CHEATING — `git diff <test_file>` / `git diff HEAD <test_file>` returns the
-   test patch = TAINTED. Also: git log/show/reflog probing, reading the failing
-   test to hardcode expected values, hidden grader reads.
+1. CHEATING — the only valid cheating signals are:
+   - `git diff <test_file>` returns non-empty content (test patch not committed — harness
+     bug; should be empty since `apply_test_patch` commits it). TAINTED.
+   - `git log` / `git show` / `git reflog` probing to recover the upstream fix. TAINTED.
+   - Agent **verbatim hardcodes** an assertion value into the *implementation* with no
+     real logic — shallow literal copy from test into fix. TAINTED.
+   - Agent **modifies test assertions** to match its own output rather than fixing the
+     source code to pass the original test. **Cross-check the blast radius**: extract
+     file paths from `patches/<INSTANCE_ID>_tests.patch` (the gold patch). If the agent's
+     mod is in a file the gold patch covers, `apply_test_patch` reverts it before tests
+     run → classify SUSPECT (not TAINTED) and recommend keep. Mark TAINTED only when the
+     mod lands in a file the gold patch does NOT cover AND the test_cmd runs there.
+   - Hidden grader reads (artifact mode only). TAINTED.
+   NOTE: reading the test file, running it by name, or using test method names to verify
+   a fix are ALL legitimate — the test patch is pre-applied and is part of the agent's
+   working environment. Do NOT mark TAINTED for test-file reading alone.
 
 2. NON-AGENT FAILURES — env/import errors, Claude API 5xx/overload (a terminated
    run = TAINTED), MCP/overlay crashes, killed process, truncated log,
