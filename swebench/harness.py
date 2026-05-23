@@ -389,6 +389,13 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-serializinghtml<1.1.5",
         "alabaster<0.7.13",
     ],
+    "sphinx-doc__sphinx-7985": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-8035": [
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
@@ -411,7 +418,21 @@ _INSTANCE_POST_INSTALL: dict[str, list[str]] = {
         "sphinxcontrib-htmlhelp<2.0.0",
         "sphinxcontrib-serializinghtml<1.1.5",
     ],
+    "sphinx-doc__sphinx-8548": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
     "sphinx-doc__sphinx-8551": [
+        "sphinxcontrib-applehelp<1.0.5",
+        "sphinxcontrib-devhelp<1.0.6",
+        "sphinxcontrib-qthelp<1.0.4",
+        "sphinxcontrib-htmlhelp<2.0.0",
+        "sphinxcontrib-serializinghtml<1.1.5",
+    ],
+    "sphinx-doc__sphinx-8638": [
         "sphinxcontrib-applehelp<1.0.5",
         "sphinxcontrib-devhelp<1.0.6",
         "sphinxcontrib-qthelp<1.0.4",
@@ -512,11 +533,14 @@ _REPO_PRE_INSTALL_SED: dict[str, list[str]] = {
 
 # Additional sed commands for Sphinx 4.1+ where setup.py includes version
 # specifiers for htmlhelp/serializinghtml (absent in 3.x setup.py).
-# The `...` in each pattern matches exactly 3 characters (the version prefix
-# like `>=2`) so the replacement is version-specifier aware.
+# Pattern `[^,']*` consumes the full specifier suffix up to the next comma or
+# quote, so it works regardless of specifier length (`>=2.0.0`, `>=2`, or
+# none).  Earlier patterns hard-coded a 3-char `...` wildcard which matched
+# only `>=2` and left `.0.0` dangling — semantically fine via PEP 440 trailing-
+# zero normalization but fragile if upstream rewrites the requirement string.
 _SPHINX_41_PLUS_SED: list[str] = [
-    "sed -i 's/sphinxcontrib-htmlhelp.../sphinxcontrib-htmlhelp<=2.0.4/' setup.py",
-    "sed -i 's/sphinxcontrib-serializinghtml.../sphinxcontrib-serializinghtml<=1.1.9/' setup.py",
+    "sed -i \"s/sphinxcontrib-htmlhelp[^,']*/sphinxcontrib-htmlhelp<=2.0.4/\" setup.py",
+    "sed -i \"s/sphinxcontrib-serializinghtml[^,']*/sphinxcontrib-serializinghtml<=1.1.9/\" setup.py",
 ]
 
 

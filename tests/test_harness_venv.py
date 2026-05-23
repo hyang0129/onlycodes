@@ -408,8 +408,11 @@ def test_sphinx_roman_module_instances_pin_roman() -> None:
         "sphinx-doc__sphinx-7985",
         "sphinx-doc__sphinx-8035",
         "sphinx-doc__sphinx-8056",
+        "sphinx-doc__sphinx-8269",
         "sphinx-doc__sphinx-8475",
+        "sphinx-doc__sphinx-8548",
         "sphinx-doc__sphinx-8551",
+        "sphinx-doc__sphinx-8638",
         "sphinx-doc__sphinx-8721",
     ):
         pins = _INSTANCE_PRE_INSTALL.get(instance_id)
@@ -421,10 +424,13 @@ def test_sphinx_roman_module_instances_pin_roman() -> None:
 
 _SPHINXCONTRIB_LOW_PIN_INSTANCES = (
     "sphinx-doc__sphinx-7748",
+    "sphinx-doc__sphinx-7985",
     "sphinx-doc__sphinx-8035",
     "sphinx-doc__sphinx-8269",
     "sphinx-doc__sphinx-8475",
+    "sphinx-doc__sphinx-8548",
     "sphinx-doc__sphinx-8551",
+    "sphinx-doc__sphinx-8638",
     "sphinx-doc__sphinx-8721",
     "sphinx-doc__sphinx-9229",
     "sphinx-doc__sphinx-9230",
