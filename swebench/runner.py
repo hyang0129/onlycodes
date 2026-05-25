@@ -559,6 +559,12 @@ _CODE_ONLY_DIRECTIVE = (
     "`execute_code` tool. Do NOT call `apply_patch`, `shell`, or any other "
     "tool. All file reads, file writes, and shell commands must be performed "
     "by running code through `execute_code`.\n\n"
+    "[LANGUAGE GUIDANCE] Prefer `language: \"python\"` for the main "
+    "computational work — parsing, analysis, file writes, verification — "
+    "because it runs in a persistent REPL keyed by cwd, so imports and "
+    "loaded data carry across calls. Use `language: \"bash\"` for quick "
+    "file inspection or shell utilities (`ls`, `head`, `grep`) where state "
+    "isn't useful.\n\n"
 )
 
 _BASH_ONLY_DIRECTIVE = (
