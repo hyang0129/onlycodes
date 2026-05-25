@@ -206,8 +206,9 @@ class _FakeCodexRunner:
 
 @pytest.mark.component
 class TestArtifactCliCodexPreflight:
-    """artifact_cli.artifact_run_command calls runner.preflight() for codex_cli
-    + code_only/bash_only arms, and skips it for tool_rich and claude_code.
+    """artifact_cli.artifact_run_command calls runner.preflight() only for codex_cli
+    + code_only (the only arm that registers the codebox MCP server), and skips it
+    for tool_rich, bash_only, and the claude_code surface.
 
     Uses the real artifact_cli CLI path (two real modules: artifact_cli + runner
     contract) with a runner stub whose preflight() is trackable.
@@ -252,12 +253,16 @@ class TestArtifactCliCodexPreflight:
             f"CLI output:\n{result.output}"
         )
 
-    def test_bash_only_arm_triggers_preflight(self, tmp_path, monkeypatch):
-        """artifact run --arms bash_only --agent-surface codex_cli must call preflight."""
+    def test_bash_only_arm_skips_preflight(self, tmp_path, monkeypatch):
+        """artifact run --arms bash_only --agent-surface codex_cli must NOT call preflight.
+
+        bash_only runs on Codex's native shell tool and does not register the
+        codebox MCP server, so the exec-server bundle is not required.
+        """
         fake = _FakeCodexRunner()
         result = self._invoke_artifact_run(tmp_path, monkeypatch, fake, arm="bash_only")
-        assert fake._preflight_called, (
-            f"preflight() was not called for codex_cli + bash_only. "
+        assert not fake._preflight_called, (
+            f"preflight() must not be called for codex_cli + bash_only. "
             f"CLI output:\n{result.output}"
         )
 

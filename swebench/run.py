@@ -853,8 +853,9 @@ def run_command(
         arm_list.append("bash_only")
 
     # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
-    # baseline runs the agent binary directly without the exec-server bundle.
-    _CODEX_EXEC_SERVER_ARMS = {"onlycode", "bash_only"}
+    # baseline and bash_only run on Codex's native shell/apply_patch surface
+    # and don't need the exec-server bundle.
+    _CODEX_EXEC_SERVER_ARMS = {"onlycode"}
     if agent_surface == "codex_cli" and any(a in _CODEX_EXEC_SERVER_ARMS for a in arm_list):
         try:
             runner.preflight(mcp_config_path)

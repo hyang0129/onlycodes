@@ -179,20 +179,24 @@ def test_claude_extract_metadata_no_cost_no_turns(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_write_codex_config_creates_valid_toml(tmp_path):
+    """Default (baseline) arm: native shell enabled, no codebox MCP block."""
     _write_codex_config(str(tmp_path), "/path/bundle.mjs", "/scratch", "0")
     toml_path = tmp_path / "config.toml"
     assert toml_path.is_file()
     content = toml_path.read_text()
-    assert "shell_tool = false" in content
-    assert "apply_patch_freeform = false" in content
+    # tool_rich/baseline grants native shell + freeform apply_patch.
+    assert "shell_tool = true" in content
+    assert "apply_patch_freeform = true" in content
     assert 'web_search = "disabled"' in content
-    assert "/path/bundle.mjs" in content
-    assert "/scratch" in content
-    assert 'ONLYCODES_PERSISTENT_KERNEL = "0"' in content
+    # No codebox MCP server block in baseline.
+    assert "[mcp_servers.codebox]" not in content
+    assert "/path/bundle.mjs" not in content
+    assert "ONLYCODES_PERSISTENT_KERNEL" not in content
 
 
 def test_write_codex_config_persistent_kernel_flag(tmp_path):
-    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "1")
+    """ONLYCODES_PERSISTENT_KERNEL is only emitted for arms that register codebox."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "1", arm="code_only")
     content = (tmp_path / "config.toml").read_text()
     assert 'ONLYCODES_PERSISTENT_KERNEL = "1"' in content
 
@@ -654,15 +658,15 @@ def test_run_command_codex_baseline_skips_bundle_check(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_write_codex_config_onlycode_restrictions(tmp_path):
-    """onlycode arm must emit browser_use=false and computer_use=false."""
+    """onlycode arm: codebox-only — native shell off, browser/computer off, codebox registered."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="onlycode")
     content = (tmp_path / "config.toml").read_text()
     assert "browser_use = false" in content
     assert "computer_use = false" in content
-    # Baseline restrictions must still be present.
     assert "shell_tool = false" in content
     assert "apply_patch_freeform = false" in content
     assert 'web_search = "disabled"' in content
+    assert "[mcp_servers.codebox]" in content
 
 
 def test_write_codex_config_code_only_restrictions(tmp_path):
@@ -671,30 +675,43 @@ def test_write_codex_config_code_only_restrictions(tmp_path):
     content = (tmp_path / "config.toml").read_text()
     assert "browser_use = false" in content
     assert "computer_use = false" in content
+    assert "shell_tool = false" in content
+    assert "[mcp_servers.codebox]" in content
 
 
-def test_write_codex_config_baseline_no_extra_restrictions(tmp_path):
-    """baseline arm must NOT emit browser_use or computer_use flags."""
+def test_write_codex_config_baseline_native_tools(tmp_path):
+    """baseline arm: native shell + freeform apply_patch, no codebox MCP."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="baseline")
     content = (tmp_path / "config.toml").read_text()
+    assert "shell_tool = true" in content
+    assert "apply_patch_freeform = true" in content
+    # No browser/computer restrictions — matches Claude tool_rich (full toolset).
     assert "browser_use" not in content
     assert "computer_use" not in content
+    # No codebox MCP server registered.
+    assert "[mcp_servers.codebox]" not in content
 
 
-def test_write_codex_config_tool_rich_no_extra_restrictions(tmp_path):
-    """tool_rich arm must NOT emit browser_use or computer_use flags."""
+def test_write_codex_config_tool_rich_native_tools(tmp_path):
+    """tool_rich arm: identical config to baseline (native tools, no codebox)."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="tool_rich")
     content = (tmp_path / "config.toml").read_text()
+    assert "shell_tool = true" in content
+    assert "apply_patch_freeform = true" in content
     assert "browser_use" not in content
     assert "computer_use" not in content
+    assert "[mcp_servers.codebox]" not in content
 
 
-def test_write_codex_config_bash_only_no_extra_restrictions(tmp_path):
-    """bash_only arm must NOT emit browser_use or computer_use flags."""
+def test_write_codex_config_bash_only_restrictions(tmp_path):
+    """bash_only arm: native shell only — no codebox, no freeform apply_patch."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="bash_only")
     content = (tmp_path / "config.toml").read_text()
-    assert "browser_use" not in content
-    assert "computer_use" not in content
+    assert "shell_tool = true" in content
+    assert "apply_patch_freeform = false" in content
+    assert "browser_use = false" in content
+    assert "computer_use = false" in content
+    assert "[mcp_servers.codebox]" not in content
 
 
 def test_write_codex_config_onlycode_valid_toml(tmp_path):
@@ -706,6 +723,29 @@ def test_write_codex_config_onlycode_valid_toml(tmp_path):
     assert parsed["features"]["computer_use"] is False
     assert parsed["features"]["shell_tool"] is False
     assert parsed["features"]["apply_patch_freeform"] is False
+    assert "codebox" in parsed["mcp_servers"]
+
+
+def test_write_codex_config_bash_only_valid_toml(tmp_path):
+    """bash_only config parses cleanly and has the expected feature shape."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="bash_only")
+    parsed = tomllib.loads((tmp_path / "config.toml").read_text())
+    assert parsed["features"]["shell_tool"] is True
+    assert parsed["features"]["apply_patch_freeform"] is False
+    assert parsed["features"]["browser_use"] is False
+    assert parsed["features"]["computer_use"] is False
+    assert "mcp_servers" not in parsed
+
+
+def test_write_codex_config_tool_rich_valid_toml(tmp_path):
+    """tool_rich config parses cleanly with native tools enabled."""
+    _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="tool_rich")
+    parsed = tomllib.loads((tmp_path / "config.toml").read_text())
+    assert parsed["features"]["shell_tool"] is True
+    assert parsed["features"]["apply_patch_freeform"] is True
+    assert "browser_use" not in parsed["features"]
+    assert "computer_use" not in parsed["features"]
+    assert "mcp_servers" not in parsed
 
 
 # ---------------------------------------------------------------------------
@@ -723,6 +763,40 @@ def test_codex_build_tools_flags_baseline_stores_arm():
     runner = CodexRunner()
     runner.build_tools_flags("baseline", None)
     assert runner._arm == "baseline"
+
+
+# ---------------------------------------------------------------------------
+# CodexRunner — arm-specific prompt directives (soft apply_patch suppression)
+# ---------------------------------------------------------------------------
+
+def test_apply_arm_directive_tool_rich_passthrough():
+    """tool_rich and baseline must NOT prepend any directive."""
+    from swebench.runner import _apply_arm_directive
+    base = "solve this problem"
+    assert _apply_arm_directive(base, "tool_rich") == base
+    assert _apply_arm_directive(base, "baseline") == base
+
+
+def test_apply_arm_directive_code_only_prepends_codebox_only_instruction():
+    """code_only / onlycode must prepend a directive restricting tools to codebox."""
+    from swebench.runner import _apply_arm_directive
+    out = _apply_arm_directive("body", "code_only")
+    assert out.endswith("body")
+    assert out != "body"
+    assert "execute_code" in out
+    assert "apply_patch" in out
+    # onlycode alias gets the same directive.
+    assert _apply_arm_directive("body", "onlycode") == out
+
+
+def test_apply_arm_directive_bash_only_prepends_shell_only_instruction():
+    """bash_only must prepend a directive restricting tools to shell."""
+    from swebench.runner import _apply_arm_directive
+    out = _apply_arm_directive("body", "bash_only")
+    assert out.endswith("body")
+    assert out != "body"
+    assert "shell" in out.lower()
+    assert "apply_patch" in out
 
 
 # ---------------------------------------------------------------------------
@@ -796,10 +870,14 @@ def test_toml_str_passthrough_clean():
 
 
 def test_write_codex_config_roundtrip_paths(tmp_path):
-    """Paths with backslash and quote must round-trip through config.toml."""
+    """Paths with backslash and quote must round-trip through config.toml.
+
+    Uses arm=code_only because that's the only arm that registers the codebox
+    MCP server (and therefore the only arm where these path fields appear).
+    """
     bundle_path = 'C:\\Users\\test "user"\\bundle.mjs'
     cwd = 'C:\\work dir\\"quoted"'
-    _write_codex_config(str(tmp_path), bundle_path, cwd, "0")
+    _write_codex_config(str(tmp_path), bundle_path, cwd, "0", arm="code_only")
     toml_text = (tmp_path / "config.toml").read_text()
     parsed = tomllib.loads(toml_text)
     assert parsed["mcp_servers"]["codebox"]["args"][0] == bundle_path

@@ -335,7 +335,13 @@ class CodexRunner(AgentRunner):
         cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
         shutil.copy2(src, cfg_dir)
 
-        bundle_path = self._resolve_bundle(mcp_config_path)
+        # Only resolve the exec-server bundle for arms that actually register
+        # the codebox MCP server. tool_rich/bash_only run on Codex's native
+        # tool surface and don't need the bundle to exist.
+        if _arm_uses_codebox(arm):
+            bundle_path = self._resolve_bundle(mcp_config_path)
+        else:
+            bundle_path = ""
         persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
         _write_codex_config(
             cfg_dir, bundle_path, cwd, persistent, arm=arm, model=self.model
@@ -360,6 +366,11 @@ class CodexRunner(AgentRunner):
         cfg_dir = self._make_isolated_config(
             mcp_config_path=mcp_config_path, cwd=cwd, arm=arm
         )
+        # Codex does not expose a feature flag to disable the structured
+        # apply_patch tool. For arms that must mirror Claude's strict
+        # restrictions, prepend a directive instructing the model to ignore it.
+        # Soft enforcement only — model compliance is not guaranteed.
+        effective_prompt = _apply_arm_directive(prompt, arm)
         try:
             cmd = [
                 binary, "exec",
@@ -367,7 +378,7 @@ class CodexRunner(AgentRunner):
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--json",
                 "-m", self.model,
-                prompt,
+                effective_prompt,
             ]
             env = os.environ.copy()
             env["CODEX_HOME"] = cfg_dir
@@ -534,6 +545,46 @@ def _toml_str(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _arm_uses_codebox(arm: str) -> bool:
+    """Whether ``arm`` should have the codebox MCP server registered in config.toml.
+
+    Only the code-only arms route through codebox; tool_rich/baseline use Codex's
+    native shell + apply_patch surface, and bash_only uses native shell alone.
+    """
+    return arm in ("onlycode", "code_only")
+
+
+_CODE_ONLY_DIRECTIVE = (
+    "[TOOL RESTRICTION] You may only use the `codebox` MCP server's "
+    "`execute_code` tool. Do NOT call `apply_patch`, `shell`, or any other "
+    "tool. All file reads, file writes, and shell commands must be performed "
+    "by running code through `execute_code`.\n\n"
+)
+
+_BASH_ONLY_DIRECTIVE = (
+    "[TOOL RESTRICTION] You may only use the shell tool. Do NOT call "
+    "`apply_patch` or any MCP tool. All file reads, file writes, and "
+    "computations must be performed via shell commands.\n\n"
+)
+
+
+def _apply_arm_directive(prompt: str, arm: str) -> str:
+    """Prepend an arm-specific tool-restriction directive to the user prompt.
+
+    Codex exposes no feature flag for disabling the structured ``apply_patch``
+    tool, so the only mechanism to keep ``code_only`` and ``bash_only`` aligned
+    with their ClaudeRunner counterparts is to instruct the model directly in
+    the prompt. This is soft enforcement; agent compliance is not guaranteed.
+
+    Returns ``prompt`` unchanged for ``tool_rich``/``baseline``.
+    """
+    if arm in ("onlycode", "code_only"):
+        return _CODE_ONLY_DIRECTIVE + prompt
+    if arm == "bash_only":
+        return _BASH_ONLY_DIRECTIVE + prompt
+    return prompt
+
+
 def _write_codex_config(
     cfg_dir: str,
     bundle_path: str,
@@ -547,55 +598,73 @@ def _write_codex_config(
     Avoids an external TOML library by rendering the known-shape config
     as a string directly.
 
-    ``arm`` controls extra ``[features]`` restrictions:
-    - ``onlycode`` / ``code_only``: adds ``browser_use = false`` and
-      ``computer_use = false`` to disable all Codex native tool surfaces
-      beyond the codebox MCP server (which is the only permitted tool for
-      the code-only evaluation arm).
-    - All other arms (``baseline``, ``tool_rich``, ``bash_only``): no extra
-      restrictions beyond the baseline ``shell_tool = false`` and
-      ``apply_patch_freeform = false`` that are always emitted.
+    ``arm`` selects one of three tool-surface profiles, designed to mirror
+    the corresponding ClaudeRunner arms:
+
+    - ``tool_rich`` / ``baseline``: native Codex tool surface — ``shell_tool``
+      and ``apply_patch_freeform`` are both enabled, no codebox MCP server is
+      registered. Mirrors Claude's full built-in toolset (Read/Edit/Write/Bash).
+    - ``code_only`` / ``onlycode``: codebox MCP is the only permitted tool.
+      ``shell_tool = false``, ``apply_patch_freeform = false``,
+      ``browser_use = false``, ``computer_use = false``. Mirrors Claude's
+      ``mcp__codebox__execute_code``-only configuration.
+    - ``bash_only``: native shell only — ``shell_tool = true``, no codebox MCP,
+      no ``apply_patch_freeform``, ``browser_use = false``, ``computer_use = false``.
+      Mirrors Claude's Bash-only configuration.
+
+    The structured ``apply_patch`` tool has no Codex feature flag and remains
+    available in every arm. ``CodexRunner.invoke`` prepends a soft directive
+    to the prompt for ``code_only`` and ``bash_only`` to discourage its use.
 
     ``model`` pins the underlying ChatGPT model at the top of config.toml so
     runs are reproducible across CLI upgrades — Codex would otherwise silently
     fall back to its compiled-in default. This is belt-and-braces with the
     ``codex exec -m <model>`` CLI flag (which takes precedence on conflict).
 
-    Note: ``shell_tool = false`` and ``apply_patch_freeform = false`` are
-    always present because the codebox MCP server runs code in a sandboxed
-    kernel; direct shell access is never appropriate for this harness.
-    ``web_search = "disabled"`` is always set to prevent uncontrolled
-    external requests that would pollute benchmark measurements.
+    ``web_search = "disabled"`` is set in every arm to prevent uncontrolled
+    external requests that would pollute benchmark measurements. Note this is
+    a deliberate divergence from Claude ``tool_rich`` (which permits WebSearch);
+    in practice the artifact tasks do not require web access.
     """
-    # Extra [features] lines emitted only for code-only arms.
-    onlycode_features = ""
     if arm in ("onlycode", "code_only"):
-        onlycode_features = (
-            "browser_use = false\n"
-            "computer_use = false\n"
-        )
+        shell_tool = "false"
+        apply_patch_freeform = "false"
+        extra_features = "browser_use = false\ncomputer_use = false\n"
+    elif arm == "bash_only":
+        shell_tool = "true"
+        apply_patch_freeform = "false"
+        extra_features = "browser_use = false\ncomputer_use = false\n"
+    else:  # tool_rich, baseline, and any unknown arm (rejected upstream)
+        shell_tool = "true"
+        apply_patch_freeform = "true"
+        extra_features = ""
 
     toml = (
         f'model = "{_toml_str(model)}"\n'
         'web_search = "disabled"\n'
         "\n"
         "[features]\n"
-        "shell_tool = false\n"
-        "apply_patch_freeform = false\n"
-        + onlycode_features
-        + "\n"
-        "[mcp_servers.codebox]\n"
-        'command = "node"\n'
-        f'args = ["{_toml_str(bundle_path)}"]\n'
-        "\n"
-        "[mcp_servers.codebox.env]\n"
-        f'ONLYCODES_PERSISTENT_KERNEL = "{_toml_str(persistent_kernel)}"\n'
-        "\n"
-        "[mcp_servers.codebox.options]\n"
-        f'enabled_tools = ["execute_code", "execute_code_and_wait"]\n'
-        f"startup_timeout_sec = 30.0\n"
-        f'cwd = "{_toml_str(cwd)}"\n'
+        f"shell_tool = {shell_tool}\n"
+        f"apply_patch_freeform = {apply_patch_freeform}\n"
+        + extra_features
     )
+
+    if _arm_uses_codebox(arm):
+        toml += (
+            "\n"
+            "[mcp_servers.codebox]\n"
+            'command = "node"\n'
+            f'args = ["{_toml_str(bundle_path)}"]\n'
+            "\n"
+            "[mcp_servers.codebox.env]\n"
+            f'ONLYCODES_PERSISTENT_KERNEL = "{_toml_str(persistent_kernel)}"\n'
+            "\n"
+            "[mcp_servers.codebox.options]\n"
+            'enabled_tools = ["execute_code", "execute_code_and_wait"]\n'
+            "startup_timeout_sec = 30.0\n"
+            f'cwd = "{_toml_str(cwd)}"\n'
+        )
+
     with open(os.path.join(cfg_dir, "config.toml"), "w") as f:
         f.write(toml)
 

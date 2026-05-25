@@ -335,7 +335,7 @@ def test_codex_run_baseline_does_not_call_preflight(runner, monkeypatch, tmp_pat
     """codex_cli + baseline arm must NOT invoke CodexRunner.preflight().
 
     Wiring assertion: the exec-server guard in run_command only triggers for
-    onlycode/bash_only arms. baseline must pass through without calling preflight
+    the onlycode arm. baseline must pass through without calling preflight
     (which would require the bundle).
 
     Strategy: monkeypatch preflight to raise AssertionError if called. Then
