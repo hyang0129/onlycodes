@@ -710,13 +710,15 @@ def test_run_command_codex_baseline_skips_bundle_check(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_write_codex_config_onlycode_restrictions(tmp_path):
-    """onlycode arm: codebox-only — native shell off, browser/computer off, codebox registered."""
+    """onlycode arm: codebox-only — native shell off, browser/computer/apps off, codebox registered."""
     _write_codex_config(str(tmp_path), "/bundle.mjs", "/scratch", "0", arm="onlycode")
     content = (tmp_path / "config.toml").read_text()
     assert "browser_use = false" in content
     assert "computer_use = false" in content
     assert "shell_tool = false" in content
     assert "apply_patch_freeform = false" in content
+    # apps=false suppresses request_plugin_install for cache-stable tools array (#292).
+    assert "apps = false" in content
     assert 'web_search = "disabled"' in content
     assert "[mcp_servers.codebox]" in content
 
@@ -728,6 +730,7 @@ def test_write_codex_config_code_only_restrictions(tmp_path):
     assert "browser_use = false" in content
     assert "computer_use = false" in content
     assert "shell_tool = false" in content
+    assert "apps = false" in content
     assert "[mcp_servers.codebox]" in content
 
 
@@ -763,6 +766,8 @@ def test_write_codex_config_bash_only_restrictions(tmp_path):
     assert "apply_patch_freeform = false" in content
     assert "browser_use = false" in content
     assert "computer_use = false" in content
+    # apps fix is code_only-specific; bash_only retains native plugin tools.
+    assert "apps =" not in content
     assert "[mcp_servers.codebox]" not in content
 
 
@@ -775,6 +780,7 @@ def test_write_codex_config_onlycode_valid_toml(tmp_path):
     assert parsed["features"]["computer_use"] is False
     assert parsed["features"]["shell_tool"] is False
     assert parsed["features"]["apply_patch_freeform"] is False
+    assert parsed["features"]["apps"] is False
     assert "codebox" in parsed["mcp_servers"]
 
 

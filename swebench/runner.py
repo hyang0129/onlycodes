@@ -559,7 +559,7 @@ class CodexRunner(AgentRunner):
 # Cache-prefix stabilization (Codex)
 # ---------------------------------------------------------------------------
 #
-# Codex injects two pieces of per-task variance into the prompt prefix that
+# Codex injects three pieces of per-task variance into the prompt prefix that
 # break OpenAI's automatic prompt caching:
 #
 #   1. ``<environment_context><cwd>...`` — the codex process cwd, which
@@ -567,18 +567,31 @@ class CodexRunner(AgentRunner):
 #   2. ``<skills_instructions>`` — absolute SKILL.md paths under
 #      ``$CODEX_HOME/skills/.system/``; CODEX_HOME is a fresh mkdtemp per
 #      task, so the paths change every task.
+#   3. ``tools[]`` array contents — Codex's curated-plugin sync races with
+#      the first API call; about 4% of runs drop ``request_plugin_install``
+#      from the advertised tools array. OpenAI treats ``instructions + tools``
+#      as a combined cache key, so a one-tool delta misses cache entirely
+#      (``cached_input_tokens = 0``). See issue #292.
 #
-# We stabilize both by:
+# We stabilize all three by:
 #   - Pointing Codex's process cwd at a single shared dir (only for arms
 #     where the agent does NOT rely on starting in the task workspace).
 #   - Symlinking each per-task ``CODEX_HOME/skills`` to one shared directory,
 #     so the SKILL.md paths in the developer message stay byte-stable across
 #     tasks (all arms benefit; no semantic change).
+#   - For ``code_only`` / ``onlycode`` arms only: setting ``apps = false``
+#     in the features block. This removes ``request_plugin_install`` from
+#     the tools array deterministically (the tool is irrelevant to the
+#     codebox-only arm anyway), eliminating the race condition.
 #
 # Verified empirically on a real artifact task (5 runs each):
-#   without fix:  mean cache_rate=77%, median uncached=27,175 tokens
-#   with fix:     mean cache_rate=89%, median uncached= 8,212 tokens
-#                                                       (−70%)
+#   without fix (cwd + skills only):
+#                                mean cache_rate=77%, median uncached=27,175
+#   with fix (cwd + skills):     mean cache_rate=89%, median uncached= 8,212
+#                                                                      (−70%)
+#   apps=false fix verified separately via local-proxy capture:
+#     baseline 10 runs:  2/10 missed RPI (20% race rate)
+#     apps=false 8 runs: 0/8  missed RPI, single tool_hash across all calls
 
 CODEX_SHARED_SKILLS_DIR = "/tmp/onlycodes_codex_shared_skills"
 CODEX_STABLE_CWD = "/tmp/onlycodes_codex_stable_cwd"
@@ -712,7 +725,16 @@ def _write_codex_config(
     if arm in ("onlycode", "code_only"):
         shell_tool = "false"
         apply_patch_freeform = "false"
-        extra_features = "browser_use = false\ncomputer_use = false\n"
+        # ``apps = false`` is a cache-stabilization fix: Codex's curated-plugin
+        # sync races with the first API call, occasionally dropping the
+        # ``request_plugin_install`` tool from the advertised tools array.
+        # OpenAI's prompt cache treats ``instructions + tools`` together as the
+        # cacheable system context, so when the tools list differs by one entry
+        # the entire request misses cache (cached_input_tokens = 0). Disabling
+        # ``apps`` removes ``request_plugin_install`` deterministically, making
+        # the tools array byte-stable across tasks. Without this, ~4% of
+        # code_only runs catastrophically miss cache (see issue #292).
+        extra_features = "browser_use = false\ncomputer_use = false\napps = false\n"
     elif arm == "bash_only":
         shell_tool = "true"
         apply_patch_freeform = "false"
