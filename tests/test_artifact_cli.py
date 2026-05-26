@@ -92,7 +92,8 @@ class _FakeRunner:
 
     def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
                result_file, binary, mcp_config_path=None,
-               wall_timeout_seconds: int = 3600):
+               wall_timeout_seconds: int = 3600,
+               isolation_nonce: str | None = None):
         Path(cwd, "answer.txt").write_text("42\n")
         with open(result_file, "a") as f:
             f.write('{"type":"result","total_cost_usd":0.01,"num_turns":2}\n')
@@ -107,7 +108,7 @@ def stub_runtime(monkeypatch):
     """Stub out agent launch and binary discovery so CLI tests stay hermetic."""
     monkeypatch.setattr(
         artifact_cli_mod, "make_runner",
-        lambda _surface: _FakeRunner(),
+        lambda _surface, **_kw: _FakeRunner(),
     )
     return monkeypatch
 

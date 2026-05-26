@@ -81,3 +81,8 @@ class ArmResult:
     jsonl_path: str
     test_txt_path: str
     agent_surface: str = "claude_code"  # default for backward compat with old result files
+    # Per-task prompt-cache isolation marker (#294). When the harness was run
+    # with --cache-isolation, this carries the 16-hex nonce that was injected
+    # into the codex tools[] array to force cross-task cache misses. ``None``
+    # means the run used the default shared-cache methodology.
+    isolation_nonce: str | None = None

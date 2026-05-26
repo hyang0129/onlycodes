@@ -86,7 +86,8 @@ class FakeRunner(AgentRunner):
 
     def invoke(self, *, prompt, cwd, system_prompt, tools_flags,
                result_file, binary, mcp_config_path=None,
-               wall_timeout_seconds: int = 3600) -> None:
+               wall_timeout_seconds: int = 3600,
+               isolation_nonce: str | None = None) -> None:
         Path(cwd, "answer.txt").write_text(self._artifact_content)
         with open(result_file, "a") as f:
             f.write(json.dumps({
