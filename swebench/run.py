@@ -323,14 +323,13 @@ def _run_arm(
 
     nonce: str | None = None
     if cache_isolation:
-        # Fresh per-invocation random nonce (#294). NOT a deterministic
-        # function of (instance_id, arm, run_idx) — different seeds and
-        # reruns must produce different nonces so OpenAI's prompt cache
-        # cannot serve cross-invocation hits. --resume correctness is
-        # preserved by ``_is_triple_complete`` skipping done runs before
-        # reaching this point; the old nonce is irrelevant once the run
-        # is complete.
-        nonce = generate_isolation_nonce()
+        # Fresh per-invocation nonce (#294, #296). Different sweeps and
+        # reruns must produce different nonces so the provider's prompt
+        # cache cannot serve cross-invocation hits. --resume correctness
+        # is preserved by ``_is_triple_complete`` skipping done runs
+        # before reaching this point; the old nonce is irrelevant once
+        # the run is complete.
+        nonce = generate_isolation_nonce(problem.instance_id, arm, run_idx)
         # Stamped for forensic traceability (#294): analyze/summary uses
         # this presence to annotate cost columns with "(iso)".
         _meta_record["isolation_nonce"] = nonce
@@ -806,11 +805,11 @@ def _cleanup_stale_overlays(
     default=False,
     show_default=True,
     help=(
-        "Force per-task OpenAI prompt-cache isolation by injecting a "
-        "fresh 16-hex random nonce into the codex tools[] array. Each "
-        "(task, arm, run) invocation gets an independent nonce so "
-        "different seeds and reruns cannot share OpenAI cache state. "
-        "No effect on Claude arms (see issue #294)."
+        "Force per-invocation prompt-cache isolation by injecting a 16-hex "
+        "nonce into the agent's tools[] array. Each call mints a fresh "
+        "nonce (datetime-salted) so reruns, different sweeps, and "
+        "different arms all miss prior cache entries. Applies to both "
+        "codex (#294) and Claude (#296) arms."
     ),
 )
 def run_command(
