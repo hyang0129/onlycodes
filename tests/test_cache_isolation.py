@@ -2,12 +2,13 @@
 
 Three boundaries are covered here:
 
-1. Nonce determinism — `compute_isolation_nonce` is stable for a given
-   (instance_id, arm, run_idx) and differs across each axis.
+1. Nonce semantics — ``generate_isolation_nonce()`` returns a fresh 16-hex
+   random value each call (never deterministic). Different seeds, reruns,
+   tasks, arms, and run indices must all observably get distinct nonces so
+   OpenAI's prompt cache cannot serve cross-invocation hits.
 2. JSONL meta-line stamping — when the harness is invoked with
    ``--cache-isolation``, the meta line written by the run loop contains an
-   ``isolation_nonce`` field whose value matches the deterministic formula.
-   When the flag is off, the field is absent.
+   ``isolation_nonce`` field. When the flag is off, the field is absent.
 3. ``_write_codex_config`` MCP block — when ``isolation_nonce`` is passed,
    the resulting ``config.toml`` contains an ``[mcp_servers.iso_nonce]``
    block referencing the on-disk stub server; without it, no such block
@@ -31,76 +32,48 @@ from swebench.artifact_run import run_artifact_arm
 from swebench.runner import (
     AgentRunner,
     _write_codex_config,
-    compute_isolation_nonce,
+    generate_isolation_nonce,
 )
 
 
 # ---------------------------------------------------------------------------
-# Boundary 1: nonce determinism
+# Boundary 1: nonce generation semantics
 # ---------------------------------------------------------------------------
 
 
-class TestComputeIsolationNonce:
-    """The nonce formula must be deterministic, 16-hex, and sensitive to each
-    of (instance_id, arm, run_idx) — so that re-runs reuse the same nonce
-    (``--resume`` correctness) and different (task, arm, run) triples can never
-    collide on the same prompt-cache key.
+class TestGenerateIsolationNonce:
+    """``generate_isolation_nonce()`` must return a fresh random 16-hex value
+    on every call. Reruns and different seeds must not share a nonce — that is
+    the entire point of the ``--cache-isolation`` mechanism. A deterministic
+    nonce would defeat the purpose: deleting a task's run_dir and re-running
+    would reuse a cache key that OpenAI may still be serving from its ~5min
+    TTL, polluting the rerun.
     """
 
-    def test_same_inputs_yield_same_nonce(self):
-        a = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        b = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        assert a == b, "Determinism: equal inputs must produce equal nonces"
-
-    def test_nonce_is_16_hex_chars(self):
-        n = compute_isolation_nonce("anything", "tool_rich", 0)
+    def test_returns_16_hex_chars(self):
+        n = generate_isolation_nonce()
         assert isinstance(n, str)
         assert len(n) == 16, f"Expected 16-char nonce, got {len(n)}: {n!r}"
         int(n, 16)  # raises ValueError if not hex
 
-    def test_different_instance_id_changes_nonce(self):
-        a = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        b = compute_isolation_nonce("repo__task-2", "code_only", 1)
+    def test_two_consecutive_calls_differ(self):
+        """Foundational property: a fresh nonce per call. With 64 bits of
+        entropy a collision is astronomically unlikely; if this ever fails
+        the implementation is broken (most likely reverted to deterministic).
+        """
+        a = generate_isolation_nonce()
+        b = generate_isolation_nonce()
         assert a != b, (
-            "Different instance_id must produce a different nonce; "
-            f"both were {a}"
+            f"Two consecutive nonces collided ({a!r}); generate_isolation_nonce "
+            "must produce a fresh random value on every call."
         )
 
-    def test_different_arm_changes_nonce(self):
-        """Cross-arm isolation: code_only and tool_rich of the same task must
-        not share a cache prefix. This is the reason ``arm`` is part of the
-        formula."""
-        a = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        b = compute_isolation_nonce("repo__task-1", "tool_rich", 1)
-        c = compute_isolation_nonce("repo__task-1", "bash_only", 1)
-        assert a != b, "code_only and tool_rich nonces must differ"
-        assert a != c, "code_only and bash_only nonces must differ"
-        assert b != c, "tool_rich and bash_only nonces must differ"
-
-    def test_different_run_idx_changes_nonce(self):
-        a = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        b = compute_isolation_nonce("repo__task-1", "code_only", 2)
-        assert a != b, "Different run_idx must produce a different nonce"
-
-    def test_known_value_pinned(self):
-        """Pin one specific (instance_id, arm, run_idx) so accidental refactors
-        that change the formula (e.g. swapping the order or the separator) are
-        caught immediately.
-
-        sha256("repo__task-1|code_only|1")[:16] = the literal asserted below.
-        Recompute with::
-
-            >>> import hashlib
-            >>> hashlib.sha256(b"repo__task-1|code_only|1").hexdigest()[:16]
-        """
-        nonce = compute_isolation_nonce("repo__task-1", "code_only", 1)
-        # Computed once with the actual implementation as the canonical value.
-        import hashlib
-        expected = hashlib.sha256(b"repo__task-1|code_only|1").hexdigest()[:16]
-        assert nonce == expected, (
-            f"Nonce formula drifted: got {nonce!r}, expected {expected!r}. "
-            "If this change was intentional, update the test and document the "
-            "migration plan for in-flight --resume runs."
+    def test_many_calls_unique(self):
+        """Belt-and-braces against a degenerate RNG: 100 calls, all distinct."""
+        nonces = {generate_isolation_nonce() for _ in range(100)}
+        assert len(nonces) == 100, (
+            f"Expected 100 distinct nonces; got {len(nonces)}. "
+            "Indicates a broken RNG or off-by-one in token_hex length."
         )
 
 

@@ -30,7 +30,7 @@ from swebench.artifact_run import (
     run_artifact_arm,
     run_dir_for,
 )
-from swebench.runner import compute_isolation_nonce, make_runner
+from swebench.runner import generate_isolation_nonce, make_runner
 
 
 @click.group()
@@ -114,9 +114,10 @@ def artifact_group() -> None:
     show_default=True,
     help=(
         "Force per-task OpenAI prompt-cache isolation by injecting a "
-        "deterministic 16-hex nonce into the codex tools[] array. Each "
-        "(instance_id, arm, run_idx) gets a stable nonce so reruns reuse "
-        "the same cache key. No effect on Claude arms (see issue #294)."
+        "fresh 16-hex random nonce into the codex tools[] array. Each "
+        "(task, arm, run) invocation gets an independent nonce so "
+        "different seeds and reruns cannot share OpenAI cache state. "
+        "No effect on Claude arms (see issue #294)."
     ),
 )
 @click.option(
@@ -222,11 +223,13 @@ def artifact_run_command(
                     )
                     continue
                 effective_timeout = task.execution_budget.max_wall_seconds or max_wall_seconds
-                nonce = (
-                    compute_isolation_nonce(task.instance_id, arm, run_idx)
-                    if cache_isolation
-                    else None
-                )
+                # Fresh per-invocation random nonce (#294). Generated here at
+                # the start of each (task, arm, run) so reruns and different
+                # seeds get different nonces, defeating OpenAI's cross-task
+                # prompt cache. --resume correctness is preserved because the
+                # ``is_run_complete`` check above already skipped done runs
+                # before we got here.
+                nonce = generate_isolation_nonce() if cache_isolation else None
                 run_artifact_arm(
                     task,
                     arm,

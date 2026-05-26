@@ -51,7 +51,7 @@ from swebench.runner import (
     BLOCKED_BUILTINS,
     AgentRunner,
     ClaudeRunner,
-    compute_isolation_nonce,
+    generate_isolation_nonce,
     make_runner,
 )
 
@@ -323,7 +323,14 @@ def _run_arm(
 
     nonce: str | None = None
     if cache_isolation:
-        nonce = compute_isolation_nonce(problem.instance_id, arm, run_idx)
+        # Fresh per-invocation random nonce (#294). NOT a deterministic
+        # function of (instance_id, arm, run_idx) — different seeds and
+        # reruns must produce different nonces so OpenAI's prompt cache
+        # cannot serve cross-invocation hits. --resume correctness is
+        # preserved by ``_is_triple_complete`` skipping done runs before
+        # reaching this point; the old nonce is irrelevant once the run
+        # is complete.
+        nonce = generate_isolation_nonce()
         # Stamped for forensic traceability (#294): analyze/summary uses
         # this presence to annotate cost columns with "(iso)".
         _meta_record["isolation_nonce"] = nonce
@@ -800,9 +807,10 @@ def _cleanup_stale_overlays(
     show_default=True,
     help=(
         "Force per-task OpenAI prompt-cache isolation by injecting a "
-        "deterministic 16-hex nonce into the codex tools[] array. Each "
-        "(instance_id, arm, run_idx) gets a stable nonce so reruns reuse "
-        "the same cache key. No effect on Claude arms (see issue #294)."
+        "fresh 16-hex random nonce into the codex tools[] array. Each "
+        "(task, arm, run) invocation gets an independent nonce so "
+        "different seeds and reruns cannot share OpenAI cache state. "
+        "No effect on Claude arms (see issue #294)."
     ),
 )
 def run_command(

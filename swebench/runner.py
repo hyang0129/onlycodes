@@ -23,11 +23,11 @@ callers do not manage temp dirs directly.
 from __future__ import annotations
 
 import glob
-import hashlib
 import json
 import logging
 import os
 import re
+import secrets
 import signal
 import shutil
 import subprocess
@@ -37,20 +37,31 @@ from pathlib import Path
 from typing import ClassVar
 
 
-def compute_isolation_nonce(instance_id: str, arm: str, run_idx: int) -> str:
-    """Return the deterministic 16-hex nonce for a (task, arm, run_idx) triple.
+def generate_isolation_nonce() -> str:
+    """Return a fresh 16-hex random nonce for per-task prompt-cache isolation.
 
-    Used by ``--cache-isolation`` (#294). Stable across reruns so ``--resume``
-    re-uses an existing run's nonce; including ``arm`` makes the nonce differ
-    across arms of the same task so cross-arm comparisons are also unbiased
-    by prompt-cache leakage.
+    Used by ``--cache-isolation`` (#294). Each call returns an independent
+    random value (``secrets.token_hex(8)``), so:
 
-    The nonce becomes part of an MCP tool name/description that codex
-    serialises into the outbound ``tools[]`` array, forcing OpenAI's prompt
-    cache to miss across tasks.
+    - Different seeds running the same task produce different nonces (the
+      whole point of running multiple seeds is to get independent samples;
+      sharing a cache key across seeds would defeat that).
+    - Reruns of the same task (after deleting ``result.json``) produce a
+      fresh nonce, so the new run cannot pick up cache state still warm
+      from the deleted run (OpenAI's prompt cache TTL is ~5 minutes).
+    - Cross-task and cross-arm collisions are astronomically unlikely
+      (16 hex = 64 bits of entropy).
+
+    ``--resume`` correctness is preserved because completed runs are
+    skipped by ``is_run_complete()`` *before* this is ever called — the
+    old run's nonce is irrelevant. New runs get a fresh nonce.
+
+    The nonce is generated once per task invocation, threaded through
+    ``runner.invoke``, written into ``config.toml``, and used consistently
+    across every LLM call within that codex session so within-session
+    cache amortisation still works.
     """
-    raw = f"{instance_id}|{arm}|{run_idx}".encode()
-    return hashlib.sha256(raw).hexdigest()[:16]
+    return secrets.token_hex(8)
 
 
 # ---------------------------------------------------------------------------
