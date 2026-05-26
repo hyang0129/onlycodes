@@ -113,11 +113,11 @@ def artifact_group() -> None:
     default=False,
     show_default=True,
     help=(
-        "Force per-task OpenAI prompt-cache isolation by injecting a "
-        "fresh 16-hex random nonce into the codex tools[] array. Each "
-        "(task, arm, run) invocation gets an independent nonce so "
-        "different seeds and reruns cannot share OpenAI cache state. "
-        "No effect on Claude arms (see issue #294)."
+        "Force per-invocation prompt-cache isolation by injecting a 16-hex "
+        "nonce into the agent's tools[] array. Each call mints a fresh "
+        "nonce (datetime-salted) so reruns, different sweeps, and "
+        "different arms all miss prior cache entries. Applies to both "
+        "codex (#294) and Claude (#296) arms."
     ),
 )
 @click.option(
@@ -223,13 +223,17 @@ def artifact_run_command(
                     )
                     continue
                 effective_timeout = task.execution_budget.max_wall_seconds or max_wall_seconds
-                # Fresh per-invocation random nonce (#294). Generated here at
+                # Fresh per-invocation nonce (#294, #296). Generated here at
                 # the start of each (task, arm, run) so reruns and different
-                # seeds get different nonces, defeating OpenAI's cross-task
-                # prompt cache. --resume correctness is preserved because the
-                # ``is_run_complete`` check above already skipped done runs
-                # before we got here.
-                nonce = generate_isolation_nonce() if cache_isolation else None
+                # sweeps get different nonces, defeating cross-task prompt
+                # cache hits on both codex and Claude. --resume correctness
+                # is preserved because the ``is_run_complete`` check above
+                # already skipped done runs before we got here.
+                nonce = (
+                    generate_isolation_nonce(task.instance_id, arm, run_idx)
+                    if cache_isolation
+                    else None
+                )
                 run_artifact_arm(
                     task,
                     arm,
