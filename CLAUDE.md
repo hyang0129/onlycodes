@@ -2,6 +2,18 @@
 
 Benchmark testing whether Claude Code performs better when restricted to writing/executing code vs. using native file-system tools.
 
+## Paper Writing
+
+The KDD 2026 Agentic AI Evaluation Workshop paper draft lives in [paper/](paper/). **When writing the paper, only reference files inside `paper/`, unless the user explicitly names a source outside it.** This applies to drafting, editing, or extending sections, outline, abstract, claims, tables, figures, and bibliography — and covers reading, citing, comparing against, or otherwise consulting external files, not just copying prose from them.
+
+Concretely: do not read `docs/ROADMAP.md`, `docs/RESULTS_SWE_MINI.md`, `docs/CATEGORY_*.md`, `README.md`, or any other location outside `paper/` when working on paper content. The old "Code Mode hypothesis" framing in those files is **superseded** by the regime-dependent sign-flip finding documented in [issue #158 comment 2026-05-25](https://github.com/hyang0129/onlycodes/issues/158); reading them risks pulling stale framing into the draft. If a fact, number, or framing from outside `paper/` needs to land in the draft, the user will name the source explicitly.
+
+The single source of truth for numbers cited in the paper is `paper/data/*.csv` and `paper/generated/figures/*.numbers.csv`, accessed through the `\result`/`\resdelta`/`\resratio`/`\resultCI`/`\resultPM` macros defined in `paper/macros.tex`. See `paper/README.md` for the build pipeline. **A stale value is a build failure (via `paper/lint.py`), not a proofreading task.**
+
+**Never edit `paper/references.bib` directly** — add citations in the relevant outline/section file with enough context for a human to verify, and wait for explicit human approval before any `.bib` insertion (agents hallucinate references).
+
+**Target venue:** [KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI](https://kdd-eval-workshop.github.io/agenticai-evaluation-kdd2026/), submission deadline **2026-06-01 AOE**, 9 pages excl. references, ACM template, OpenReview anonymous submission.
+
 ## Architecture Overview
 
 Two independent evaluation modes sharing a common subprocess harness:

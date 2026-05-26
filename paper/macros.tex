@@ -1,0 +1,152 @@
+% paper/macros.tex
+% Late-binding citation macros for the onlycodes paper.
+%
+% Every number in prose resolves at build time through these macros.
+% Values are defined in paper/generated/values.tex via \csname lookup;
+% build_numbers.py produces that file from paper/data/*.csv and
+% paper/generated/figures/*.numbers.csv.
+%
+% Namespace prefix: oc@ (onlycodes). Must match NAMESPACE in build_numbers.py.
+%
+% Usage:
+%   \result{csv_stem}{key}[precision]
+%   \resdelta{csv_stem}{key_a}{key_b}[precision]
+%   \resratio{csv_stem}{key_a}{key_b}[precision]
+%   \resultCI{csv_stem}{mean_key,lo_key,hi_key}[precision]
+%   \resultPM{csv_stem}{mean_key,err_key}[precision]
+%
+% Where:
+%   csv_stem  - stem of the CSV file (e.g. "headline" for headline.csv,
+%               "fig.01_signflip" for the sidecar of that figure)
+%   key       - colon-joined coordinate per the CSV's key_schema
+%   precision - number of decimal places for siunitx rounding (optional;
+%               default is the CSV's default_precision, embedded as
+%               oc@<stem>@__default_precision__ in values.tex)
+
+\usepackage{siunitx}
+\usepackage{xfp}
+\usepackage{etoolbox}
+
+% --------------------------------------------------------------------------
+% Definitions below use @ in macro names. Outside a .sty file, @ has catcode
+% 12, so we temporarily make it a letter via \makeatletter / \makeatother.
+% --------------------------------------------------------------------------
+\makeatletter
+
+% --------------------------------------------------------------------------
+% Internal helper: look up \csname oc@<stem>@<key>\endcsname
+% Raises \PackageError if undefined.
+% --------------------------------------------------------------------------
+\newcommand{\ocget}[2]{%
+  \@ifundefined{oc@#1@#2}{%
+    \PackageError{onlycodes-macros}%
+      {Undefined result key '#2' in CSV stem '#1'.
+       Check paper/data/#1.csv and re-run 'make values'.}%
+      {The key '#2' was not found in the values generated from '#1'.
+       Valid keys are listed in paper/generated/values.tex.}%
+    \textbf{??}%
+  }{%
+    \csname oc@#1@#2\endcsname%
+  }%
+}
+
+% --------------------------------------------------------------------------
+% Helper: get default precision for a CSV stem (falls back to 3)
+% --------------------------------------------------------------------------
+\newcommand{\ocgetdefprec}[1]{%
+  \@ifundefined{oc@#1@__default_precision__}{3}{\csname oc@#1@__default_precision__\endcsname}%
+}
+
+% --------------------------------------------------------------------------
+% \result{csv}{key}[precision]
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\result}[2]{%
+  \@ifnextchar[%]
+    {\oc@result@prec{#1}{#2}}%
+    {\oc@result@prec{#1}{#2}[\ocgetdefprec{#1}]}%
+}
+\def\oc@result@prec#1#2[#3]{%
+  \num[round-mode=places,round-precision=#3]{\ocget{#1}{#2}}%
+}
+
+% --------------------------------------------------------------------------
+% \resdelta{csv}{key_a}{key_b}[precision]
+% Computes key_a - key_b using \fpeval from xfp.
+% (Named \resdelta, not \delta, to avoid clashing with the Greek letter.)
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\resdelta}[3]{%
+  \@ifnextchar[%]
+    {\oc@delta@prec{#1}{#2}{#3}}%
+    {\oc@delta@prec{#1}{#2}{#3}[\ocgetdefprec{#1}]}%
+}
+\def\oc@delta@prec#1#2#3[#4]{%
+  \edef\oc@va{\ocget{#1}{#2}}%
+  \edef\oc@vb{\ocget{#1}{#3}}%
+  \num[round-mode=places,round-precision=#4,explicit-sign]{\fpeval{\oc@va - \oc@vb}}%
+}
+
+% --------------------------------------------------------------------------
+% \resratio{csv}{key_a}{key_b}[precision]
+% Computes key_a / key_b using \fpeval.
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\resratio}[3]{%
+  \@ifnextchar[%]
+    {\oc@ratio@prec{#1}{#2}{#3}}%
+    {\oc@ratio@prec{#1}{#2}{#3}[\ocgetdefprec{#1}]}%
+}
+\def\oc@ratio@prec#1#2#3[#4]{%
+  \edef\oc@va{\ocget{#1}{#2}}%
+  \edef\oc@vb{\ocget{#1}{#3}}%
+  \num[round-mode=places,round-precision=#4]{\fpeval{\oc@va / \oc@vb}}%
+}
+
+% --------------------------------------------------------------------------
+% \resultCI{csv}{mean_key,lo_key,hi_key}[precision]
+% Renders as: mean [lo, hi]
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\resultCI}[2]{%
+  \@ifnextchar[%]
+    {\oc@ci@prec{#1}{#2}}%
+    {\oc@ci@prec{#1}{#2}[\ocgetdefprec{#1}]}%
+}
+\def\oc@ci@prec#1#2[#3]{%
+  \oc@splitthree{#2}{\oc@keyA}{\oc@keyB}{\oc@keyC}%
+  \num[round-mode=places,round-precision=#3]{\ocget{#1}{\oc@keyA}}%
+  \ [\num[round-mode=places,round-precision=#3]{\ocget{#1}{\oc@keyB}},
+     \num[round-mode=places,round-precision=#3]{\ocget{#1}{\oc@keyC}}]%
+}
+
+% --------------------------------------------------------------------------
+% \resultPM{csv}{mean_key,err_key}[precision]
+% Renders as: mean ± err
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\resultPM}[2]{%
+  \@ifnextchar[%]
+    {\oc@pm@prec{#1}{#2}}%
+    {\oc@pm@prec{#1}{#2}[\ocgetdefprec{#1}]}%
+}
+\def\oc@pm@prec#1#2[#3]{%
+  \oc@splittwo{#2}{\oc@keyA}{\oc@keyB}%
+  \num[round-mode=places,round-precision=#3]{\ocget{#1}{\oc@keyA}}%
+  $\pm$%
+  \num[round-mode=places,round-precision=#3]{\ocget{#1}{\oc@keyB}}%
+}
+
+% --------------------------------------------------------------------------
+% Utility: split comma-delimited pairs and triples into named macros.
+% --------------------------------------------------------------------------
+\def\oc@splittwo#1#2#3{%
+  \oc@splittwoaux#1\@nil{#2}{#3}%
+}
+\def\oc@splittwoaux#1,#2\@nil#3#4{%
+  \def#3{#1}\def#4{#2}%
+}
+
+\def\oc@splitthree#1#2#3#4{%
+  \oc@splitthreeaux#1\@nil{#2}{#3}{#4}%
+}
+\def\oc@splitthreeaux#1,#2,#3\@nil#4#5#6{%
+  \def#4{#1}\def#5{#2}\def#6{#3}%
+}
+
+\makeatother

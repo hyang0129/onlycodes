@@ -1,0 +1,21 @@
+% paper/sections/00_abstract.tex
+% Placeholder abstract. Do not finalize until §5 numbers freeze.
+% See ../00_abstract.md for the working draft outline.
+
+Modern coding agents expose multiple tool surfaces --- IDE primitives,
+bash, and MCP code-execution --- and the field has shipped three
+contradictory claims about which one matters. We run the missing
+crossed comparison: an integrity-clean three-arm ablation
+(\texttt{tool\_rich} / \texttt{bash\_only} / \texttt{code\_only}) on
+synthetic computation tasks and SWE-bench Mini modification tasks,
+holding model, harness, and prompts fixed. We find that cost asymmetry
+flips sign between regimes:
+\texttt{code\_only} is
+\resratio{headline}{computation:code_only:median_cost_usd}{computation:tool_rich:median_cost_usd}[2]
+of the \texttt{tool\_rich} cost on computation tasks, but
+\texttt{tool\_rich} is
+\resratio{headline}{modification:tool_rich:total_cost_usd}{modification:code_only:total_cost_usd}[2]
+of the \texttt{code\_only} cost on modification tasks --- with pass
+rates statistically tied within each regime. The sign-flip challenges
+both the ``specialized tools win'' and ``less is more'' framings;
+optimal tool surface is regime-dependent, not universal.

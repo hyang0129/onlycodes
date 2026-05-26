@@ -1,0 +1,22 @@
+# source_commit: 27815b82040f9bd5a8aa87369d8849446b7c4247
+# generated: 2026-05-25T16:00:00Z
+# generator: hand-built from seed_1 aggregates (issue #158 comment 2026-05-25). Replace with build_numbers.py output once seeds 2/3 + auth recovery land.
+# key_schema: regime:arm
+# default_precision: 3
+#
+# Wide format: one row per (regime, arm), one column per metric.
+#   regime ∈ {computation, modification}
+#   arm    ∈ {tool_rich, code_only, bash_only}
+#
+# Cells become \result{headline}{<regime>:<arm>:<metric>}.
+# Example: \result{headline}{modification:tool_rich:total_cost_usd}[2]
+#
+# Modification-regime numbers exclude 12 auth-failed sympy+mwaskom
+# instances (n=88 valid). Refresh after auth recovery completes.
+regime,arm,pass_rate,total_cost_usd,median_cost_usd,total_turns,dollars_per_turn,dollars_per_inst,n_instances
+computation,tool_rich,0.968,,0.100,,,,93
+computation,code_only,0.968,,0.070,,,,93
+computation,bash_only,0.946,,0.093,,,,93
+modification,tool_rich,0.540,45.48,,1906,0.024,0.52,88
+modification,code_only,0.540,50.60,,2694,0.019,0.58,88
+modification,bash_only,0.535,51.68,,2716,0.019,0.60,88
