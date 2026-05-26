@@ -30,7 +30,7 @@ from swebench.artifact_run import (
     run_artifact_arm,
     run_dir_for,
 )
-from swebench.runner import make_runner
+from swebench.runner import generate_isolation_nonce, make_runner
 
 
 @click.group()
@@ -107,6 +107,32 @@ def artifact_group() -> None:
     show_default=True,
     help="Wall-time cap in seconds per agent invocation (0 = unlimited). Overridden per task by execution_budget.max_wall_seconds when set.",
 )
+@click.option(
+    "--cache-isolation/--no-cache-isolation",
+    "cache_isolation",
+    default=False,
+    show_default=True,
+    help=(
+        "Force per-invocation prompt-cache isolation by injecting a 16-hex "
+        "nonce into the agent's tools[] array. Each call mints a fresh "
+        "nonce (datetime-salted) so reruns, different sweeps, and "
+        "different arms all miss prior cache entries. Applies to both "
+        "codex (#294) and Claude (#296) arms."
+    ),
+)
+@click.option(
+    "--codex-model",
+    "codex_model",
+    type=str,
+    default="gpt-5.5",
+    show_default=True,
+    help=(
+        "Codex CLI model slug (e.g. gpt-5.5, gpt-5.4, gpt-5.4-mini). "
+        "Written to config.toml AND passed as `codex exec -m <model>`. "
+        "Recorded in the JSONL meta line for cost lookup via codex_prices.toml. "
+        "Ignored when --agent-surface=claude_code."
+    ),
+)
 def artifact_run_command(
     filter_ids: str | None,
     arms: str,
@@ -117,6 +143,8 @@ def artifact_run_command(
     mcp_config: str | None,
     agent_surface: str,
     max_wall_seconds: int,
+    cache_isolation: bool,
+    codex_model: str,
 ) -> None:
     """Run artifact-graded benchmark arms on one or more tasks."""
     if num_runs < 1:
@@ -152,7 +180,7 @@ def artifact_run_command(
             mcp_path = str(candidate)
 
     try:
-        runner = make_runner(agent_surface)
+        runner = make_runner(agent_surface, codex_model=codex_model)
         binary = runner.find_binary()
         runner.verify_auth()
     except (ValueError, FileNotFoundError) as exc:
@@ -195,6 +223,17 @@ def artifact_run_command(
                     )
                     continue
                 effective_timeout = task.execution_budget.max_wall_seconds or max_wall_seconds
+                # Fresh per-invocation nonce (#294, #296). Generated here at
+                # the start of each (task, arm, run) so reruns and different
+                # sweeps get different nonces, defeating cross-task prompt
+                # cache hits on both codex and Claude. --resume correctness
+                # is preserved because the ``is_run_complete`` check above
+                # already skipped done runs before we got here.
+                nonce = (
+                    generate_isolation_nonce(task.instance_id, arm, run_idx)
+                    if cache_isolation
+                    else None
+                )
                 run_artifact_arm(
                     task,
                     arm,
@@ -205,6 +244,7 @@ def artifact_run_command(
                     mcp_config_path=mcp_path,
                     echo=click.echo,
                     wall_timeout_seconds=effective_timeout,
+                    isolation_nonce=nonce,
                 )
 
 
@@ -280,6 +320,7 @@ def _collect_artifact_rows(
                 cost_usd: float | None = None
                 num_turns: int | None = None
                 wall_secs: int | None = None
+                isolation_nonce: str | None = None
                 if result_path.is_file():
                     try:
                         data = json.loads(result_path.read_text())
@@ -296,6 +337,10 @@ def _collect_artifact_rows(
                         wall_secs = (
                             int(raw_wall) if isinstance(raw_wall, (int, float)) else None
                         )
+                        # #294 — surface --cache-isolation nonce for display
+                        raw_iso = data.get("isolation_nonce")
+                        if isinstance(raw_iso, str) and raw_iso:
+                            isolation_nonce = raw_iso
                     except (OSError, json.JSONDecodeError, ValueError):
                         verdict = "MISSING"
 
@@ -309,13 +354,17 @@ def _collect_artifact_rows(
                     "turns": num_turns,
                     "cost_usd": cost_usd,
                     "wall_secs": wall_secs,
+                    "isolation_nonce": isolation_nonce,
                 })
     rows.sort(key=lambda r: (r["task"], r["arm"], r["run"]))
     return rows
 
 
-def _fmt_cost(val: float | None) -> str:
-    return f"${val:.3f}" if isinstance(val, (int, float)) else "N/A"
+def _fmt_cost(val: float | None, *, isolation_nonce: str | None = None) -> str:
+    base = f"${val:.3f}" if isinstance(val, (int, float)) else "N/A"
+    if isolation_nonce:
+        return f"{base} (iso)"
+    return base
 
 
 def _fmt_num(val: Any) -> str:
@@ -334,7 +383,7 @@ def _emit_table(rows: list[dict[str, Any]], echo: Any) -> None:
             r["run"],
             r["verdict"],
             _fmt_num(r["turns"]),
-            _fmt_cost(r["cost_usd"]),
+            _fmt_cost(r["cost_usd"], isolation_nonce=r.get("isolation_nonce")),
             _fmt_num(r["wall_secs"]),
         ]
         for r in rows

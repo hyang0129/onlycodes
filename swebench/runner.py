@@ -23,6 +23,7 @@ callers do not manage temp dirs directly.
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import logging
 import os
@@ -32,8 +33,37 @@ import shutil
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
+
+
+def generate_isolation_nonce(instance_id: str, arm: str, run_idx: int) -> str:
+    """Return a fresh 16-hex nonce for a (task, arm, run_idx) invocation.
+
+    Used by ``--cache-isolation`` (#294, #296). Each call mixes a microsecond
+    UTC timestamp with the (instance, arm, run_idx) salt and hashes to 16 hex,
+    so:
+
+    - **Reruns** of the same triple produce different nonces — the new run
+      cannot inherit a prior run's prompt-cache entry still warm within the
+      provider's TTL window.
+    - **Different sweeps** of the same triple (e.g. ``seed_1`` vs ``seed_2``
+      output dirs) likewise mint independent nonces.
+    - **Concurrent invocations** of *different* triples are safe even if they
+      land on the same microsecond, because the identifier salt distinguishes
+      them. Concurrent calls for the *same* triple are not expected (the
+      scheduler dispatches each triple to one worker).
+    - **Cross-arm** isolation: arm is part of the salt, preserving the original
+      #294 guarantee that arms within a task do not share a cache key.
+
+    ``--resume`` correctness is preserved because completed runs are skipped
+    by ``is_run_complete()`` *before* this function is called — the prior
+    nonce is irrelevant for a fresh resumed invocation.
+    """
+    salt = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%f")
+    raw = f"{salt}|{instance_id}|{arm}|{run_idx}".encode()
+    return hashlib.sha256(raw).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +125,7 @@ class AgentRunner(ABC):
         binary: str,
         mcp_config_path: str | None = None,
         wall_timeout_seconds: int = 3600,
+        isolation_nonce: str | None = None,
     ) -> None:
         """Run the agent, appending output to result_file. Non-zero exit does not raise.
 
@@ -104,6 +135,13 @@ class AgentRunner(ABC):
 
         ``wall_timeout_seconds`` caps the total wall time of the agent subprocess.
         Pass 0 for unlimited.
+
+        ``isolation_nonce`` enables per-task prompt-cache isolation when set
+        (see issue #294). For CodexRunner, the nonce is injected into the
+        ``tools[]`` array via an extra stub MCP server, breaking OpenAI's
+        cross-task prompt cache. For ClaudeRunner, this is currently a no-op
+        — Claude's cache architecture differs and a symmetric mechanism is
+        a future follow-up (TODO).
         """
 
     @abstractmethod
@@ -190,6 +228,7 @@ class ClaudeRunner(AgentRunner):
         binary: str,
         mcp_config_path: str | None = None,  # unused; already in tools_flags
         wall_timeout_seconds: int = 3600,
+        isolation_nonce: str | None = None,
     ) -> None:
         cfg_dir = tempfile.mkdtemp(prefix="claude-eval-")
         try:
@@ -197,6 +236,30 @@ class ClaudeRunner(AgentRunner):
                 src = os.path.expanduser(f"~/.claude/{fname}")
                 if os.path.isfile(src):
                     shutil.copy2(src, cfg_dir)
+
+            env = os.environ.copy()
+            env["CLAUDE_CONFIG_DIR"] = cfg_dir
+            env["FORCE_PROMPT_CACHING_5M"] = "1"
+
+            # Per-invocation prompt-cache isolation (#296). Register the
+            # iso_nonce stub MCP server so the tool name embedded in
+            # Anthropic's tools[] array differs per invocation, missing the
+            # prefix cache. The stub tool is added to --disallowedTools so
+            # the agent cannot accidentally call it.
+            if isolation_nonce:
+                iso_server_path = _resolve_iso_nonce_server()
+                base_cfg: str | None = None
+                if "--mcp-config" in tools_flags:
+                    idx = tools_flags.index("--mcp-config")
+                    base_cfg = tools_flags[idx + 1]
+                merged_cfg = _write_claude_iso_mcp_config(
+                    base_cfg, iso_server_path, isolation_nonce, cfg_dir
+                )
+                iso_tool = f"mcp__iso_nonce__iso_nonce_{isolation_nonce}"
+                tools_flags = _splice_iso_into_claude_flags(
+                    tools_flags, merged_cfg, iso_tool
+                )
+                env["ONLYCODES_ISOLATION_NONCE"] = isolation_nonce
 
             cmd = [
                 binary,
@@ -209,9 +272,6 @@ class ClaudeRunner(AgentRunner):
                 "--output-format", "stream-json",
                 "--verbose",
             ]
-            env = os.environ.copy()
-            env["CLAUDE_CONFIG_DIR"] = cfg_dir
-            env["FORCE_PROMPT_CACHING_5M"] = "1"
             effective_timeout = wall_timeout_seconds if wall_timeout_seconds != 0 else None
             with open(result_file, "a") as out:
                 with subprocess.Popen(
@@ -315,6 +375,7 @@ class CodexRunner(AgentRunner):
         mcp_config_path: str | None = None,
         cwd: str = ".",
         arm: str = "baseline",
+        isolation_nonce: str | None = None,
     ) -> str:
         """Create an isolated CODEX_HOME directory for a single run.
 
@@ -325,6 +386,11 @@ class CodexRunner(AgentRunner):
 
         ``arm`` controls whether extra tool-restriction knobs are written into
         config.toml (for ``onlycode``/``code_only`` arms).
+
+        ``isolation_nonce`` — when set, an additional MCP stub server block is
+        written so codex serialises a per-task-unique tool into the outbound
+        ``tools[]`` array, forcing OpenAI's prompt cache to miss across tasks
+        (issue #294).
 
         Returns the path to the isolated config directory; ``invoke()`` is
         responsible for ``shutil.rmtree``.
@@ -354,8 +420,16 @@ class CodexRunner(AgentRunner):
         else:
             bundle_path = ""
         persistent = os.environ.get("ONLYCODES_PERSISTENT_KERNEL", "0")
+        iso_server_path = _resolve_iso_nonce_server() if isolation_nonce else None
         _write_codex_config(
-            cfg_dir, bundle_path, cwd, persistent, arm=arm, model=self.model
+            cfg_dir,
+            bundle_path,
+            cwd,
+            persistent,
+            arm=arm,
+            model=self.model,
+            isolation_nonce=isolation_nonce,
+            iso_server_path=iso_server_path,
         )
 
         return cfg_dir
@@ -371,11 +445,15 @@ class CodexRunner(AgentRunner):
         binary: str,
         mcp_config_path: str | None = None,
         wall_timeout_seconds: int = 3600,
+        isolation_nonce: str | None = None,
     ) -> None:
         """Run codex exec with an isolated CODEX_HOME containing auth + MCP config."""
         arm = getattr(self, "_arm", "baseline")
         cfg_dir = self._make_isolated_config(
-            mcp_config_path=mcp_config_path, cwd=cwd, arm=arm
+            mcp_config_path=mcp_config_path,
+            cwd=cwd,
+            arm=arm,
+            isolation_nonce=isolation_nonce,
         )
         # Codex does not expose a feature flag to disable the structured
         # apply_patch tool. For arms that must mirror Claude's strict
@@ -405,6 +483,11 @@ class CodexRunner(AgentRunner):
             ]
             env = os.environ.copy()
             env["CODEX_HOME"] = cfg_dir
+            if isolation_nonce:
+                # Required by the iso_nonce_server.mjs stub: the server reads
+                # the nonce from this env var to embed it into the tool name
+                # and description that codex serialises into the tools[] array.
+                env["ONLYCODES_ISOLATION_NONCE"] = isolation_nonce
             effective_timeout = wall_timeout_seconds if wall_timeout_seconds != 0 else None
             with open(result_file, "a") as out:
                 with subprocess.Popen(
@@ -681,6 +764,85 @@ def _apply_arm_directive(prompt: str, arm: str) -> str:
     return prompt
 
 
+def _write_claude_iso_mcp_config(
+    base_config_path: str | None,
+    iso_server_path: str,
+    nonce: str,
+    out_dir: str,
+) -> str:
+    """Write a Claude mcp-config.json containing the iso_nonce stub server (#296).
+
+    If ``base_config_path`` is given and readable, its existing ``mcpServers``
+    entries are preserved so the codebox / other servers stay available for
+    ``code_only`` / ``onlycode`` arms. For arms that pass no base config
+    (``tool_rich`` / ``baseline`` / ``bash_only``), the output contains only
+    the iso server.
+
+    Returns the path to the new file inside ``out_dir`` — the caller's
+    per-invocation temp dir, cleaned up alongside the rest of the run.
+    """
+    if base_config_path and Path(base_config_path).is_file():
+        base = json.loads(Path(base_config_path).read_text())
+    else:
+        base = {}
+    base.setdefault("mcpServers", {})
+    base["mcpServers"]["iso_nonce"] = {
+        "command": "node",
+        "args": [iso_server_path],
+        "env": {"ONLYCODES_ISOLATION_NONCE": nonce},
+    }
+    out_path = Path(out_dir) / "mcp-config-iso.json"
+    out_path.write_text(json.dumps(base))
+    return str(out_path)
+
+
+def _splice_iso_into_claude_flags(
+    flags: list[str], merged_mcp_config: str, iso_tool: str
+) -> list[str]:
+    """Return ``flags`` with the iso MCP config and disallowed-tool spliced in.
+
+    - If ``--mcp-config`` is already present, its value is replaced with the
+      merged config path (preserves ``--strict-mcp-config`` if also present).
+    - Otherwise ``--mcp-config <merged> --strict-mcp-config`` is appended.
+    - If ``--disallowedTools`` is present, its comma-separated value is
+      extended with ``iso_tool``; otherwise the flag pair is appended.
+
+    Returns a new list; the input is not mutated.
+    """
+    out = list(flags)
+    if "--mcp-config" in out:
+        idx = out.index("--mcp-config")
+        out[idx + 1] = merged_mcp_config
+    else:
+        out += ["--mcp-config", merged_mcp_config, "--strict-mcp-config"]
+    if "--disallowedTools" in out:
+        idx = out.index("--disallowedTools")
+        out[idx + 1] = f"{out[idx + 1]},{iso_tool}"
+    else:
+        out += ["--disallowedTools", iso_tool]
+    return out
+
+
+def _resolve_iso_nonce_server() -> str:
+    """Return the absolute path to the iso_nonce stub MCP server script.
+
+    Located next to the exec-server JS source so the existing
+    ``@modelcontextprotocol/sdk`` dependency suffices. The file is checked in;
+    if it is missing this is a packaging bug, surfaced as ``FileNotFoundError``.
+    """
+    candidate = (
+        Path(__file__).parent.parent
+        / "exec_server"
+        / "iso_nonce_server.mjs"
+    )
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"iso_nonce_server.mjs not found at {candidate}. "
+            "Cache-isolation requires this stub MCP server."
+        )
+    return str(candidate)
+
+
 def _write_codex_config(
     cfg_dir: str,
     bundle_path: str,
@@ -688,6 +850,8 @@ def _write_codex_config(
     persistent_kernel: str,
     arm: str = "baseline",
     model: str = DEFAULT_CODEX_MODEL,
+    isolation_nonce: str | None = None,
+    iso_server_path: str | None = None,
 ) -> None:
     """Write config.toml into cfg_dir for a Codex run.
 
@@ -768,6 +932,26 @@ def _write_codex_config(
             'enabled_tools = ["execute_code", "execute_code_and_wait"]\n'
             "startup_timeout_sec = 30.0\n"
             f'cwd = "{_toml_str(cwd)}"\n'
+        )
+
+    # Per-task prompt-cache isolation (#294). When enabled, register a stub
+    # MCP server that exposes one tool whose name and description embed the
+    # nonce. Codex serialises this tool into the outbound Responses-API
+    # ``tools[]`` array, so the cache key (instructions + tools) byte-differs
+    # per task and OpenAI's prompt cache cannot serve cross-task hits.
+    if isolation_nonce and iso_server_path:
+        toml += (
+            "\n"
+            "[mcp_servers.iso_nonce]\n"
+            'command = "node"\n'
+            f'args = ["{_toml_str(iso_server_path)}"]\n'
+            "\n"
+            "[mcp_servers.iso_nonce.env]\n"
+            f'ONLYCODES_ISOLATION_NONCE = "{_toml_str(isolation_nonce)}"\n'
+            "\n"
+            "[mcp_servers.iso_nonce.options]\n"
+            f'enabled_tools = ["iso_nonce_{_toml_str(isolation_nonce)}"]\n'
+            "startup_timeout_sec = 30.0\n"
         )
 
     with open(os.path.join(cfg_dir, "config.toml"), "w") as f:

@@ -195,7 +195,7 @@ class _FakeCodexRunner:
         if self._preflight_raises is not None:
             raise self._preflight_raises
 
-    def invoke(self, *, prompt, cwd, system_prompt, tools_flags, result_file, binary, mcp_config_path=None, wall_timeout_seconds: int = 3600):
+    def invoke(self, *, prompt, cwd, system_prompt, tools_flags, result_file, binary, mcp_config_path=None, wall_timeout_seconds: int = 3600, isolation_nonce: str | None = None):
         Path(cwd, "answer.txt").write_text("ok\n")
         with open(result_file, "a") as f:
             f.write('{"type":"result","total_cost_usd":0.0,"num_turns":1}\n')
@@ -228,7 +228,7 @@ class TestArtifactCliCodexPreflight:
         iid = _write_minimal_task(tasks_root)
         results_dir = tmp_path / "results"
 
-        monkeypatch.setattr(artifact_cli_mod, "make_runner", lambda _surface: fake_runner)
+        monkeypatch.setattr(artifact_cli_mod, "make_runner", lambda _surface, **_kw: fake_runner)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -288,7 +288,7 @@ class TestArtifactCliCodexPreflight:
         iid = _write_minimal_task(tasks_root)
         results_dir = tmp_path / "results"
 
-        monkeypatch.setattr(artifact_cli_mod, "make_runner", lambda _surface: fake)
+        monkeypatch.setattr(artifact_cli_mod, "make_runner", lambda _surface, **_kw: fake)
 
         runner = CliRunner()
         result = runner.invoke(

@@ -33,6 +33,7 @@ We evaluate two agent surfaces: Claude Code (claude-sonnet-4-6, version 2.1.139)
 - Claude cost is reported via the agent's per-message API usage telemetry — accurate to within the rounding precision of the telemetry stream.
 - Codex cost is estimated from token usage × model price per [Issue #253](https://github.com/hyang0129/onlycodes/issues/253) — slightly less precise than Claude's direct telemetry.
 - Wall-clock time is reported in the appendix but not used in the headline; we focus on dollar cost and turn count.
+- **Headline costs are reported in two columns: cache-independent and observed-with-cache (see §3.5).** Cache-independent applies full per-token rates to all input tokens (the model-deterministic upper bound); observed reflects actual API billing during our runs. Both are needed because OpenAI's prompt cache is non-stationary even across identical repeated runs (a single task's `cached_input_tokens` swung between 0 and 17,920 across four sequential runs in smoke testing, driven by cross-account / cross-workload cache pollution on the OpenAI backend). Cache-independent costs are reproducible from raw token counts; observed costs are not. Neither represents a "deployment" cost — real users land somewhere between the two depending on how much workload locality they have on their account. Known contributing OpenAI-side issues: gpt-5.5 cache rate (codex#20301), ChatGPT-login auth caching (codex#5556).
 
 ### What we deliberately did not test
 

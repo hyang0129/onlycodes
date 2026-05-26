@@ -60,10 +60,12 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
         # the agent_surface field in their meta line.
         agent_surface = "claude_code"
 
+        isolation_nonce: str | None = None
         if jsonl_path.exists():
             # Detect agent_surface from the meta line so we can route cost
             # parsing to the right path (Claude's total_cost_usd vs. Codex's
-            # turn.completed usage + price-table estimate).
+            # turn.completed usage + price-table estimate). Also extract
+            # isolation_nonce (#294) so the cost column can be annotated.
             try:
                 first_line = jsonl_path.read_text().splitlines()[0] if jsonl_path.stat().st_size else ""
                 if first_line:
@@ -74,6 +76,9 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
                             _surface = meta.get("agent_surface")
                             if isinstance(_surface, str):
                                 agent_surface = _surface
+                            _nonce = meta.get("isolation_nonce")
+                            if isinstance(_nonce, str) and _nonce:
+                                isolation_nonce = _nonce
                     except (_json.JSONDecodeError, ValueError):
                         pass
             except (OSError, IndexError):
@@ -111,6 +116,7 @@ def _parse_results(results_dir: Path) -> list[ArmResult]:
                 jsonl_path=str(jsonl_path),
                 test_txt_path=str(test_file),
                 agent_surface=agent_surface,
+                isolation_nonce=isolation_nonce,
             )
         )
 
@@ -128,11 +134,19 @@ def _format_cost(r: ArmResult) -> str:
     Issue #253: ``~`` is a display-only marker. ``ArmResult.cost_usd`` stays
     a plain ``float | None`` for CSV/JSON consumers, which simply gives the
     estimate as the number (one source of truth).
+
+    Issue #294: when the run used ``--cache-isolation`` (``isolation_nonce``
+    populated), suffix the formatted cost with ``(iso)`` so reviewers cannot
+    accidentally compare iso runs against shared-cache-warmed runs.
     """
     if r.cost_usd is None:
-        return "N/A"
-    prefix = "~$" if r.agent_surface == "codex_cli" else "$"
-    return f"{prefix}{r.cost_usd:.3f}"
+        base = "N/A"
+    else:
+        prefix = "~$" if r.agent_surface == "codex_cli" else "$"
+        base = f"{prefix}{r.cost_usd:.3f}"
+    if r.isolation_nonce:
+        return f"{base} (iso)"
+    return base
 
 
 def _emit_arm_aggregates(results: list[ArmResult]) -> None:

@@ -95,6 +95,7 @@ def run_artifact_arm(
     mcp_config_path: str | None = None,
     echo: Callable[[str], None] | None = None,
     wall_timeout_seconds: int = 3600,
+    isolation_nonce: str | None = None,
 ) -> ArtifactArmResult:
     """Run one (task, arm, run_idx) triple and write result.json + agent.jsonl.
 
@@ -125,17 +126,26 @@ def run_artifact_arm(
     _log_budget(task, echo)
 
     agent_version = runner.get_version(binary)
+    meta_record: dict[str, object] = {
+        "type": "meta",
+        "mode": "artifact",
+        "instance_id": task.instance_id,
+        "arm": arm,
+        "run": run_idx,
+        "agent_surface": runner.surface,
+        "agent_binary": binary,
+        "agent_version": agent_version,
+    }
+    if runner.surface == "codex_cli" and getattr(runner, "model", None):
+        meta_record["model"] = runner.model
+    if isolation_nonce:
+        # Stamped for forensic traceability (#294): downstream analyze/summary
+        # uses this presence to annotate cost columns with "(iso)" so
+        # reviewers can tell whether a run used per-task prompt-cache
+        # isolation or shared-cache methodology.
+        meta_record["isolation_nonce"] = isolation_nonce
     with open(agent_jsonl, "w") as f:
-        f.write(json.dumps({
-            "type": "meta",
-            "mode": "artifact",
-            "instance_id": task.instance_id,
-            "arm": arm,
-            "run": run_idx,
-            "agent_surface": runner.surface,
-            "agent_binary": binary,
-            "agent_version": agent_version,
-        }) + "\n")
+        f.write(json.dumps(meta_record) + "\n")
 
     prompt = _build_prompt(task, scratch_dir, arm)
     tools_flags = runner.build_tools_flags(arm, mcp_config_path)
@@ -157,6 +167,7 @@ def run_artifact_arm(
             binary=binary,
             mcp_config_path=mcp_config_path,
             wall_timeout_seconds=wall_timeout_seconds,
+            isolation_nonce=isolation_nonce,
         )
         wall_secs = int(time.time() - start)
         echo(f"  [{task.instance_id} {arm} run{run_idx}] Grading...")
@@ -184,6 +195,7 @@ def run_artifact_arm(
             "max_wall_seconds": task.execution_budget.max_wall_seconds,
             "enforcement": task.execution_budget.enforcement,
         },
+        isolation_nonce=isolation_nonce,
         wall_secs=wall_secs,
         cost_usd=cost,
         num_turns=turns,

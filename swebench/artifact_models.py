@@ -100,6 +100,9 @@ class ArtifactArmResult:
     agent_surface: str      # "claude_code" | "codex_cli"
     agent_version: str | None
     agent_jsonl_path: str
+    # Per-task prompt-cache isolation nonce (#294). ``None`` when the run
+    # used the default shared-cache methodology.
+    isolation_nonce: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

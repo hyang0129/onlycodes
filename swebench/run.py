@@ -47,7 +47,13 @@ from swebench.harness import (
     strip_git_history,
 )
 from swebench.models import Problem
-from swebench.runner import BLOCKED_BUILTINS, AgentRunner, ClaudeRunner, make_runner
+from swebench.runner import (
+    BLOCKED_BUILTINS,
+    AgentRunner,
+    ClaudeRunner,
+    generate_isolation_nonce,
+    make_runner,
+)
 
 
 def _mcp_config_without_persistent_kernel(
@@ -159,6 +165,7 @@ def _run_arm(
     runner: AgentRunner | None = None,
     codex_model: str | None = None,
     wall_timeout_seconds: int = 3600,
+    cache_isolation: bool = False,
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
@@ -313,6 +320,20 @@ def _run_arm(
     # in codex_prices.toml and so the result file is self-describing.
     if _runner.surface == "codex_cli" and codex_model is not None:
         _meta_record["model"] = codex_model
+
+    nonce: str | None = None
+    if cache_isolation:
+        # Fresh per-invocation nonce (#294, #296). Different sweeps and
+        # reruns must produce different nonces so the provider's prompt
+        # cache cannot serve cross-invocation hits. --resume correctness
+        # is preserved by ``_is_triple_complete`` skipping done runs
+        # before reaching this point; the old nonce is irrelevant once
+        # the run is complete.
+        nonce = generate_isolation_nonce(problem.instance_id, arm, run_idx)
+        # Stamped for forensic traceability (#294): analyze/summary uses
+        # this presence to annotate cost columns with "(iso)".
+        _meta_record["isolation_nonce"] = nonce
+
     with open(result_file, "w") as _meta_f:
         _meta_f.write(json.dumps(_meta_record) + "\n")
 
@@ -325,6 +346,7 @@ def _run_arm(
         binary=agent_binary,
         mcp_config_path=effective_mcp_config,
         wall_timeout_seconds=wall_timeout_seconds,
+        isolation_nonce=nonce,
     )
 
     wall_secs = int(time.time() - start_time)
@@ -777,6 +799,19 @@ def _cleanup_stale_overlays(
     show_default=True,
     help="Wall-time cap in seconds per agent invocation (0 = unlimited).",
 )
+@click.option(
+    "--cache-isolation/--no-cache-isolation",
+    "cache_isolation",
+    default=False,
+    show_default=True,
+    help=(
+        "Force per-invocation prompt-cache isolation by injecting a 16-hex "
+        "nonce into the agent's tools[] array. Each call mints a fresh "
+        "nonce (datetime-salted) so reruns, different sweeps, and "
+        "different arms all miss prior cache entries. Applies to both "
+        "codex (#294) and Claude (#296) arms."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -791,6 +826,7 @@ def run_command(
     agent_surface: str,
     codex_model: str,
     max_wall_seconds: int,
+    cache_isolation: bool,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -1086,6 +1122,7 @@ def run_command(
                         runner=runner,
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
                         wall_timeout_seconds=max_wall_seconds,
+                        cache_isolation=cache_isolation,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -1143,6 +1180,7 @@ def run_command(
                         runner=runner,
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
                         wall_timeout_seconds=max_wall_seconds,
+                        cache_isolation=cache_isolation,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)
