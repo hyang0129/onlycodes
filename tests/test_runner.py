@@ -604,6 +604,58 @@ def test_codex_make_isolated_config_success(tmp_path, monkeypatch):
         _shutil.rmtree(cfg_dir, ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------
+# Codex cache-prefix stabilization (skills symlink + stable process cwd)
+# ---------------------------------------------------------------------------
+
+def test_codex_make_isolated_config_creates_skills_symlink(tmp_path, monkeypatch):
+    """Per-task CODEX_HOME must have ``skills`` symlinked to the shared dir
+    so SKILL.md paths in the developer message stay byte-stable across tasks
+    (otherwise OpenAI's prompt cache misses every task)."""
+    import shutil as _shutil
+    fake_home = tmp_path / "home"
+    codex_dir = fake_home / ".codex"
+    codex_dir.mkdir(parents=True)
+    (codex_dir / "auth.json").write_text('{"token": "t"}')
+
+    real_expanduser = os.path.expanduser
+    def fake_expanduser(p):
+        if p.startswith("~/"):
+            return str(fake_home / p[2:])
+        return real_expanduser(p)
+    monkeypatch.setattr("swebench.runner.os.path.expanduser", fake_expanduser)
+
+    cfg_dir = CodexRunner()._make_isolated_config(
+        mcp_config_path=None, cwd=str(tmp_path), arm="baseline"
+    )
+    try:
+        from swebench.runner import CODEX_SHARED_SKILLS_DIR
+        skills_link = Path(cfg_dir) / "skills"
+        assert skills_link.is_symlink(), "expected skills/ to be a symlink"
+        assert os.readlink(str(skills_link)) == CODEX_SHARED_SKILLS_DIR
+    finally:
+        _shutil.rmtree(cfg_dir, ignore_errors=True)
+
+
+def test_arm_uses_stable_process_cwd():
+    """Only the code-only family runs with the stable process cwd."""
+    from swebench.runner import _arm_uses_stable_process_cwd
+    assert _arm_uses_stable_process_cwd("code_only") is True
+    assert _arm_uses_stable_process_cwd("onlycode") is True
+    assert _arm_uses_stable_process_cwd("tool_rich") is False
+    assert _arm_uses_stable_process_cwd("baseline") is False
+    assert _arm_uses_stable_process_cwd("bash_only") is False
+
+
+def test_ensure_codex_cache_dirs_idempotent():
+    """Calling the dir-ensure helper multiple times is safe."""
+    from swebench.runner import _ensure_codex_cache_dirs, CODEX_SHARED_SKILLS_DIR, CODEX_STABLE_CWD
+    _ensure_codex_cache_dirs()
+    _ensure_codex_cache_dirs()
+    assert os.path.isdir(CODEX_SHARED_SKILLS_DIR)
+    assert os.path.isdir(CODEX_STABLE_CWD)
+
+
 def test_run_command_codex_baseline_skips_bundle_check(tmp_path, monkeypatch):
     """Preflight for codex_cli + baseline must not require the exec-server bundle (F-1)."""
     from click.testing import CliRunner

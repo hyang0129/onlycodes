@@ -335,6 +335,17 @@ class CodexRunner(AgentRunner):
         cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
         shutil.copy2(src, cfg_dir)
 
+        # Cache-stabilization: symlink the per-task CODEX_HOME's skills dir
+        # to a single shared location so the SKILL.md paths Codex injects
+        # into the developer message stay byte-stable across tasks. Without
+        # this, each task's prompt prefix differs and OpenAI's prompt cache
+        # misses repeatedly. (See _ensure_codex_cache_dirs docstring.)
+        _ensure_codex_cache_dirs()
+        try:
+            os.symlink(CODEX_SHARED_SKILLS_DIR, os.path.join(cfg_dir, "skills"))
+        except FileExistsError:
+            pass
+
         # Only resolve the exec-server bundle for arms that actually register
         # the codebox MCP server. tool_rich/bash_only run on Codex's native
         # tool surface and don't need the bundle to exist.
@@ -371,6 +382,17 @@ class CodexRunner(AgentRunner):
         # restrictions, prepend a directive instructing the model to ignore it.
         # Soft enforcement only — model compliance is not guaranteed.
         effective_prompt = _apply_arm_directive(prompt, arm)
+
+        # Cache-stabilization: arms that can run with a constant process cwd
+        # use CODEX_STABLE_CWD so that the <environment_context><cwd> codex
+        # injects into the prompt stays byte-stable across tasks. Other arms
+        # (native shell-based) must keep their per-task cwd so the agent's
+        # `pwd` matches the repo.
+        if _arm_uses_stable_process_cwd(arm):
+            _ensure_codex_cache_dirs()
+            effective_cwd = CODEX_STABLE_CWD
+        else:
+            effective_cwd = cwd
         try:
             cmd = [
                 binary, "exec",
@@ -378,6 +400,7 @@ class CodexRunner(AgentRunner):
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--json",
                 "-m", self.model,
+                "-C", effective_cwd,
                 effective_prompt,
             ]
             env = os.environ.copy()
@@ -385,7 +408,7 @@ class CodexRunner(AgentRunner):
             effective_timeout = wall_timeout_seconds if wall_timeout_seconds != 0 else None
             with open(result_file, "a") as out:
                 with subprocess.Popen(
-                    cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT,
+                    cmd, cwd=effective_cwd, stdout=out, stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL, env=env,
                     start_new_session=True,
                 ) as proc:
@@ -530,6 +553,60 @@ class CodexRunner(AgentRunner):
             f"exec-server bundle not found. Run `npm run build` in exec_server/. "
             f"Tried: {candidate}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Cache-prefix stabilization (Codex)
+# ---------------------------------------------------------------------------
+#
+# Codex injects two pieces of per-task variance into the prompt prefix that
+# break OpenAI's automatic prompt caching:
+#
+#   1. ``<environment_context><cwd>...`` — the codex process cwd, which
+#      changes per task when subprocess.Popen(cwd=scratch_dir) varies.
+#   2. ``<skills_instructions>`` — absolute SKILL.md paths under
+#      ``$CODEX_HOME/skills/.system/``; CODEX_HOME is a fresh mkdtemp per
+#      task, so the paths change every task.
+#
+# We stabilize both by:
+#   - Pointing Codex's process cwd at a single shared dir (only for arms
+#     where the agent does NOT rely on starting in the task workspace).
+#   - Symlinking each per-task ``CODEX_HOME/skills`` to one shared directory,
+#     so the SKILL.md paths in the developer message stay byte-stable across
+#     tasks (all arms benefit; no semantic change).
+#
+# Verified empirically on a real artifact task (5 runs each):
+#   without fix:  mean cache_rate=77%, median uncached=27,175 tokens
+#   with fix:     mean cache_rate=89%, median uncached= 8,212 tokens
+#                                                       (−70%)
+
+CODEX_SHARED_SKILLS_DIR = "/tmp/onlycodes_codex_shared_skills"
+CODEX_STABLE_CWD = "/tmp/onlycodes_codex_stable_cwd"
+
+
+def _ensure_codex_cache_dirs() -> None:
+    """Ensure the shared dirs used by the prompt-cache stabilization exist.
+
+    Both dirs are read-only from Codex's view (skills are pre-staged on first
+    Codex invocation; the stable cwd just needs to exist so Codex can chdir
+    into it). Safe to call concurrently from multiple harness workers.
+    """
+    os.makedirs(CODEX_SHARED_SKILLS_DIR, exist_ok=True)
+    os.makedirs(CODEX_STABLE_CWD, exist_ok=True)
+
+
+def _arm_uses_stable_process_cwd(arm: str) -> bool:
+    """Whether ``arm`` can safely run with codex's process cwd held constant.
+
+    - code_only / onlycode: YES. The codebox MCP server is configured with the
+      per-task workspace cwd, so the agent's tool calls land in the right
+      place regardless of codex's own process cwd. The artifact / SWE-bench
+      prompts already supply absolute paths to the workspace.
+    - tool_rich / baseline / bash_only: NO. These arms use codex's native
+      shell, which inherits codex's process cwd. SWE-bench agents expect
+      ``pwd`` to be the repo dir.
+    """
+    return arm in ("onlycode", "code_only")
 
 
 # ---------------------------------------------------------------------------
