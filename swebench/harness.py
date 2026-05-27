@@ -59,6 +59,7 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "scikit-learn__scikit-learn-10427": "python3.9",
     "scikit-learn__scikit-learn-13013": "python3.9",
     "scikit-learn__scikit-learn-10803": "python3.9",
+    "scikit-learn__scikit-learn-10908": "python3.9",
     "scikit-learn__scikit-learn-11206": "python3.9",
     # sklearn 0.21.dev era (2019): distutils.version.LooseVersion emits DeprecationWarning
     # on Python 3.10+ (deprecated there, removed 3.12); pytest collection aborts
@@ -169,6 +170,7 @@ _INSTANCE_PRE_INSTALL: dict[str, list[str]] = {
     # pre-installed, build fails with "scikit-learn requires scipy >= 1.3.2".
     # scipy<1.12 keeps compatibility with the repo-level numpy<1.24 pin.
     "scikit-learn__scikit-learn-24677": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
+    "scikit-learn__scikit-learn-25570": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
     "scikit-learn__scikit-learn-25694": ["setuptools<60", "numpy<1.24", "cython<3", "scipy<1.12"],
     # sphinx 2.x–3.x era: sphinx/writers/latex.py imports the `roman` package
     # unconditionally (either via `docutils.utils.roman`, which modern docutils
