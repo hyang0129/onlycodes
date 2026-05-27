@@ -79,11 +79,20 @@ def _load_problems(filter_ids: str | None) -> list[Problem]:
 
 
 def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
-    """Build the cache for one instance. Returns (id, ok, message)."""
+    """Build the cache for one instance. Returns (id, ok, message).
+
+    New cache entries use the isolated layout (``venv_lower/`` as the pristine
+    lowerdir; ``venv/`` is kept as the canonical mountpoint for per-arm
+    overlays).  Existing legacy entries (``venv/`` present, no ``venv_lower/``)
+    are left as-is here — lazy migration happens in ``_setup_problem_cached``
+    when ``swebench run`` first uses them with ``--venv-isolation``.
+    """
     instance_id = problem.instance_id
     paths = cache_paths(instance_id)
 
-    if not force and has_cached_instance(instance_id):
+    # Check isolated layout first (preferred), then fall back to legacy.
+    if not force and (has_cached_instance(instance_id, venv_isolation=True)
+                      or has_cached_instance(instance_id, venv_isolation=False)):
         return (instance_id, True, "already cached (skip)")
 
     started = time.time()
@@ -107,17 +116,34 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
         # 3. Checkout base commit
         git_reset(repo_dir, problem.base_commit)
 
-        # 4. Venv + editable install
-        venv_dir = paths["venv"]
-        if force and Path(venv_dir).exists():
-            shutil.rmtree(venv_dir, ignore_errors=True)
-        setup_venv(venv_dir, repo_dir, **_venv_kwargs(problem))
+        # 4. Venv + editable install — build into venv/ (the canonical creation path).
+        # Shebangs in console scripts are baked to the creation path; the overlay
+        # mounts back at venv/ so they keep working after migration. After building,
+        # we rename venv/ → venv_lower/ so the mountpoint (venv/) is free.
+        venv_lower_dir = paths["venv_lower"]
+        venv_canonical = paths["venv"]
+        if force and Path(venv_lower_dir).exists():
+            shutil.rmtree(venv_lower_dir, ignore_errors=True)
+        # On --force or fresh build, ensure venv/ is clear (not a live mount).
+        if force and Path(venv_canonical).exists() and not Path(venv_canonical).is_mount():
+            shutil.rmtree(venv_canonical, ignore_errors=True)
+        # Build into venv/ (canonical path — shebangs will point here).
+        setup_venv(venv_canonical, repo_dir, **_venv_kwargs(problem))
 
         # 5. Scrub transient artifacts
         scrub_cache_dir(repo_dir)
 
-        # 6. Write lockfile
-        write_lockfile(venv_dir, paths["lockfile"])
+        # 6. Write lockfile (against venv/ before rename, since pip freeze uses venv).
+        write_lockfile(venv_canonical, paths["lockfile"])
+
+        # 7. Rename venv/ → venv_lower/ (isolated layout).
+        # Now venv/ is free to be the overlay mountpoint. Shebangs baked to
+        # "<cache>/instances/<id>/venv/bin/python" still work because the overlay
+        # mounts the lowerdir (venv_lower/) back at venv/.
+        if Path(venv_canonical).exists() and not Path(venv_canonical).is_mount():
+            if Path(venv_lower_dir).exists():
+                shutil.rmtree(venv_lower_dir, ignore_errors=True)
+            Path(venv_canonical).rename(venv_lower_dir)
 
         elapsed = int(time.time() - started)
         return (instance_id, True, f"built in {elapsed}s")

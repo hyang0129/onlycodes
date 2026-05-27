@@ -19,16 +19,19 @@ import click
 from swebench import repo_root
 from swebench.cache import (
     Backend,
+    CacheError,
+    OverlayError,
     cache_paths,
     detect_overlay_backend,
     has_cached_instance,
+    migrate_to_isolated_layout,
     mount_overlay,
     reinstall_editable,
     scrub_cache_dir,
     unmount_overlay,
     verify_lockfile,
+    venv_overlay,
     write_lockfile,
-    OverlayError,
 )
 from swebench.harness import (
     _venv_kwargs,
@@ -166,6 +169,11 @@ def _run_arm(
     codex_model: str | None = None,
     wall_timeout_seconds: int = 3600,
     cache_isolation: bool = False,
+    venv_isolation: bool = True,
+    # When venv_isolation is True, this must be the venv_lower path so the
+    # context manager can mount the overlay over venv_dir (the canonical path).
+    venv_lower_dir: str = "",
+    overlay_backend: Backend = "none",
 ) -> str:
     """Run a single arm (baseline or onlycode) for one instance.
 
@@ -191,6 +199,78 @@ def _run_arm(
             click.echo(msg)
 
     _echo(f"  [{arm} run {run_idx}] Starting...")
+
+    # -- Venv isolation: mount a per-arm overlay over the canonical venv dir. --
+    # When venv_isolation is True, ``venv_overlay()`` mounts an OverlayFS at
+    # the canonical venv_dir path so agent pip-installs go into a per-arm upper
+    # layer that is discarded after the arm. venv_lower_dir is the pristine
+    # lowerdir populated during cache setup. If venv_isolation is False, we
+    # use the shared venv_dir directly (legacy behaviour).
+    if venv_isolation and venv_lower_dir:
+        _venv_ctx = venv_overlay(
+            instance_id=problem.instance_id,
+            arm=arm,
+            run_idx=run_idx,
+            venv_lower=venv_lower_dir,
+            venv_merged=venv_dir,
+            upper_root="/tmp",
+            backend=overlay_backend if overlay_backend != "none" else None,
+        )
+    else:
+        # No isolation — use the shared venv directly (identity context manager).
+        import contextlib as _contextlib
+        _venv_ctx = _contextlib.nullcontext(venv_dir)
+
+    with _venv_ctx as _effective_venv_dir:
+        return _run_arm_body(
+            problem=problem,
+            arm=arm,
+            run_idx=run_idx,
+            repo_dir=repo_dir,
+            venv_dir=_effective_venv_dir,
+            results_dir=results_dir,
+            agent_binary=agent_binary,
+            mcp_config_path=mcp_config_path,
+            root=root,
+            persistent_kernel=persistent_kernel,
+            log_buffer=log_buffer,
+            needs_editable_reinstall=needs_editable_reinstall,
+            runner=runner,
+            codex_model=codex_model,
+            wall_timeout_seconds=wall_timeout_seconds,
+            cache_isolation=cache_isolation,
+            _echo=_echo,
+        )
+
+
+def _run_arm_body(
+    *,
+    problem: Problem,
+    arm: str,
+    run_idx: int,
+    repo_dir: str,
+    venv_dir: str,
+    results_dir: str,
+    agent_binary: str,
+    mcp_config_path: str,
+    root: Path,
+    persistent_kernel: bool = True,
+    log_buffer: io.StringIO | None = None,
+    needs_editable_reinstall: bool = False,
+    runner: AgentRunner | None = None,
+    codex_model: str | None = None,
+    wall_timeout_seconds: int = 3600,
+    cache_isolation: bool = False,
+    _echo=None,
+) -> str:
+    """Core arm execution body. Called by ``_run_arm`` inside a venv context."""
+
+    if _echo is None:
+        def _echo(msg: str) -> None:  # type: ignore[misc]
+            if log_buffer is not None:
+                log_buffer.write(msg + "\n")
+            else:
+                click.echo(msg)
 
     # Reset repo to its current HEAD rather than ``problem.base_commit``: the
     # history-strip routine (see ``strip_git_history``) has already collapsed
@@ -526,6 +606,8 @@ class _OverlayHandle(NamedTuple):
     workdir: str
     backend: Backend
     lowerdir: str = ""  # set for cached overlays so they can be refreshed between arms
+    venv_lower_dir: str = ""  # set when venv_isolation is True; lowerdir for venv overlay
+    venv_canonical_dir: str = ""  # canonical venv path (mountpoint when isolation is on)
 
 
 def _setup_problem_cached(
@@ -534,6 +616,7 @@ def _setup_problem_cached(
     run_tag: str,
     overlay_tmp_root: str,
     overlay_backend: Backend,
+    venv_isolation: bool = True,
 ) -> tuple[str, str, _OverlayHandle | None]:
     """Cache-aware per-problem setup.
 
@@ -545,32 +628,74 @@ def _setup_problem_cached(
     ``repo/``, verifies the venv's pip-freeze matches the captured lockfile
     (rebuilding the cache entry if it drifted), and re-runs ``pip install -e``
     so ``.egg-info`` exists in the overlay.
+
+    When *venv_isolation* is True:
+      - Lazily migrates legacy ``venv/`` → ``venv_lower/`` (idempotent).
+      - The ``verify_lockfile`` check runs against ``venv_lower/`` (the pristine
+        lowerdir); any drift here indicates the overlay logic itself broke
+        (paranoia assertion), not an agent pip-install.
+      - Returns ``venv_lower`` in the handle so ``_run_arm`` can mount a per-arm
+        overlay over ``venv/`` (the canonical path, same as the creation path).
+    When *venv_isolation* is False:
+      - Legacy behaviour: ``venv/`` is the shared, mutable venv dir.
+      - ``verify_lockfile`` drift triggers a full rebuild as before.
     """
-    if not has_cached_instance(problem.instance_id):
-        return ("", "", None)
+    if not has_cached_instance(problem.instance_id, venv_isolation=venv_isolation):
+        # Also check legacy layout so we can migrate on the fly.
+        if not has_cached_instance(problem.instance_id, venv_isolation=False):
+            return ("", "", None)
+        # Legacy layout exists but isolation mode expects venv_lower — migrate.
+        if venv_isolation:
+            instance_dir = cache_paths(problem.instance_id)["instance"]
+            try:
+                migrate_to_isolated_layout(instance_dir)
+            except CacheError as exc:
+                click.echo(
+                    f"  {problem.instance_id}: venv layout migration failed ({exc}); "
+                    "falling back to clone+venv.",
+                    err=True,
+                )
+                return ("", "", None)
 
     paths = cache_paths(problem.instance_id)
     lower = paths["repo"]
-    venv_dir = paths["venv"]
     lockfile = paths["lockfile"]
 
-    # Venv integrity — if Claude leaked a pip install into a prior run, rebuild.
-    if not verify_lockfile(venv_dir, lockfile):
-        click.echo(
-            f"  {problem.instance_id}: venv lockfile mismatch — rebuilding cache entry."
-        )
-        # Rebuild means: scrub any mutations the venv picked up. We can't
-        # un-pip-install without knowing what was added, so the safest path is
-        # to recreate the venv from scratch.
-        # First, reset the lowerdir to base_commit so it is clean before
-        # rebuilding — a prior run may have left the lowerdir in a modified
-        # state (e.g. partial edits, stale .egg-info from a previous
-        # setup_venv call that scrub_cache_dir later removed).
-        git_reset(lower, problem.base_commit)
-        shutil.rmtree(venv_dir, ignore_errors=True)
-        setup_venv(venv_dir, lower, **_venv_kwargs(problem))
-        scrub_cache_dir(lower)
-        write_lockfile(venv_dir, lockfile)
+    if venv_isolation:
+        # Isolated layout: venv_lower is the pristine lowerdir; venv is the mountpoint.
+        venv_lower = paths["venv_lower"]
+        venv_canonical = paths["venv"]
+        # Paranoia assertion: verify the lowerdir is clean.
+        # Under isolation the agent cannot write to venv_lower, so drift here
+        # would indicate an overlay bug.  Log loudly and fall through to rebuild
+        # for safety (same as the legacy drift path).
+        if not verify_lockfile(venv_lower, lockfile):
+            click.echo(
+                f"  {problem.instance_id}: venv_lower lockfile mismatch — "
+                "PARANOIA: overlay isolation may have failed; rebuilding cache entry.",
+                err=True,
+            )
+            git_reset(lower, problem.base_commit)
+            shutil.rmtree(venv_lower, ignore_errors=True)
+            setup_venv(venv_lower, lower, **_venv_kwargs(problem))
+            scrub_cache_dir(lower)
+            write_lockfile(venv_lower, lockfile)
+        # Ensure the canonical mountpoint dir exists (empty; will be used as merged).
+        os.makedirs(venv_canonical, exist_ok=True)
+    else:
+        # Legacy layout: venv is the shared mutable dir.
+        venv_lower = ""
+        venv_canonical = paths["venv"]
+        # Legacy drift detection — agent leaked a pip install; rebuild.
+        if not verify_lockfile(venv_canonical, lockfile):
+            click.echo(
+                f"  {problem.instance_id}: venv lockfile mismatch — rebuilding cache entry."
+            )
+            git_reset(lower, problem.base_commit)
+            shutil.rmtree(venv_canonical, ignore_errors=True)
+            setup_venv(venv_canonical, lower, **_venv_kwargs(problem))
+            scrub_cache_dir(lower)
+            write_lockfile(venv_canonical, lockfile)
 
     # Allocate overlay dirs unique to this (problem, run_tag) pair.
     overlay_root = os.path.join(overlay_tmp_root, f"{problem.instance_id}-{run_tag}")
@@ -591,13 +716,15 @@ def _setup_problem_cached(
 
     return (
         merged,
-        venv_dir,
+        venv_canonical,
         _OverlayHandle(
             merged=merged,
             upperdir=upperdir,
             workdir=workdir,
             backend=overlay_backend,
             lowerdir=lower,
+            venv_lower_dir=venv_lower,
+            venv_canonical_dir=venv_canonical,
         ),
     )
 
@@ -822,6 +949,24 @@ def _cleanup_stale_overlays(
         "cache hits. See paper/outline.md §3.5 for the full evidence."
     ),
 )
+@click.option(
+    "--venv-isolation/--no-venv-isolation",
+    "venv_isolation",
+    default=True,
+    show_default=True,
+    help=(
+        "Mount a per-arm fuse-overlayfs over the cached venv so agent pip "
+        "installs don't poison the cache or cross-contaminate arms. "
+        "Default: on. The cached venv becomes a frozen lowerdir; agent writes "
+        "land in a per-arm upper layer discarded after the arm. "
+        "Disable with --no-venv-isolation to restore legacy shared-venv "
+        "behaviour (useful for parity testing or environments without FUSE). "
+        "Only applies when --use-cache is also on; non-cached runs are "
+        "unaffected (they use a throw-away venv per instance). "
+        "Note: $HOME/.cache/pip and other pip caches are NOT isolated; "
+        "this is a known follow-up."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -837,6 +982,7 @@ def run_command(
     codex_model: str,
     max_wall_seconds: int,
     cache_isolation: bool,
+    venv_isolation: bool,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
@@ -1007,6 +1153,7 @@ def run_command(
                     run_tag="eval",
                     overlay_tmp_root=overlay_tmp_root,
                     overlay_backend=overlay_backend,
+                    venv_isolation=venv_isolation,
                 )
             except OverlayError as exc:
                 click.echo(
@@ -1136,6 +1283,7 @@ def run_command(
                     click.echo(f"  Test cmd: {task.problem.test_cmd}")
                     last_instance = task.problem.instance_id
                 try:
+                    _handle = overlay_handles.get(task.problem.instance_id)
                     verdict = _run_arm(
                         problem=task.problem,
                         arm=task.arm,
@@ -1152,6 +1300,9 @@ def run_command(
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
                         wall_timeout_seconds=max_wall_seconds,
                         cache_isolation=cache_isolation,
+                        venv_isolation=venv_isolation and _handle is not None,
+                        venv_lower_dir=_handle.venv_lower_dir if _handle else "",
+                        overlay_backend=overlay_backend,
                     )
                 except BaseException:
                     _teardown_all_overlays()
@@ -1193,6 +1344,7 @@ def run_command(
 
                 buf = io.StringIO()
                 try:
+                    _handle = overlay_handles.get(task.problem.instance_id)
                     verdict = _run_arm(
                         problem=task.problem,
                         arm=task.arm,
@@ -1210,6 +1362,9 @@ def run_command(
                         codex_model=codex_model if agent_surface == "codex_cli" else None,
                         wall_timeout_seconds=max_wall_seconds,
                         cache_isolation=cache_isolation,
+                        venv_isolation=venv_isolation and _handle is not None,
+                        venv_lower_dir=_handle.venv_lower_dir if _handle else "",
+                        overlay_backend=overlay_backend,
                     )
                 except Exception as exc:
                     stderr_detail = getattr(exc, "stderr", None)

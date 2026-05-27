@@ -31,6 +31,7 @@ def test_cache_paths_layout(tmp_path, monkeypatch):
         "instance": base,
         "repo": base + "/repo",
         "venv": base + "/venv",
+        "venv_lower": base + "/venv_lower",
         "lockfile": base + "/lockfile.txt",
     }
 
@@ -42,11 +43,13 @@ def test_bare_repo_path_slug_sanitised(tmp_path, monkeypatch):
 
 
 def test_has_cached_instance_requires_all_three(tmp_path, monkeypatch):
+    """Legacy layout (venv/) with venv_isolation=False."""
     monkeypatch.setenv("SWEBENCH_CACHE_ROOT", str(tmp_path))
     paths = cache.cache_paths("example-1")
 
     # Nothing → False
     assert cache.has_cached_instance("example-1") is False
+    assert cache.has_cached_instance("example-1", venv_isolation=False) is False
 
     # Only repo → False
     os.makedirs(paths["repo"], exist_ok=True)
@@ -54,11 +57,35 @@ def test_has_cached_instance_requires_all_three(tmp_path, monkeypatch):
 
     # repo + venv, no lockfile → False
     os.makedirs(paths["venv"], exist_ok=True)
-    assert cache.has_cached_instance("example-1") is False
+    assert cache.has_cached_instance("example-1", venv_isolation=False) is False
+
+    # All three (legacy layout) → True with venv_isolation=False
+    Path(paths["lockfile"]).write_text("requests==2.31.0\n")
+    assert cache.has_cached_instance("example-1", venv_isolation=False) is True
+    # Default (no arg) is venv_isolation=False for backward compat → True for legacy layout
+    assert cache.has_cached_instance("example-1") is True
+    # But venv_isolation=True requires venv_lower, not venv → False
+    assert cache.has_cached_instance("example-1", venv_isolation=True) is False
+
+
+def test_has_cached_instance_isolated_layout(tmp_path, monkeypatch):
+    """Isolated layout (venv_lower/) with venv_isolation=True."""
+    monkeypatch.setenv("SWEBENCH_CACHE_ROOT", str(tmp_path))
+    paths = cache.cache_paths("example-iso-1")
+
+    # Nothing → False
+    assert cache.has_cached_instance("example-iso-1", venv_isolation=True) is False
+
+    # repo + venv_lower, no lockfile → False
+    os.makedirs(paths["repo"], exist_ok=True)
+    os.makedirs(paths["venv_lower"], exist_ok=True)
+    assert cache.has_cached_instance("example-iso-1", venv_isolation=True) is False
 
     # All three → True
     Path(paths["lockfile"]).write_text("requests==2.31.0\n")
-    assert cache.has_cached_instance("example-1") is True
+    assert cache.has_cached_instance("example-iso-1", venv_isolation=True) is True
+    # But legacy check (venv_isolation=False) → False (no venv/ dir)
+    assert cache.has_cached_instance("example-iso-1", venv_isolation=False) is False
 
 
 # --- scrub_cache_dir ---------------------------------------------------------

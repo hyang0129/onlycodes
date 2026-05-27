@@ -119,13 +119,16 @@ python -m swebench cache clean --filter django__django-16379
 
 Cache is on by default. The harness prefers kernel overlayfs (requires `CAP_SYS_ADMIN`) and falls back to `fuse-overlayfs`. The devcontainer already grants `--cap-add=SYS_ADMIN`.
 
+**Per-arm venv isolation** (`--venv-isolation`, default on): each arm gets a fresh fuse-overlayfs layer over the cached venv so agent pip-installs don't poison the cache or cross-contaminate arms. Disable with `--no-venv-isolation` to restore legacy shared-venv behaviour (useful for parity testing or environments without FUSE).
+
 Cache layout:
 ```
 /workspaces/.swebench-cache/
 ├── repos/                         # bare clones, shared across instances
 └── instances/<instance_id>/
     ├── repo/                      # checkout at base_commit, scrubbed
-    ├── venv/                      # python3.11 + editable install
+    ├── venv/                      # overlay mountpoint (empty dir; per-arm overlay mounts here)
+    ├── venv_lower/                # pristine lowerdir — never written by agent runs
     └── lockfile.txt               # pip freeze at cache time
 ```
 

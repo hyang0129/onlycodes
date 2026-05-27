@@ -79,8 +79,22 @@ Violating any of these breaks benchmark integrity or sandbox isolation.
 
 fuse-overlayfs copy-up semantics prevent `git clean -fd` from un-creating files added during a run (EEXIST). Between arms, `_refresh_overlay()` unmounts → deletes upper+work dirs → recreates → remounts → re-strips history. The merged path stays the same.
 
-- Venv lives **outside** the overlay (sibling dir). After each mount, `pip install -e .` is re-run to regenerate `.egg-info` (which was scrubbed from the cached lowerdir).
-- Lockfile drift (agent leaked a pip install) triggers full cache entry rebuild, not a skip.
+- With `--venv-isolation` (default on): the venv is also overlaid per-arm — see "Per-arm venv overlay" below.
+- With `--no-venv-isolation` (legacy): the venv lives as a shared sibling dir. After each mount, `pip install -e .` is re-run to regenerate `.egg-info`. Lockfile drift (agent leaked a pip install) triggers full cache entry rebuild.
+
+### Per-arm venv overlay (`--venv-isolation`)
+
+The cached venv at `instances/<id>/venv/` (formerly a shared mutable dir) is now a per-arm fuse-overlayfs mountpoint when `--venv-isolation` is on (default).
+
+**Layout:** `cache setup` builds the venv at `instances/<id>/venv/` (shebangs bake to this path), then renames it to `instances/<id>/venv_lower/`, leaving `venv/` free as the mountpoint. Legacy entries with only `venv/` are lazily migrated (`venv/ → venv_lower/`) on first isolated run.
+
+**Shebang invariant (non-negotiable):** The fuse-overlayfs mount MUST be at the original venv creation path (`venv/`). Because console scripts bake `#!<abs-path>/venv/bin/python` at creation time, any other mount path breaks every `pip` / `pytest` invocation. Never mount the overlay at a per-arm tempdir.
+
+**Arms are serialised within an instance.** Intra-instance parallelism is not supported — if it is added later, this per-arm-overlay design requires a shebang-relocation solution and a separate merged path per arm.
+
+**Drift detection under isolation:** `verify_lockfile` on `venv_lower/` is a paranoia assertion — agent pip-installs cannot reach `venv_lower/` through the overlay. A drift hit here means the overlay logic itself broke; log loudly and rebuild.
+
+**Cleanup on exception:** `venv_overlay()` is a context manager with `try/finally`. Orphan mounts are the existing pain point; do not add code paths that bypass the `finally` block.
 
 ### Artifact no-leak invariant
 

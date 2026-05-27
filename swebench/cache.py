@@ -8,29 +8,43 @@ Each instance that has been "warmed up" has a cached directory layout:
       instances/
         {instance_id}/
           repo/                     # checkout at base_commit, scrubbed
-          venv/                     # python3.11 venv with -e . installed
+          venv/                     # python3.11 venv (overlay mountpoint when
+                                    # --venv-isolation is on; shared dir when off)
+          venv_lower/               # pristine lowerdir — present only when
+                                    # --venv-isolation has been used at least once
           lockfile.txt              # `pip freeze` output at cache time
 
-At run time, each evaluation mounts the cached `repo/` as the lowerdir of an
-OverlayFS, hands the merged path to Claude, and `rm -rf`s the upperdir on
-teardown. The venv is **not** part of the overlay — it sits as a sibling
-directory because overlaying on top of a live venv introduces complexity
-(site-packages perms, `.egg-info` timestamps) for no real benefit.
+At run time, each evaluation mounts the cached ``repo/`` as the lowerdir of
+an OverlayFS, hands the merged path to Claude, and ``rm -rf``s the upperdir on
+teardown.
+
+With ``--venv-isolation`` (the default): the venv is also overlaid per-arm.
+``venv_lower/`` is the frozen lowerdir; ``venv/`` is the fuse-overlayfs
+mountpoint so agent pip-installs land in a per-arm tempdir upper layer that is
+discarded after the arm.  The mounted path equals the original venv creation
+path so all shebangs keep working.
+
+Without ``--venv-isolation``: the venv sits as a shared sibling directory
+(legacy behaviour, equivalent to pre-isolation runs).
 
 The module exposes stdlib-only helpers; the caller is responsible for
 ordering (mount → use → unmount → cleanup) and for choosing when to invoke
-`verify_lockfile` / `reinstall_editable`.
+``verify_lockfile`` / ``reinstall_editable``.
 """
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Generator, Literal
+
+_log = logging.getLogger(__name__)
 
 
 # -- Layout ------------------------------------------------------------------
@@ -62,7 +76,12 @@ def cache_paths(instance_id: str) -> dict:
     Keys:
       - ``instance``: top-level dir (``.../instances/{id}/``)
       - ``repo``: checked-out working tree (overlay lowerdir)
-      - ``venv``: python venv (outside the overlay)
+      - ``venv``: python venv — canonical path.  With ``--venv-isolation`` this
+        is the fuse-overlayfs *mountpoint*; without it, the shared venv dir.
+        Shebangs in the venv always point here (the creation path).
+      - ``venv_lower``: pristine lowerdir for the venv overlay.  Present only
+        after a ``--venv-isolation`` run (or a lazy migration from the legacy
+        layout).  Consumers should check existence before using.
       - ``lockfile``: path to the captured ``pip freeze`` output
     """
     base = instances_dir() / instance_id
@@ -70,6 +89,7 @@ def cache_paths(instance_id: str) -> dict:
         "instance": str(base),
         "repo": str(base / "repo"),
         "venv": str(base / "venv"),
+        "venv_lower": str(base / "venv_lower"),
         "lockfile": str(base / "lockfile.txt"),
     }
 
@@ -80,12 +100,76 @@ def bare_repo_path(repo_slug: str) -> Path:
     return repos_dir() / f"{safe}.git"
 
 
-def has_cached_instance(instance_id: str) -> bool:
-    """True iff the instance has a complete cache entry (repo + venv + lockfile)."""
+def _is_mountpoint(path: str) -> bool:
+    """Return True if *path* is currently a mount point.
+
+    Uses ``findmnt --mountpoint`` when available (Linux) — note: ``--target``
+    would match any path within any mounted filesystem (always returns 0 for
+    paths inside the root mount), so we must use ``--mountpoint`` which checks
+    EXACTLY whether *path* is itself a mount point.
+
+    Falls back to comparing ``os.stat()`` device numbers of *path* and its
+    parent directory (different device numbers → mount point).
+    """
+    if shutil.which("findmnt") is not None:
+        result = subprocess.run(
+            ["findmnt", "--noheadings", "--mountpoint", path],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    # Fallback: compare st_dev of the directory and its parent.
+    try:
+        st_self = os.stat(path)
+        st_parent = os.stat(os.path.dirname(path) or ".")
+        return st_self.st_dev != st_parent.st_dev
+    except OSError:
+        return False
+
+
+class CacheError(RuntimeError):
+    """Raised for cache-consistency violations (e.g. attempted migration of a
+    live mount, or a layout that the caller cannot recover from automatically)."""
+
+
+def migrate_to_isolated_layout(instance_dir: str) -> None:
+    """Rename legacy ``venv/`` → ``venv_lower/`` for the isolated-venv layout.
+
+    One-shot, idempotent: if ``venv_lower/`` already exists the function is a
+    no-op.  If ``venv/`` is a live fuse mount, raises ``CacheError`` — the
+    caller must tear down any active venv overlay before migrating.
+
+    This is called lazily by callers that operate with ``--venv-isolation`` so
+    existing cache entries auto-upgrade on first use without requiring a
+    separate migration command.
+    """
+    venv = os.path.join(instance_dir, "venv")
+    venv_lower = os.path.join(instance_dir, "venv_lower")
+    if os.path.exists(venv_lower):
+        # Already in isolated layout (or partially migrated) — nothing to do.
+        return
+    if not os.path.isdir(venv):
+        # Nothing to rename (fresh cache entry or already fully set up).
+        return
+    if _is_mountpoint(venv):
+        raise CacheError(
+            f"{venv} is currently a fuse mount point; cannot migrate. "
+            "Tear down any active venv overlay first."
+        )
+    os.rename(venv, venv_lower)
+
+
+def has_cached_instance(instance_id: str, venv_isolation: bool = False) -> bool:
+    """True iff the instance has a complete cache entry (repo + venv + lockfile).
+
+    When *venv_isolation* is ``True`` the function checks for ``venv_lower/``
+    (the isolated layout) instead of ``venv/`` (the legacy shared layout).
+    Both layouts require ``repo/`` and ``lockfile.txt``.
+    """
     paths = cache_paths(instance_id)
+    venv_key = "venv_lower" if venv_isolation else "venv"
     return (
         os.path.isdir(paths["repo"])
-        and os.path.isdir(paths["venv"])
+        and os.path.isdir(paths[venv_key])
         and os.path.isfile(paths["lockfile"])
     )
 
@@ -516,3 +600,175 @@ def unmount_overlay(merged: str, backend: Backend) -> None:
                 return
         if shutil.which("umount") is not None:
             subprocess.run(["umount", "-l", merged], capture_output=True)
+
+
+# ---------------------------------------------------------------------------
+# Per-arm venv overlay
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def venv_overlay(
+    *,
+    instance_id: str,
+    arm: str,
+    run_idx: int,
+    venv_lower: str,
+    venv_merged: str,
+    upper_root: str = "/tmp",
+    backend: Backend | None = None,
+) -> Generator[str, None, None]:
+    """Context manager that mounts a per-arm fuse-overlayfs over the cached venv.
+
+    On entry:
+      1. Creates ``<upper_root>/<id>-<arm>-run<N>-venv/{upper,work}`` and
+         ensures ``venv_merged`` exists as an empty mountpoint directory.
+      2. Mounts ``fuse-overlayfs(lower=venv_lower, upper, work, merged=venv_merged)``.
+      3. Yields ``venv_merged`` as the active venv directory.
+
+    On exit (including on exception):
+      4. Unmounts ``venv_merged`` via ``fusermount3 -u`` (or ``umount``).
+      5. Removes the per-arm upper+work scratch dirs (best-effort).
+
+    The canonical mount path (``venv_merged``) MUST equal the path at which the
+    venv was originally created — venvs bake absolute shebangs into every
+    console script (``#!/<path>/venv/bin/python``), so mounting at any other
+    path breaks ``pip``, ``pytest``, etc.
+
+    **Concurrency note:** arms of the same instance are serialised by the
+    harness (parallelism is across instances, not within one).  If intra-instance
+    parallelism is ever added, ``venv_merged`` would need to be per-arm and a
+    shebang-relocation solution would be required.
+
+    Failure modes:
+      - If the overlay backend is unavailable (``"none"``) or the mount fails,
+        the context manager falls back to a *direct copy* of ``venv_lower`` into
+        a per-arm temporary directory.  Shebangs are rewritten via a sed pass
+        over ``*/bin/*`` scripts.  This is the degraded path — correctness over
+        performance.
+      - If ``venv_merged`` is already a live mountpoint, the context manager
+        attempts an unmount-and-retry once; if it remains mounted, it raises
+        ``OverlayError`` (the caller should surface this, not silently skip).
+      - Unmount failure on teardown is logged but does not re-raise.
+    """
+    if backend is None:
+        backend = detect_overlay_backend()
+
+    # Unique per-arm scratch parent under upper_root.
+    scratch_parent = os.path.join(
+        upper_root, f"{instance_id}-{arm}-run{run_idx}-venv"
+    )
+    upperdir = os.path.join(scratch_parent, "upper")
+    workdir = os.path.join(scratch_parent, "work")
+
+    # Ensure the merged mountpoint exists as an empty directory.
+    os.makedirs(venv_merged, exist_ok=True)
+
+    # If a stale overlay is sitting on the mountpoint, attempt one unmount
+    # before we try to mount — this happens when a prior run crashed mid-arm.
+    if _is_mountpoint(venv_merged):
+        _log.warning(
+            "venv_overlay: %s is already a mountpoint; attempting unmount before re-use.",
+            venv_merged,
+        )
+        unmount_overlay(venv_merged, backend)
+        if _is_mountpoint(venv_merged):
+            raise OverlayError(
+                f"venv_overlay: {venv_merged!r} is still mounted after unmount attempt. "
+                "This is a state bug — manually run 'fusermount3 -u "
+                f"{venv_merged}' and retry."
+            )
+
+    # Try the overlay mount; fall back to a copy if unavailable.
+    use_copy_fallback = False
+    copy_dir: str | None = None
+
+    if backend == "none":
+        use_copy_fallback = True
+    else:
+        os.makedirs(upperdir, exist_ok=True)
+        os.makedirs(workdir, exist_ok=True)
+        try:
+            mount_overlay(venv_lower, upperdir, workdir, venv_merged, backend)
+        except OverlayError as exc:
+            _log.warning(
+                "venv_overlay: fuse mount failed (%s); falling back to copy.", exc
+            )
+            shutil.rmtree(upperdir, ignore_errors=True)
+            shutil.rmtree(workdir, ignore_errors=True)
+            use_copy_fallback = True
+
+    if use_copy_fallback:
+        # Degraded path: copy the lowerdir to a per-arm tempdir and rewrite
+        # shebangs in bin/ scripts so they point to the copy.
+        copy_dir = os.path.join(scratch_parent, "copy")
+        _log.warning(
+            "venv_overlay: using copy fallback — copying %s → %s", venv_lower, copy_dir
+        )
+        shutil.copytree(venv_lower, copy_dir)
+        # Rewrite bin/ shebangs from the original venv creation path to copy_dir.
+        _rewrite_venv_shebangs(copy_dir, venv_lower, copy_dir)
+        try:
+            yield copy_dir
+        finally:
+            # Cleanup: remove the copy (best-effort) even on exception.
+            shutil.rmtree(scratch_parent, ignore_errors=True)
+        return
+
+    # --- Overlay path ---
+    try:
+        yield venv_merged
+    finally:
+        # Unmount — best-effort; log on failure but do not re-raise.
+        try:
+            unmount_overlay(venv_merged, backend)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "venv_overlay: unmount of %s failed (%s); "
+                "marking for manual cleanup — stale mount may persist.",
+                venv_merged,
+                exc,
+            )
+        # Remove per-arm scratch dirs; leave venv_merged (the canonical path) in
+        # place as an empty directory so the next arm can remount cleanly.
+        shutil.rmtree(upperdir, ignore_errors=True)
+        shutil.rmtree(workdir, ignore_errors=True)
+        try:
+            os.rmdir(scratch_parent)
+        except OSError:
+            pass
+
+
+def _rewrite_venv_shebangs(venv_dir: str, old_prefix: str, new_prefix: str) -> None:
+    """Rewrite ``#!<old_prefix>/...`` shebangs in ``<venv_dir>/bin/`` scripts.
+
+    Used by the copy fallback path of ``venv_overlay`` when fuse-overlayfs is
+    unavailable.  Only rewrites the first line of each file; binary files are
+    skipped if decoding fails.
+
+    *old_prefix* and *new_prefix* must be absolute paths without trailing slash.
+    """
+    bin_dir = os.path.join(venv_dir, "bin")
+    if not os.path.isdir(bin_dir):
+        return
+    old_shebang_prefix = f"#!{old_prefix}"
+    new_shebang_prefix = f"#!{new_prefix}"
+    for fname in os.listdir(bin_dir):
+        fpath = os.path.join(bin_dir, fname)
+        if not os.path.isfile(fpath) or os.path.islink(fpath):
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8") as fh:
+                first = fh.readline()
+                if not first.startswith(old_shebang_prefix):
+                    continue
+                rest = fh.read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        new_first = new_shebang_prefix + first[len(old_shebang_prefix):]
+        try:
+            with open(fpath, "w", encoding="utf-8") as fh:
+                fh.write(new_first)
+                fh.write(rest)
+        except OSError as exc:
+            _log.warning("venv_overlay: could not rewrite shebang in %s: %s", fpath, exc)
