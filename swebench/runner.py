@@ -398,7 +398,17 @@ class CodexRunner(AgentRunner):
         self.verify_auth()
         src = os.path.expanduser("~/.codex/auth.json")
 
-        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-")
+        # CODEX_HOME must NOT be under /tmp: codex refuses to install plugin
+        # helper binaries to a $TMPDIR path ("Refusing to create helper
+        # binaries under temporary dir"), then later dies with "No such file
+        # or directory (os error 2)" when arms that exercise apps=true
+        # (tool_rich, bash_only) try to spawn the missing helper. At
+        # parallel=1 the race is often invisible; at parallel>=2 the failures
+        # become consistent. Stage per-invocation CODEX_HOMEs under
+        # ~/.cache/onlycodes-codex-home/ instead.
+        codex_home_root = os.path.expanduser("~/.cache/onlycodes-codex-home")
+        os.makedirs(codex_home_root, exist_ok=True)
+        cfg_dir = tempfile.mkdtemp(prefix="codex-eval-", dir=codex_home_root)
         shutil.copy2(src, cfg_dir)
 
         # Cache-stabilization: symlink the per-task CODEX_HOME's skills dir
@@ -474,7 +484,16 @@ class CodexRunner(AgentRunner):
         try:
             cmd = [
                 binary, "exec",
-                "--ephemeral",
+                # --ephemeral REMOVED 2026-05-27: it suppresses rollout files
+                # at $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl, which
+                # are our only source of per-API-call usage data (token_count
+                # events with last_token_usage) when not using a proxy.
+                # Each codex exec is still independent (fresh thread/session
+                # per invocation), so no cross-task state leakage. The
+                # rollout is just a per-session log under CODEX_HOME (which
+                # the harness sets to a fresh mkdtemp dir per invocation
+                # — so rollouts live IN the per-invocation temp dir and get
+                # deleted when it's cleaned up, unless captured first).
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--json",
                 "-m", self.model,
@@ -507,7 +526,24 @@ class CodexRunner(AgentRunner):
                         out.write(json.dumps({"type": "system", "subtype": "wall_timeout", "wall_seconds": wall_timeout_seconds}) + "\n")
                         logging.warning("wall_timeout: agent killed after %ds", wall_timeout_seconds)
         finally:
-            shutil.rmtree(cfg_dir, ignore_errors=True)
+            # Preserve rollout files (per-API-call usage data) before nuking
+            # the per-invocation CODEX_HOME. The rollout lives at
+            # $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl and contains
+            # token_count event_msg records with `info.last_token_usage`
+            # (per-call) and `info.total_token_usage` (cumulative). We copy
+            # it next to result_file as <result_file>.rollout.jsonl.
+            try:
+                import glob as _glob
+                rollouts = _glob.glob(os.path.join(cfg_dir, "sessions", "*", "*", "*", "rollout-*.jsonl"))
+                if rollouts:
+                    # Take the most recent (should be exactly one per invocation)
+                    rollouts.sort(key=os.path.getmtime)
+                    target = result_file + ".rollout.jsonl"
+                    shutil.copy2(rollouts[-1], target)
+            except Exception as _e:
+                logging.warning("failed to preserve codex rollout: %s", _e)
+            if os.environ.get("ONLYCODES_KEEP_CFG_DIR") != "1":
+                shutil.rmtree(cfg_dir, ignore_errors=True)
 
     def extract_metadata(self, jsonl_path: Path) -> tuple[float | None, int | None]:
         """Return ``(cost_usd, num_turns)`` for a Codex JSONL log.
@@ -886,27 +922,28 @@ def _write_codex_config(
     a deliberate divergence from Claude ``tool_rich`` (which permits WebSearch);
     in practice the artifact tasks do not require web access.
     """
+    # ``apps = false`` is set on ALL codex arms (2026-05-27): the curated-
+    # plugin loader (apps=true) races at parallel>=4 — codex tries to install
+    # plugin helper binaries from a shared global store and dies with
+    # "Error: No such file or directory (os error 2)" on the loser of the
+    # race. At parallel=6 this kills ~100% of tool_rich/bash_only invocations
+    # (verified empirically: 41/41 fail). apps=false skips the plugin loader
+    # entirely and is harmless — tool_rich/bash_only still have shell_tool
+    # and apply_patch_freeform, which is the surface area we measure. As a
+    # bonus, it stabilises the tools[] payload byte-signature across tasks,
+    # which #292 documented as a separate cache-stability fix.
     if arm in ("onlycode", "code_only"):
         shell_tool = "false"
         apply_patch_freeform = "false"
-        # ``apps = false`` is a cache-stabilization fix: Codex's curated-plugin
-        # sync races with the first API call, occasionally dropping the
-        # ``request_plugin_install`` tool from the advertised tools array.
-        # OpenAI's prompt cache treats ``instructions + tools`` together as the
-        # cacheable system context, so when the tools list differs by one entry
-        # the entire request misses cache (cached_input_tokens = 0). Disabling
-        # ``apps`` removes ``request_plugin_install`` deterministically, making
-        # the tools array byte-stable across tasks. Without this, ~4% of
-        # code_only runs catastrophically miss cache (see issue #292).
         extra_features = "browser_use = false\ncomputer_use = false\napps = false\n"
     elif arm == "bash_only":
         shell_tool = "true"
         apply_patch_freeform = "false"
-        extra_features = "browser_use = false\ncomputer_use = false\n"
+        extra_features = "browser_use = false\ncomputer_use = false\napps = false\n"
     else:  # tool_rich, baseline, and any unknown arm (rejected upstream)
         shell_tool = "true"
         apply_patch_freeform = "true"
-        extra_features = ""
+        extra_features = "browser_use = false\ncomputer_use = false\napps = false\n"
 
     toml = (
         f'model = "{_toml_str(model)}"\n'

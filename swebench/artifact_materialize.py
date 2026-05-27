@@ -36,13 +36,32 @@ class MaterializationError(RuntimeError):
     """Raised when the no-leak invariant is violated or the generator fails."""
 
 
+SCRATCH_ROOT_OFF_REPO = Path("/tmp/onlycodes_scratch")
+"""Off-repo scratch root for arms whose codex cwd would otherwise land inside
+the onlycodes git repo. The codex CLI's curated-plugin loader activates when
+cwd is inside any git repo (even with ``apps = false`` in the per-invocation
+config), tries to spawn a plugin helper binary, and dies with
+``Error: No such file or directory (os error 2)`` on tool_rich/bash_only
+arms. Routing scratch under /tmp side-steps the entire plugin path. Verified
+empirically: same task PASSes when scratch is in /tmp, INFRA-fails when
+scratch is under /workspaces/hub_1/onlycodes/runs/."""
+
+
 def scratch_dir_for(
     results_dir: Path,
     instance_id: str,
     arm: str,
     run_idx: int,
 ) -> Path:
-    """Return the canonical scratch-dir path (not created)."""
+    """Return the canonical scratch-dir path (not created).
+
+    tool_rich/bash_only land under /tmp (off the onlycodes git repo) to avoid
+    codex's plugin-loader race; code_only stays under results_dir for
+    backward compatibility (its codex cwd is CODEX_STABLE_CWD anyway, so the
+    plugin loader never sees its scratch path).
+    """
+    if arm in ("tool_rich", "bash_only"):
+        return SCRATCH_ROOT_OFF_REPO / instance_id / arm / f"run{run_idx}" / "scratch"
     return results_dir / instance_id / arm / f"run{run_idx}" / "scratch"
 
 
