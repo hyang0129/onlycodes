@@ -991,6 +991,7 @@ def run_command(
     # --- Phase 1: parallel clone + venv setup -----------------------------------
     click.echo("Phase 1: Setting up repos and venvs...")
     setup_map: dict[str, tuple[str, str]] = {}
+    setup_failures: dict[str, str] = {}
 
     def _setup_one(problem: Problem) -> tuple[str, str, _OverlayHandle | None]:
         """Prefer cached setup when --use-cache is on; else fall back to plain clone."""
@@ -1029,10 +1030,14 @@ def run_command(
         # Serial setup — no thread overhead
         for problem in problems:
             click.echo(f"  Setting up {problem.instance_id}...")
-            repo_dir, venv_dir, handle = _setup_one(problem)
-            setup_map[problem.instance_id] = (repo_dir, venv_dir)
-            if handle is not None:
-                overlay_handles[problem.instance_id] = handle
+            try:
+                repo_dir, venv_dir, handle = _setup_one(problem)
+                setup_map[problem.instance_id] = (repo_dir, venv_dir)
+                if handle is not None:
+                    overlay_handles[problem.instance_id] = handle
+            except Exception as exc:
+                click.echo(f"  {problem.instance_id}: setup FAILED ({exc})", err=True)
+                setup_failures[problem.instance_id] = str(exc)
     else:
         with ThreadPoolExecutor(max_workers=parallel) as pool:
             future_to_id: dict[Future[tuple[str, str, _OverlayHandle | None]], str] = {}
@@ -1049,10 +1054,22 @@ def run_command(
                     click.echo(f"  {pid}: setup complete")
                 except Exception as exc:
                     click.echo(f"  {pid}: setup FAILED ({exc})", err=True)
-                    # Tear down any overlays mounted so far before exiting.
-                    for h in overlay_handles.values():
-                        _teardown_overlay(h)
-                    raise SystemExit(1)
+                    setup_failures[pid] = str(exc)
+
+    if setup_failures:
+        click.echo()
+        click.echo(
+            f"Phase 1 complete: {len(setup_map)}/{len(problems)} instances ready, "
+            f"{len(setup_failures)} failed setup (will be skipped in Phase 2):"
+        )
+        for pid, msg in setup_failures.items():
+            click.echo(f"  • {pid}: {msg}")
+
+    if not setup_map:
+        click.echo("ERROR: No instances completed setup; aborting.", err=True)
+        for h in overlay_handles.values():
+            _teardown_overlay(h)
+        raise SystemExit(1)
 
     click.echo()
 
@@ -1074,6 +1091,8 @@ def run_command(
     # paths see the exact same filtered task list.
     problem_tasks: dict[str, list[_ArmTask]] = {}
     for problem in problems:
+        if problem.instance_id not in setup_map:
+            continue
         repo_dir, venv_dir = setup_map[problem.instance_id]
         # Cached instances run inside an overlay merged dir; git_reset's
         # `git clean -fd` wipes .egg-info there, so each arm must re-run
