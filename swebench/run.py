@@ -809,7 +809,17 @@ def _cleanup_stale_overlays(
         "nonce into the agent's tools[] array. Each call mints a fresh "
         "nonce (datetime-salted) so reruns, different sweeps, and "
         "different arms all miss prior cache entries. Applies to both "
-        "codex (#294) and Claude (#296) arms."
+        "codex (#294) and Claude (#296) arms. "
+        "WARNING (2026-05-26): does NOT reliably achieve cache isolation "
+        "in practice. For Claude (#296), the stub MCP server is reported "
+        "as status:pending at session init and the nonced tool never "
+        "lands in the outbound tools[] before the first API call — "
+        "iso-pass JSONLs show identical first-turn cache_read to "
+        "contaminated runs in 3-task smoke tests. For Codex (#294) the "
+        "tools[] injection succeeds, but neither vendor documents a flag "
+        "that scopes or disables the prompt cache, so other prefix bytes "
+        "(system prompt, cwd, skills paths) can still produce cross-task "
+        "cache hits. See paper/outline.md §3.5 for the full evidence."
     ),
 )
 def run_command(

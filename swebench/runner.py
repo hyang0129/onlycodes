@@ -60,6 +60,15 @@ def generate_isolation_nonce(instance_id: str, arm: str, run_idx: int) -> str:
     ``--resume`` correctness is preserved because completed runs are skipped
     by ``is_run_complete()`` *before* this function is called — the prior
     nonce is irrelevant for a fresh resumed invocation.
+
+    ⚠ KNOWN-LIMITATION (2026-05-26): empirical cache isolation is NOT reliably
+    achieved by this nonce. See the docstring on the ``--cache-isolation``
+    flag (in ``run.py`` and ``artifact_cli.py``) and the ``invoke`` methods
+    of ``ClaudeRunner`` and ``CodexRunner`` for the failure-mode details.
+    Treat the nonce as a *necessary but insufficient* component of isolation:
+    the tools[] payload differs per task as designed, but neither vendor
+    documents a flag that scopes or skips the prompt cache, and observed
+    cached_input_tokens on iso-runs match contaminated runs in smoke tests.
     """
     salt = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%f")
     raw = f"{salt}|{instance_id}|{arm}|{run_idx}".encode()
@@ -246,6 +255,19 @@ class ClaudeRunner(AgentRunner):
             # Anthropic's tools[] array differs per invocation, missing the
             # prefix cache. The stub tool is added to --disallowedTools so
             # the agent cannot accidentally call it.
+            #
+            # ⚠ DOES NOT WORK (2026-05-26 smoke test, 3 back-to-back tasks):
+            # Claude Code reports the stub MCP as status:pending in the
+            # session-init record, so the nonced tool never lands in the
+            # outbound tools[] before the first API call. Iso-pass JSONLs
+            # show identical first-turn cache_read_input_tokens to a
+            # contaminated baseline pass (~9871 tokens on tasks 2 and 3;
+            # primer at 0). The failure is invisible to unit tests because
+            # the argv shape is correct — it is a property of Claude Code's
+            # MCP startup race we do not control. Kept enabled so the
+            # nonce is recorded in the JSONL meta and so the harness flag
+            # composes with other isolation mechanisms; do not interpret
+            # presence of the nonce as evidence of cold cache.
             if isolation_nonce:
                 iso_server_path = _resolve_iso_nonce_server()
                 base_cfg: str | None = None
@@ -976,6 +998,20 @@ def _write_codex_config(
     # nonce. Codex serialises this tool into the outbound Responses-API
     # ``tools[]`` array, so the cache key (instructions + tools) byte-differs
     # per task and OpenAI's prompt cache cannot serve cross-task hits.
+    #
+    # ⚠ INSUFFICIENT IN PRACTICE (2026-05-26): the tools[] injection
+    # succeeds as designed, but OpenAI's Responses-API caching documents
+    # no parameter that scopes or disables the prompt cache. The
+    # ``prompt_cache_key`` parameter is a partition/routing hint, not a
+    # disable switch and not a security boundary. Other prefix bytes
+    # (system instructions, cwd, skills/plugins paths, model-side
+    # automatic state) can still produce cross-task cache hits independent
+    # of the tools[] payload — see the cwd / skills-symlink / apps=false
+    # cache-stabilisation fixes that landed under #292 to recover the
+    # 4 zero-cache outliers in the seed-1 artifact backup. Treat this
+    # mechanism as one of several required components, not a complete
+    # solution; do not interpret presence of the nonce as evidence of
+    # cold cache.
     if isolation_nonce and iso_server_path:
         toml += (
             "\n"
