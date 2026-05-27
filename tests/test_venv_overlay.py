@@ -235,6 +235,52 @@ def test_venv_overlay_cleanup_on_exception(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Regression: verify_lockfile must work when shebangs are broken
+# ---------------------------------------------------------------------------
+
+
+def test_verify_lockfile_works_on_renamed_venv(tmp_path):
+    """verify_lockfile must succeed on venv_lower/ outside an active mount.
+
+    Reproduces the smoke-test failure on mwaskom__seaborn-2946: cache setup
+    creates the venv at venv/ (shebangs bake "<cache>/venv/bin/python"),
+    captures the lockfile, then renames venv/ → venv_lower/. After the rename,
+    bin/pip's shebang points at a path that doesn't exist until an arm mounts
+    the overlay. Invoking pip via its shebang fails with FileNotFoundError;
+    invoking it as `python -m pip` works because the interpreter binary at
+    venv_lower/bin/python is still directly executable.
+
+    Before the fix, _pip_freeze used `bin/pip` → _setup_problem_cached aborted
+    Phase 1 with "setup FAILED ([Errno 2] No such file or directory:
+    venv_lower/bin/pip)" on every isolation-enabled run.
+    """
+    from swebench.cache import verify_lockfile, write_lockfile
+
+    canonical = tmp_path / "venv"
+    stdlib_venv.create(str(canonical), with_pip=True)
+
+    lockfile_path = str(tmp_path / "lockfile.txt")
+    write_lockfile(str(canonical), lockfile_path)
+
+    venv_lower = tmp_path / "venv_lower"
+    canonical.rename(venv_lower)
+    assert not canonical.exists(), "Canonical path must not exist post-rename"
+
+    pip_script = venv_lower / "bin" / "pip"
+    assert pip_script.is_file()
+    first_line = pip_script.read_text().splitlines()[0]
+    assert first_line.startswith(f"#!{canonical}"), (
+        f"Shebang must still point at the (now missing) canonical path, got: {first_line!r}"
+    )
+
+    assert verify_lockfile(str(venv_lower), lockfile_path), (
+        "verify_lockfile must return True for a freshly renamed venv whose "
+        "shebangs point at a non-existent path — the python interpreter "
+        "itself is still directly executable via `python -m pip`."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Integration: cache immutability under isolation
 # ---------------------------------------------------------------------------
 

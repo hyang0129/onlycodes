@@ -254,10 +254,20 @@ def scrub_cache_dir(repo_dir: str) -> None:
 
 
 def _pip_freeze(venv_dir: str) -> str:
-    """Return the normalised `pip freeze` output for a venv."""
-    pip = os.path.join(venv_dir, "bin", "pip")
+    """Return the normalised `pip freeze` output for a venv.
+
+    Invokes pip via ``python -m pip`` rather than ``bin/pip`` to bypass the
+    script's shebang. Under ``--venv-isolation``, the cached venv lives at
+    ``venv_lower/`` but its console-script shebangs still point at the
+    canonical ``venv/bin/python`` path (the overlay mountpoint). When no arm
+    is currently active, that path is unmounted and shebang resolution fails
+    with ENOENT — but ``venv_lower/bin/python`` itself is a real interpreter
+    and works directly. Invoking it as ``python -m pip`` avoids the broken
+    shebang while producing identical output to ``bin/pip freeze``.
+    """
+    python = os.path.join(venv_dir, "bin", "python")
     result = subprocess.run(
-        [pip, "freeze", "--disable-pip-version-check"],
+        [python, "-m", "pip", "freeze", "--disable-pip-version-check"],
         capture_output=True,
         text=True,
         check=True,
