@@ -516,14 +516,17 @@ def _run_arm_body(
         extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(problem.instance_id),
     )
     if not collected_ok:
+        # Phase 1 setup smoke-imported the package and the post-agent test
+        # patch applied cleanly (otherwise we returned FAIL above). A 0-item
+        # collect-only at this point is on the agent — it broke an import the
+        # held-out tests depend on, or it didn't author a module the task
+        # requires (e.g. sklearn-10427's sklearn.externals._pilutil per the
+        # #287 protocol). Recording env_fail here would silently exclude these
+        # agent failures from the pass-rate denominator and overstate quality.
         _echo(
             f"  [{arm} run {run_idx}] Pre-flight collect FAILED (post-agent) — "
-            "recording env_fail (0 items collected; skipping run_tests)."
+            "recording FAIL (0 items collected; skipping run_tests)."
         )
-        # Update the meta record on line 1 of the .jsonl to carry the
-        # env_fail verdict + reason, preserving the agent transcript that
-        # follows it. Downstream tools (analyze, summary) keep reading the
-        # first meta line and now see verdict=env_fail there.
         try:
             with open(result_file) as _rf:
                 _lines = _rf.readlines()
@@ -536,7 +539,7 @@ def _run_arm_body(
                 _meta_loaded = dict(_meta_record)
         else:
             _meta_loaded = dict(_meta_record)
-        _meta_loaded["verdict"] = "env_fail"
+        _meta_loaded["verdict"] = "FAIL"
         _meta_loaded["reason"] = "pytest --collect-only returned 0 items (post-agent)"
         _lines[:1] = [json.dumps(_meta_loaded) + "\n"]
         with open(result_file, "w") as _wf:
@@ -550,9 +553,9 @@ def _run_arm_body(
                 out.write("\n--- pytest --collect-only output ---\n")
                 out.write(preflight_output)
                 out.write("\n--- end ---\n")
-            out.write("\nenv_fail\n")
-        _echo(f"  [{arm} run {run_idx}] Verdict: env_fail ({wall_secs}s wall)")
-        return "env_fail"
+            out.write("\nFAIL\n")
+        _echo(f"  [{arm} run {run_idx}] Verdict: FAIL ({wall_secs}s wall)")
+        return "FAIL"
 
     _echo(f"  [{arm} run {run_idx}] Running test suite...")
 
