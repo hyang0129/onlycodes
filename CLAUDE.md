@@ -12,7 +12,9 @@ The single source of truth for numbers cited in the paper is `paper/data/*.csv` 
 
 **Never edit `paper/references.bib` directly** — add citations in the relevant outline/section file with enough context for a human to verify, and wait for explicit human approval before any `.bib` insertion (agents hallucinate references).
 
-**Target venue:** [KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI](https://kdd-eval-workshop.github.io/agenticai-evaluation-kdd2026/), submission deadline **2026-06-01 AOE**, 9 pages excl. references, ACM template, OpenReview anonymous submission.
+**The `analyze/` pathology pipeline is OUT of paper scope (decided 2026-05-28).** The harness ships a three-stage analysis pipeline — mechanical extractor → Claude-classifier subagents → synthesizer → `patterns.json` — documented below in the **Module Map** (rows for `analyze/*.py`) and in the **Analysis Sidecar Layout** section. **None of its output lands in the paper.** No failure-mode taxonomy, no mechanical-flag distributions, no subagent-classified findings, no `patterns.json` reference, no per-instance pattern hits — not in §3 (Method), §4 (Experimental Setup), §5 (Results), §6 (Discussion), or §7 (Limitations). The paper's full metric surface is pass rate + cache-adjusted cost + input/output tokens; nothing else. Rationale (story-completeness, page budget, classifier-defense methodology debt), surface-effect audit list, and future-agent guardrails live in [paper/outline.md](paper/outline.md)'s Methodology decisions log entry dated 2026-05-28 — read that entry before reopening the decision. **The pipeline itself is not deprecated**: it remains valid harness instrumentation for debugging and follow-up work; the exclusion is paper-scope only. **If a paper-writing agent encounters `analyze/`-related code, sidecar JSON, or `patterns.json` content during research, treat it the same as `docs/ROADMAP.md`: out of scope, do not import, do not cite, do not summarize into the draft.**
+
+**Target venue:** [Agentic Software Engineering (SE 3.0) Workshop at KDD 2026](https://agent-se.github.io/) — submission deadline **2026-06-01 AOE**, **8 pages excl. references** (long paper), ACM KDD template (`\documentclass[sigconf,anonymous,review]{acmart}`), double-blind, non-archival. **Venue switched 2026-05-27** from the KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI (now backup venue — same June 1 deadline, 9-page ceiling, same ACM template family). SE 3.0 hits four direct topic axes (Agent Tool Use & Environments, Failure Modes & Root Causes, Economic Cost & Impact, Trustworthiness & Reliability) vs. one for the prior venue, and the reviewer pool is coding-agent researchers rather than monitoring/governance. Cost is one page off the ceiling (9 → 8). Full rationale in [paper/outline.md](paper/outline.md) header and [paper/README.md](paper/README.md) "Submission target" section.
 
 ## Architecture Overview
 
@@ -178,6 +180,8 @@ Instance ID format: `<category>__<slug>` (two underscores). Category must match 
 ---
 
 ## Analysis Sidecar Layout
+
+> **Harness instrumentation only — does NOT feed the paper.** See the *Paper Writing* section above (2026-05-28 decision). The pipeline still runs and is still useful for debugging and follow-up work; it is just outside the scope of the current draft.
 
 ```
 runs/swebench/_analysis/<run_id>/

@@ -1,0 +1,19 @@
+# generator: paper/figures_src/02_signflip.py
+# source_data: paper/data/paired_marginals.csv + paper/data/paired_contrasts.csv
+label,value,role
+artifact-claude:ratio,0.754041,ratio
+artifact-claude:p,7.365478e-14,p_value
+artifact-claude:code_mean,0.078845,cost_usd
+artifact-claude:rival_mean,0.104563,cost_usd
+artifact-codex:ratio,0.933021,ratio
+artifact-codex:p,2.543284e-01,p_value
+artifact-codex:code_mean,0.081951,cost_usd
+artifact-codex:rival_mean,0.087834,cost_usd
+swebench-claude:ratio,1.144375,ratio
+swebench-claude:p,1.201551e-01,p_value
+swebench-claude:code_mean,0.586036,cost_usd
+swebench-claude:rival_mean,0.512101,cost_usd
+swebench-codex:ratio,0.800914,ratio
+swebench-codex:p,2.016919e-09,p_value
+swebench-codex:code_mean,0.516197,cost_usd
+swebench-codex:rival_mean,0.644510,cost_usd

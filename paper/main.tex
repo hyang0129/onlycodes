@@ -1,20 +1,21 @@
 % paper/main.tex
-% KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI submission.
+% Agentic Software Engineering (SE 3.0) Workshop at KDD 2026 submission.
 % Submission deadline: 2026-06-01 AOE.
 %
-% Uses the ACM Conference Proceeding template (acmart class). Download
+% Uses the ACM KDD template (acmart class). The SE 3.0 CFP mandates the
+% exact options [sigconf,anonymous,review] — do not drop `review`. Download
 % acmart.cls from https://www.acm.org/publications/proceedings-template
 % and place alongside this file before building.
 %
-% The workshop requires anonymous submission. The default acmart `sigconf`
-% style is fine; we add \settopmatter{printccs=false, printacmref=false}
-% and use \acmConference / \acmYear stubs for the anonymous review version.
+% The workshop requires double-blind submission. `\settopmatter{printccs=false,
+% printacmref=false}` and \acmConference / \acmYear stubs handle the
+% anonymous-review block.
 
-\documentclass[sigconf, anonymous]{acmart}
+\documentclass[sigconf,anonymous,review]{acmart}
 
 % Suppress CCS / ACM reference / DOI block during anonymous review
 \settopmatter{printccs=false, printacmref=false}
-\acmConference[KDD '26 Workshop]{KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI}{August 2026}{Jeju, Korea}
+\acmConference[SE 3.0 @ KDD '26]{Agentic Software Engineering (SE 3.0) Workshop at KDD 2026}{August 2026}{Jeju, Korea}
 \acmYear{2026}
 \copyrightyear{2026}
 \setcopyright{none}

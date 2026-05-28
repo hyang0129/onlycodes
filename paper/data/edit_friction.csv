@@ -1,0 +1,28 @@
+# source_commit: 050947f44fb7dec5793e05700cd01bdd5942ebfa
+# generated: 2026-05-28T19:24:42Z
+# generator: paper/data/scripts/edit_friction.py
+# key_schema: metric
+# default_precision: 3
+# Headline edit-friction numbers for §6 Q1. Claude SWE-bench, Δ = onlycode − baseline, n=100.
+# rho_edit_chars: Spearman ρ of (per-instance Δ_edit_chars, Δ_output_tokens). Headline test.
+# rho_gold_lines: ρ of (gold patch_lines_added, Δ_output_tokens). Reference / weaker proxy.
+# highpatch_ratio: mean_high / mean_low of Δ_output_tokens, split on median gold patch_lines_added.
+# theilsen_slope_*: robust median slope of output_tokens vs patch_lines_added, per arm.
+# intercept_*: OLS intercept of output_tokens vs patch_lines_added — fixed-cost component at zero patch size.
+metric,value,precision
+n_instances,100,0
+rho_edit_chars,0.4880542695919644,3
+rho_edit_chars_p,2.5947886871300053e-07,4
+rho_gold_lines,0.22753436802925409,3
+rho_gold_lines_p,0.022804924368829527,4
+median_patch_lines_added,6.0,0
+lowpatch_delta_output_tokens,2650.3333333333335,0
+highpatch_delta_output_tokens,6378.434027777778,0
+highpatch_ratio,2.4066535131849243,2
+highpatch_mw_p,0.024831066506004692,4
+theilsen_slope_baseline,127.05140692640694,1
+theilsen_slope_onlycode,189.4810040705563,1
+theilsen_slope_diff,62.42959714414937,1
+intercept_baseline,10966.457358144515,0
+intercept_onlycode,14959.069520725781,0
+intercept_gap,3992.6121625812666,0

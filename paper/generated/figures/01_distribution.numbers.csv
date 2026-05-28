@@ -1,0 +1,31 @@
+# generator: paper/figures_src/01_distribution.py
+# source_data: paper/data/raw/all_results.csv
+label,value,role
+artifact-claude:n,93,count
+artifact-claude:n_win,85,count
+artifact-claude:median_delta,-0.023301,delta_usd
+artifact-claude:p25_delta,-0.037427,delta_usd
+artifact-claude:p75_delta,-0.013661,delta_usd
+artifact-claude:min_delta,-0.164642,delta_usd
+artifact-claude:max_delta,0.044711,delta_usd
+artifact-codex:n,93,count
+artifact-codex:n_win,48,count
+artifact-codex:median_delta,-0.001577,delta_usd
+artifact-codex:p25_delta,-0.020768,delta_usd
+artifact-codex:p75_delta,0.013153,delta_usd
+artifact-codex:min_delta,-0.139568,delta_usd
+artifact-codex:max_delta,0.073554,delta_usd
+swebench-claude:n,100,count
+swebench-claude:n_win,44,count
+swebench-claude:median_delta,0.009432,delta_usd
+swebench-claude:p25_delta,-0.039165,delta_usd
+swebench-claude:p75_delta,0.096615,delta_usd
+swebench-claude:min_delta,-1.646747,delta_usd
+swebench-claude:max_delta,2.325633,delta_usd
+swebench-codex:n,100,count
+swebench-codex:n_win,76,count
+swebench-codex:median_delta,-0.091691,delta_usd
+swebench-codex:p25_delta,-0.190602,delta_usd
+swebench-codex:p75_delta,-0.006399,delta_usd
+swebench-codex:min_delta,-1.136231,delta_usd
+swebench-codex:max_delta,0.182485,delta_usd

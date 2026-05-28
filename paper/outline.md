@@ -1,84 +1,84 @@
-# Paper Outline — KDD 2026 Agentic AI Evaluation & Trustworthiness Workshop
+# Paper Outline — KDD 2026 Agentic Software Engineering (SE 3.0) Workshop
 
-**Target venue:** [KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI](https://kdd-eval-workshop.github.io/agenticai-evaluation-kdd2026/)
-**Submission deadline:** **2026-06-01 AOE** (7 days from 2026-05-25)
-**Notification:** 2026-07-01
-**Camera-ready:** 2026-07-10
-**Workshop:** 2026-08-09 or 08-10, ICC Jeju, Korea
-**Format:** ACM Conference Proceeding template (`acmart` class), 9 pages excl. references, anonymous, OpenReview submission
-**Archival:** Posted on workshop website only — **not** included in KDD proceedings (good for double-submission optionality)
+**Target venue:** [Agentic Software Engineering (SE 3.0) Workshop at KDD 2026](https://agent-se.github.io/)
+**Submission deadline:** **2026-06-01 AOE**
+**Workshop:** KDD 2026, ICC Jeju, Korea
+**Format:** ACM KDD template — `\documentclass[sigconf,anonymous,review]{acmart}`, **8 pages excl. references** (long paper), double-blind
+**Archival:** Non-archival, no formal proceedings — preserves double-submission optionality
 
-## Page budget (target ~7.5 pages, not 9)
+**Venue switch rationale (2026-05-27):** moved from KDD Eval & Trustworthiness to SE 3.0 — same deadline, same ACM template family, both non-archival, but SE 3.0 hits 4+ of our topic axes directly (Agent Tool Use & Environments, Failure Modes & Root Causes, Economic Cost & Impact, Trustworthiness & Reliability) versus 1 for KDD Eval. Reviewer pool is coding-agent researchers rather than monitoring/governance. Cost is −1 page on the ceiling (9 → 8); page-budget target was 7.45 pages so slack absorbs it. See issue #158 comment for full comparison.
 
-The 9-page limit is the ceiling, not the goal. Dense > stuffed; reviewers prefer tight claims over hedged filler. Each extra page is more reviewer-2 surface area. Saving 1.5 pages of slack also lets figure sizes breathe.
+## Page budget (target ~7.5 pages, not 8)
+
+The 8-page limit is the ceiling, not the goal. Dense > stuffed; reviewers prefer tight claims over hedged filler. Each extra page is more reviewer-2 surface area. Saving slack also lets figure sizes breathe. **SE 3.0 long-paper ceiling is 8 pages excl. references (1 page tighter than the prior KDD Eval target); the 7.45 target absorbs the haircut but no further ceiling room remains.**
 
 | Section | Target | Hard ceiling |
 |---|---|---|
-| Abstract + §1 Introduction | 1.25 | 1.5 |
-| §2 Related Work | 0.75 | 1.0 |
-| §3 Method (incl. §3.3 integrity disclosure) | **1.75** | 2.0 |
-| §4 Experimental Setup | 0.5 | 0.75 |
-| §5 Main Results | 2.0 | 2.25 |
-| §6 Redundancy Table (Table 1 + short prose) | 0.5 | 0.75 |
-| §7 Discussion (3 prescriptions) | 0.5 | 0.75 |
-| §8/Limitations (required) | 0.25 | 0.5 |
-| **Total** | **7.5** | 8.5 (with all ceilings hit) |
+| Abstract + §1 Introduction | 1.1 | 1.35 |
+| §2 Related Work | 0.9 | 1.15 |
+| §3 Method (incl. §3.3 integrity, §3.4 capability overlap + Table 1, §3.5 cost, §3.6 artifact-suite methodology) | **2.20** | 2.45 |
+| §4 Experimental Setup | **0.85** | 1.0 |
+| §5 Main Results | 2.0 | 2.15 |
+| §6 Discussion (3 prescriptions) | 0.5 | 0.7 |
+| §7 Limitations (required) | 0.25 | 0.4 |
+| **Total** | **7.80** | 8.0 (with all ceilings hit) |
 
-**The non-negotiable budget item is §3.3** — the post-Issue #287 integrity disclosure. Compressing this to a parenthetical to save space invites a reviewer-2 attack on the test-patch protocol. Keep it ≥0.5 page even if other sections shrink.
-
-**§3.5 (cache isolation methodology) is the other defensive paragraph** — without it, a reviewer will read the cost table and ask "but isn't OpenAI's prompt cache non-deterministic?" Pre-empt it with one tight paragraph (~5-7 sentences); see §3 sub-outline for content.
+**Three non-negotiable budget items in §3.** §3.3 (post-Issue #287 integrity disclosure) defends the SWE-bench protocol. §3.5 (cache + cost methodology) defends the cost table. §3.6 (artifact-suite methodology — grader contract, no-leak invariant, subprocess isolation) defends the benchmark contribution claim in §1. Compressing any of these invites a corresponding reviewer-2 attack. Keep §3.3 ≥0.4 pg, §3.5 ≥0.3 pg, §3.6 ≥0.3 pg even if other sections shrink. **§3 was rebalanced 2026-05-28: −0.15 pg pulled from §3.1 and §3.2 (mechanism-heavy, not contribution-heavy) into §4 to fund the inference-unit defense; §3's three pinned floors are unchanged.**
 
 Structural skeleton only. Each section lists what the prose will cover, not the prose itself. `[bracketed]` items mark spots where the author decides whether to import from planning docs (issue #158, `docs/ROADMAP.md`, `paper/02_related_work.md`).
 
 ---
 
-## Abstract (~180 words)
+## Abstract (~190 words)
 
 - One-sentence framing: modern coding agents expose multiple tool surfaces (IDE primitives, bash, MCP execute_code) — which surface is actually load-bearing on which task?
-- One-sentence statement of method: integrity-clean three-arm ablation (`tool_rich` / `bash_only` / `code_only`) on artifact-graded computation tasks and SWE-bench Mini modification tasks, two agent surfaces (Claude Code, Codex CLI).
+- One-sentence benchmark contribution: existing coding-agent evaluation skews to modification (SWE-bench) or function completion (HumanEval/MBPP); we release a computation-regime benchmark of artifact-graded tasks with hidden deterministic graders, materialize-time leak checking, and grader-subprocess isolation.
+- One-sentence statement of method: integrity-clean three-arm ablation (`baseline` / `bash_only` / `code_only`) on the new artifact benchmark and SWE-bench Mini, two agent surfaces (Claude Code, Codex CLI).
 - One-sentence statement of comparison classes: SWE-agent's ACI claim (NeurIPS 2024), mini-SWE-agent's bash-only result (2025), Anthropic/Cloudflare "Code Mode" external-MCP claims.
-- One-sentence headline: cost asymmetry flips sign between regimes — code_only wins by 33% on computation tasks, tool_rich wins by 11% on modification tasks, pass rates statistically tied within each regime.
-- One-sentence claim: the sign-flip is predicted by the Capability Overlap Principle (Zhang et al. 2026) and supports a *regime-dependent* optimal tool surface rather than the "less is more" or "ACI wins" framings.
+- One-sentence headline: cost asymmetry flips sign between regimes — `code_only` wins on computation tasks, `baseline` wins on modification tasks, pass rates statistically tied within each regime.
+- One-sentence claim: the benchmark-plus-finding pair operationalizes a *regime-dependent* optimal tool surface predicted by the Capability Overlap Principle (Zhang et al. 2026), replacing the "less is more" / "ACI wins" mononarratives.
 - **Do not finalize until §5 numbers freeze.** Abstract is written last.
 
 ---
 
-## 1. Introduction (~1 page; combined with abstract: 1.25 page target)
+## 1. Introduction (~1 page; combined with abstract: 1.1 page target)
 
 - **The phenomenon.** Coding agents ship with overlapping tool surfaces — Claude Code's Read/Grep/Glob/Edit/Write/Bash, Cursor's equivalents, the SWE-agent ACI. Industry blogs (Anthropic Nov 2025, Cloudflare Sept 2025 / Feb 2026) report 98–99% token reductions by routing through `execute_code` MCP tools; academic work (SWE-agent NeurIPS 2024) argues specialized IDE tools are *required*; mini-SWE-agent (2025) shows bash-only is sufficient. **The field has three contradictory claims and no crossed comparison.**
 - **The detection axis we work in.** Same harness, same model, same prompts, three tool surfaces × two task regimes. Integrity-clean evaluation (post-Issue #287 protocol — `test_patch` applied post-agent, restoring standard SWE-bench semantics).
 - **What's already known about tool-surface effects.** SWE-agent's two-arm ACI-vs-shell result, mini-SWE-agent's single-arm bash result, Anthropic/Cloudflare's external-MCP token reduction, "Dive into Claude Code" (Liu et al. 2026)'s architectural taxonomy *without ablation*, Verdent's anecdotal informal ablation. Nobody has crossed the three surfaces with regime stratification.
-- **Our contribution (3 bullets, paper-claim-aligned).**
-  1. **A regime-dependent sign-flip:** on computation-dominated tasks, `code_only` is ~33% cheaper than `tool_rich` at equal pass rate; on modification-dominated multi-file tasks, `tool_rich` is ~11% cheaper than `code_only` at equal pass rate. (Same model, same harness, same prompts — the regime is the only varied factor.)
-  2. **Capability invariance within regime.** Pass rates are statistically tied across all three arms within each regime. The asymmetry lives in cost/turns, not in capability — supporting the Capability Overlap Principle (Zhang et al. 2026) framing where IDE tool gain depends on whether primitives have unique non-bash-redundant capability *for this task shape*.
-  3. **Agent-design dependence (secondary).** Codex CLI shows a different SWE-bench ranking than Claude Code (`code_only` cheaper than `tool_rich`), suggesting optimal tool surface is jointly determined by regime AND agent design — not a universal "less is more" or "ACI wins."
+- **Our contribution (4 bullets, benchmark-first ordering).**
+  1. **A computation-regime benchmark.** Artifact-graded tasks across multiple categories, each defined by a `(workspace/, hidden grader, reference output)` triple. Grader contract is deterministic, offline, seeded-random only; no-leak invariant enforced pre-flight at materialize time; grading runs in an isolated subprocess. Fills the computation cell that SWE-bench-only evaluation leaves empty — without it, the sign-flip below is unobservable.
+  2. **A regime-dependent sign-flip.** On the artifact benchmark, `code_only` is cheaper than `baseline` at equal pass rate; on SWE-bench Mini, `baseline` is cheaper than `code_only` at equal pass rate. Same model, same harness, same prompts — regime is the only varied factor.
+  3. **Capability invariance within regime.** Pass rates are statistically tied across all three arms within each regime. The asymmetry lives in cost/turns, not in capability — consistent with the Capability Overlap Principle (Zhang et al. 2026): IDE-primitive gain depends on whether they expose non-bash-redundant capability *for this task shape*.
+  4. **Agent-design dependence (co-headline).** Codex CLI shows a different SWE-bench ranking than Claude Code, suggesting optimal surface is jointly determined by regime AND agent design — elevated to §5.3 (Figure 2's 4-bar sign-flip), no longer a footnote.
 - **Roadmap of the paper.** One paragraph.
 
 ---
 
-## 2. Related Work (0.75 page target; 1.0 ceiling)
+## 2. Related Work (0.9 page target; 1.15 ceiling)
 
-Detailed outline in [02_related_work.md](02_related_work.md). Three subsections:
+Detailed outline in [02_related_work.md](02_related_work.md). Four subsections:
 
 - **2.1 IDE-tool-surface ablation on coding agents.** SWE-agent (Yang et al. NeurIPS 2024, ACI vs shell, +10.7pp); mini-SWE-agent (2025, bash-only ≥74% on Verified); Live-SWE-agent (Xia et al. 2511.13646, scaffold evolution); Liu et al. (2604.14228, Claude Code design space without ablation); Rombaut (2604.03515, source-code taxonomy of 13 OSS scaffolds); Verdent (informal). **Delta:** none of these run the crossed three-surface design under integrity-clean evaluation with regime stratification.
 - **2.2 Code-execution-as-action / code-mode.** CodeAct (Wang et al. ICML 2024, code-as-action vs JSON tools at the *encoding* level); OpenHands/CodeAct 2.1 (2511.03690); Anthropic "Code execution with MCP" (Nov 2025, external tools); Cloudflare "Code Mode" / "Code Mode MCP" (Sept 2025 / Feb 2026, external APIs); Terminal Agents Suffice (Bechard et al. 2604.00073, enterprise APIs). **Delta:** all studied **external** tool surfaces. Nobody crossed three internal IDE-tool surfaces on coding benchmarks with regime stratification.
 - **2.3 Tool-use tax / capability overlap.** Zhang et al. *Are Tools All We Need? Unveiling the Tool-Use Tax in LLM Agents* (arXiv:2605.00136, Apr 2026) — the theoretical frame (general-purpose math/QA, not coding). Tool-pruning literature (Budget-Aware Tool Use 2511.17006, ToolTree 2603.12740, Trajectory Reduction 2509.23586) is orthogonal (selection problem, not surface design). MCP tool descriptions ablations (2602.14878) ablate *description text*, not the tool set.
+- **2.4 Coding-agent benchmarks (NEW).** Position the artifact suite against three groups: (a) modification benchmarks (SWE-bench, SWE-bench Verified/Live, Multi-SWE-bench); (b) function-completion benchmarks (HumanEval+/MBPP+, BigCodeBench, LiveCodeBench, APPS); (c) artifact-graded benchmarks (KernelBench as closest analogue; ML-Bench, DS-1000 as niche cases). **Delta:** the artifact suite is a general-purpose computation-regime benchmark with deterministic offline graders and explicit materialize-time leak enforcement. The sign-flip finding requires exactly this kind of benchmark to be observed; we built it because it didn't exist.
 
-End with one sentence positioning this work as the missing empirical complement to Liu et al. (2604.14228) — they describe Claude Code's tool architecture, we ablate it on SWE-bench.
+End with one sentence positioning this work as the missing empirical complement to Liu et al. (2604.14228) — they describe Claude Code's tool architecture, we ablate it under regime stratification on a benchmark pair that spans both regimes.
 
 ---
 
-## 3. Method (1.75 page target; 2.0 ceiling — §3.3 integrity disclosure is non-negotiable)
+## 3. Method (2.20 page target; 2.45 ceiling — §3.3, §3.5, §3.6 all non-negotiable)
 
-Sub-outline pending in `03_method.md` (TODO). Summary structure:
+Sub-outline in [03_method.md](03_method.md). Summary structure:
 
 - **3.1 Three-arm tool surface.** Define each:
   - `tool_rich`: full Claude Code IDE surface (Read, Grep, Glob, Edit, Write, Bash, plus all built-in agents/skills).
   - `bash_only`: Bash only, all IDE primitives disallowed via `--disallowedTools`. mini-SWE-agent's tool surface, ported to our harness.
   - `code_only`: single MCP tool `mcp__codebox__execute_code` (Python + Bash, persistent REPL kernel). All built-in tools disallowed.
 - **3.2 Harness design.** Subprocess isolation (`run_claude` creates temp `CLAUDE_CONFIG_DIR`), per-arm overlay refresh (fuse-overlayfs upper+work reset between arms), per-instance venv (outside overlay), git-history strip (single orphan commit, no reflog, no `base_commit` recoverability), **per-task prompt-cache isolation (`--cache-isolation`) injecting a deterministic 16-hex nonce into the codex tools array so every (instance, arm, run) triple is a cold-cache measurement.**
-- **3.3 Evaluation integrity.** The `test_patch` timing question. SWE-bench standard: apply post-agent. Our original (Apr 2026) harness: applied pre-agent — a leak. Issue #226 closed the `git diff` vector; Issue #287 (May 2026) closed the `cat tests/` vector by deferring `apply_test_patch` to post-agent. **Disclosure: numbers in this paper are post-#287; pre-#287 numbers are not comparable and have been archived.**
-- **3.4 The Capability Overlap framing.** Zhang et al.'s tool-use-tax inequality reframed for coding tools. IDE primitive capability ⊆ bash capability for Read/Grep/Glob/Write — these are "tax without grip" on tasks where bash alone suffices. Edit is the one IDE primitive with non-overlapping capability (atomic byte-precise replace with lint). Bash's *capability* is task-invariant; its *cost in turns* depends on whether the agent can explore the workspace efficiently.
+- **3.3 Evaluation integrity.** SWE-bench's canonical protocol holds `test_patch` until the agent terminates; we follow that protocol. State what we ship: (1) `apply_test_patch` runs only after the agent exits and after a `pytest --collect-only` health gate; (2) before `git apply`, target files are `git checkout HEAD`'d and agent-created "new file" collisions are removed; (3) if the apply still fails the instance is recorded FAIL with an explicit reason rather than scored against an inconsistent tree. The pre-apply cleanup is the only deviation from canonical SWE-bench and exists because our agents (unlike the bash-only patch-submission scaffold in the original evaluation) can write arbitrary files anywhere in the worktree. Audit forward-references to §5 (`audit_total`, `audit_propagated`).
+- **3.4 The Capability Overlap framing + Table 1 (Redundancy Table).** Zhang et al.'s tool-use-tax inequality reframed for coding tools. **Owns Table 1**, the per-primitive redundancy table (lifted from issue #158) mapping each Claude Code IDE primitive to its bash equivalent and asking the binary question — does it expose capability bash doesn't have? Read/Grep/Glob/Write are bash-subsets (UX wins only); `Edit` is the one primitive with non-overlapping capability (atomic byte-precise replace with lint); Bash is itself. The table operationalizes the framing and is the receipt that §5's sign-flip and §6's prescription both cite back to. Bash's *capability* is task-invariant; its *cost in turns* depends on whether the agent can explore the workspace efficiently.
 - **3.5 Dual cost reporting (methodology).** [**TODO prose:** the section opens by stating two facts that constrain how cost can honestly be reported.
 
   - **Fact 1 — No documented cache-isolation mechanism.** Across all four surfaces this paper touches — the Anthropic Messages API, the Claude Code CLI, the OpenAI Responses API, and the OpenAI Codex CLI — **there is no documented way to isolate the prompt cache, or any other server-side token-caching mechanism the vendor operates, within a session or prevent other sessions from reusing tokens cached by an earlier session.** The claim extends beyond the "prompt cache" label specifically: we surveyed the documentation for any cached-tokens primitive (prompt-prefix cache, conversation-state persistence, stored responses, server-side context retention, automatic KV reuse) and found no parameter, flag, environment variable, or namespace knob that forces a cache miss, scopes cached tokens to a single caller, or prevents cross-session reuse. The only documented mechanism is implicit: change the cached content so the cache key changes. Sources to cite (URLs included for human verification — **do not auto-insert into `references.bib`**; await approval per repo policy):
@@ -88,28 +88,25 @@ Sub-outline pending in `03_method.md` (TODO). Summary structure:
     - **OpenAI Responses API prompt caching.** Caching is documented as automatic with no opt-out. The `prompt_cache_key` parameter is a **routing / partition hint** combined with the prefix hash for cache lookup, not a disable switch — and crucially not a security boundary, so other sessions can still hit the same cache when prefixes collide. URL: `https://platform.openai.com/docs/guides/prompt-caching`.
     - **OpenAI Responses API stored state (other server-side cached tokens).** `store=true` (default) retains the response object server-side for 30 days; `previous_response_id` chains a later request to a prior response so the model "has access to prior context automatically" without re-submitting the message history. OpenAI also exposes a Sessions API, `conversation_id`, and `auto_previous_response_id` as alternative stateful primitives — but the docs explicitly forbid combining Sessions with `previous_response_id`/`conversation_id`/`auto_previous_response_id` in a single run, so these are alternative stateful channels, not isolation knobs layered on top. The only documented opt-out is `store=false`, which disables server-side retention entirely (with `include=["reasoning.encrypted_content"]` available as a compliance-oriented workaround that keeps reasoning encrypted client-side rather than scoping it per session). Isolation between callers is achieved implicitly via project/API-key scoping at the account level — not via any per-session parameter. URL: `https://developers.openai.com/api/docs/guides/conversation-state` (this URL resolves; the earlier `platform.openai.com/docs/api-reference/responses` 403'd in agent-side WebFetch and may require auth).
     - **OpenAI Codex CLI.** The README and configuration documentation expose no cache flag or environment variable. URL: `https://github.com/openai/codex` (verify against the README at the commit hash cited in §4 once the agent-version table is finalized).
-  - **Fact 2 — Custom isolation attempts are not reliably effective.** We implemented two: a per-task tool-name nonce in codex's `tools[]` array (issue #294, worked empirically), and the symmetric mechanism via a stub MCP server for Claude Code (issue #296). A 3-task back-to-back smoke test of #296 on `tool_rich` artifact tasks showed the iso pass's first task hitting Anthropic's cache identically to a contaminated task — Claude Code reported the stub MCP server as `status: pending` in the session-init record, so the nonced tool never landed in the outbound `tools[]` array before the first API call. The failure mode is invisible to unit tests (argv shape is correct) and is a property of agent runtime we don't control. Empirically reliable cache isolation across both providers is therefore not on offer with the harness we have.
+  Given that no cache-isolation knob exists, cost in §5 is reported as a single cache-adjusted column, defined from the underlying token formula plus a per-arm median-floor adjustment:
 
-  Given those two facts, every cost figure in §5 is reported under two accounting models side-by-side:
+  - **Token cost formula.** Per-run cost is `input_tokens × full_input_rate + output_tokens × output_rate` — every token billed at non-cached rates. Reproducible from raw `turn.completed.usage` JSONL records; immune to provider cache-state variation.
+  - **Median-floor adjustment.** For each arm, let `M_arm` be the *median* across that arm's instances of first-turn `cache_read_input_tokens` — empirically the floor representing "system prompt + tool definitions are warm in cache". Any instance whose first-turn `cache_read` falls **below** `M_arm` is bumped up to `M_arm` for accounting: that instance is credited as if it had hit the cache for its arm's shared prefix. Within-task multi-turn cache reads (turns ≥ 2) and instances already at or above `M_arm` are unchanged. The adjustment normalizes the system-prompt warm/cold lottery without claiming isolation.
 
-  - **(a) Token-based cost** = `input_tokens × full_input_rate + output_tokens × output_rate`. Charged at non-cached rates throughout. Depends only on agent behavior on each task; reproducible from raw `turn.completed.usage` JSONL records; immune to provider cache-state variation. Functions as a deterministic upper bound on what a fresh-cache user would pay.
-  - **(b) Cache-adjusted cost.** Charges the per-arm shared prefix (system prompt + tool definitions, byte-identical across tasks in an arm) at the **cache-read rate** for *every* task, including the task that happened to prime the cache. Concretely: let `X` = first-turn `cache_read_input_tokens` on the median non-primer task in an arm; move `X` tokens of every task's first-turn `cache_creation` into `cache_read` for accounting purposes. Within-task multi-turn cache reads (turns ≥ 2) are unchanged. The result is a steady-state cost: what each task would cost in a world where the shared prefix is always warm — independent of who happened to run first in our experiment. Removes the run-order asymmetry without claiming we achieved isolation.
+  - **Why the adjustment is bounded at the system prompt and why that is sufficient.** Cross-task cache sharing **beyond** the system prompt is vanishingly unlikely: both providers' prompt caches key on a prefix hash invalidated by any byte difference in the cached span. Past the system prompt, the conversation diverges per task — the first user message is the task statement (a fresh string per instance), the model's response is task-conditional, and every subsequent tool call carries task-specific arguments. For a cache hit to extend further, two instances would need byte-identical task statements, byte-identical model responses, and byte-identical tool-call payloads in identical order — negligible across our 93+100 instances. Empirically the per-instance first-turn `cache_read` clusters tightly around the arm's system-prompt token count with no bimodal tail consistent with cross-task content reuse.
 
-  - **Why both.** Token-based isolates agent behavior from infrastructure but ignores caching entirely (the upper bound). Cache-adjusted reflects deployment economics (steady-state pricing) without leaking run-order into the comparison. A user's real cost sits between the two depending on workload locality. The *gap* between the two columns is itself a finding — it varies by arm (different shared-prefix sizes) and quantifies how much caching matters for each arm's cost profile.
-
-  - **What to emphasize in the prose.** Token-based is the primary metric for cross-arm comparisons (no caching noise). Cache-adjusted is reported alongside to ground the comparison in something a deployer would actually pay. We explicitly do *not* report raw observed cost (the API-billed amount), because the smoke test in Fact 2 shows it is sensitive to run order and to ambient cache state we cannot control — and because reporting numbers we know are confounded would mislead readers.
-
-  - **Open OpenAI bugs that contribute to the problem** (cite in prose): codex#20301 (gpt-5.5 cache rate), codex#5556 (ChatGPT-login auth degraded caching), codex#19996 (cache-warming init call). These reinforce Fact 1: even when caching is documented at the API level, behavior in practice is undocumented and non-stationary.
+  - **Why not raw observed cost.** We deliberately do **not** report raw API-billed cost: it is sensitive to run order and to ambient cache state we cannot control, and reporting numbers we know are confounded would mislead readers. Cache-adjusted is the single reported cost column; the unadjusted token formula is the underlying input, not a parallel reporting line.
 
   - **Length target.** 5–7 sentences in the final prose. The bracketed text above is the guide; condense aggressively when writing.]
+- **3.6 The artifact suite (NEW; non-negotiable).** Artifact-side methodology layer parallel to §3.3 for SWE-bench. Covers: task contract (`task.yaml` + `workspace/` + `grader/hidden.py` + `reference_output.*`), grader contract (deterministic / offline / seeded-random only; score ∈ [0,1]; runs in subprocess; reference-output round-trip validates the grader itself), no-leak invariant (materialize-time scan rejects any leak of grader/reference into agent scratch dir before the run starts — pre-flight, not post-hoc), category taxonomy (one clause per category on what capability it probes). Details and code references in [03_method.md](03_method.md).
 
 ---
 
-## 4. Experimental Setup (0.5 page target; 0.75 ceiling)
+## 4. Experimental Setup (0.85 page target; 1.0 ceiling)
 
-- **Benchmarks.**
-  - **artifact suite:** 93 tasks across 9 categories (algorithmic, data_engineering, data_processing, data_science, enumeration, iterative_numerical, ml_engineering, stateful_reasoning, verification_heavy). Hidden deterministic graders, offline, seeded-random only. Covers the (computation, single+multi-file) regime cell.
-  - **SWE-bench Mini:** 100 instances split as verified-mini (Django 25 + Sphinx 25) and datasci-mini (sklearn 15 + matplotlib 12 + xarray 8 + sympy 7 + seaborn 5 + astropy 3). Covers (modification, multi-file). Standard post-agent `test_patch` protocol.
+- **Benchmarks.** Methodology lives in §3 (§3.6 for the artifact suite, §3.3 for SWE-bench protocol); §4 carries only the stats block.
+  - **artifact suite:** n and per-category counts from `paper/data/artifact_categories.csv`. Covers the computation regime cell (single + multi-file).
+  - **SWE-bench Mini:** 100 instances split as verified-mini (Django + Sphinx) and datasci-mini (sklearn + matplotlib + xarray + sympy + seaborn + astropy). Covers (modification, multi-file). Per-repo counts from `paper/data/swebench_repos.csv`.
 - **Agent surfaces.**
   - Claude Code (claude-sonnet-4-6, version 2.1.139). Three arms × the IDE tool surface ablation.
   - Codex CLI (gpt-5.5). Reported as generalization probe in §5.
@@ -120,54 +117,61 @@ Sub-outline pending in `03_method.md` (TODO). Summary structure:
 
 ---
 
-## 5. Main Results (2.0 page target; 2.25 ceiling)
+## 5. Main Results (2.0 page target; 2.15 ceiling)
 
-Numbers freeze before this section is written. Until then, table/figure slots are reserved but blank.
+Numbers freeze ✅ cleared 2026-05-28 (all 3 seeds × 2 agents × 2 benchmarks landed). **Four subsections; lean by design.** Paragraph-grain plan with cited macros in [05_results.md](05_results.md). Total page budget ≈1.9 pg (slack against 2.15 ceiling).
 
-- **5.1 Headline table.** Per-arm pass rate, total cost (**both token-based AND cache-adjusted — two cost columns side by side per §3.5**), median per-instance cost, turns, $/turn — split by regime (artifact / SWE-bench), with 95% CI from seed variance.
-- **5.2 Sign-flip figure (Figure 1).** Cost ratio `code_only / tool_rich` per regime, two bars: artifact `<1.0` (code_only cheaper), SWE-bench `>1.0` (tool_rich cheaper). The single visual that defends contribution bullet #1.
-- **5.3 Capability invariance.** Pass-rate table by arm × regime, showing ≤2pp spread within each regime. Defends contribution bullet #2.
-- **5.4 Per-repo breakdown (SWE-bench).** Django/Sphinx vs sklearn/matplotlib/xarray/sympy/seaborn/astropy. Where the modification-regime sign-flip is most/least pronounced.
-- **5.5 Agreement matrix.** Where the arms disagree on pass/fail. Most instances unanimous; signal lives in 6-or-so split instances per repo.
-- **5.6 Generalization to Codex CLI.** 1-paragraph note: Codex's bash-first prompt design flips the SWE-bench ranking (code_only cheaper than tool_rich). Implication: optimal surface is jointly determined by regime AND agent design.
+The cuts vs. the pre-2026-05-28 seven-subsection plan: capability-invariance (former §5.4) folds into §5.1¶2 (Table 1's pass column already shows it NS in every cell); per-category / per-repo breakdowns (former §5.5) cut entirely (reviewer-2 padding; per-cell n=12–15 noisier than headline; no slack for 0.4 pg of trend-only evidence); standalone Codex generalization (former §5.7) folds into §5.3¶2 since Codex now appears in every Table 1 row + every Figure 2 bar. The agreement-matrix subsection (former §5.6) is renumbered to §5.4 and stays — it is load-bearing for §6.3 (the capability-tie mechanism question) and not substitutable by prose.
 
----
+- **5.1 Headline contrasts (Table 1).** Paired contrast between `code_only` and its cheapest rival per `(benchmark, agent)` cell, on four columns: pass rate (absolute Δ in pp), cache-adjusted cost (Δ%), input tokens (Δ%), output tokens (Δ%); each Δ paired with a Wilcoxon p. Split by regime × agent → 4 rows. Implemented as Table 1 (`tab:code-only-headline`) in [sections/05_results.tex](sections/05_results.tex), sourced from [paper/data/paired_contrasts.csv](data/paired_contrasts.csv). Walkthrough is two paragraphs: ¶1 the regime sign-flip on cost-adj + agent split on SWE-bench; ¶2 capability invariance (pass column NS in all four cells) + token decomposition (Claude SWE-bench cost overrun is +40% output-tok; Codex SWE-bench cost win is −25% input-tok with output flat — forward to §6.1 / §6.2). **Metric surface is fixed at these four columns** — turns, $/turn, median per-instance cost are not headline metrics; raw token-based cost is the underlying input to cache-adjusted cost, not a parallel reporting column (see §3.5).
+- **5.2 Per-cell Δ distribution (Figure 1).** 2×2 small-multiples panel: for each cell, sorted per-instance Δcost_adj (code_only − cheapest rival, per-instance mean across 3 seeds), with a horizontal zero line. One paragraph. Reads from [paper/generated/figures/01_distribution.numbers.csv](generated/figures/01_distribution.numbers.csv): Artifact-Claude 85/93 wins (uniform shift), SWE-bench-Codex 76/100 wins (uniform shift), SWE-bench-Claude 44/100 wins with right-tail concentration (max +$2.33 — task-structural, loads §6.1), Artifact-Codex 48/93 wins with narrow symmetric IQR (consistent with the NS Table 1 row).
+- **5.3 Sign-flip + agent-flip (Figure 2).** Cost ratio `code_only / cheapest rival` per cell, four bars on a 1.0 reference line: artifact-claude 0.75 (***), artifact-codex 0.93 (ns), SWE-bench-claude 1.14 (ns directional), SWE-bench-codex 0.80 (***). Two paragraphs. ¶1 walks the four bars (reads from [02_signflip.numbers.csv](generated/figures/02_signflip.numbers.csv)). ¶2 lands the agent-design-dependence elevation: same restriction (code_only) penalizes Claude on SWE-bench and rewards Codex on the same benchmark — surface choice is jointly determined by regime AND agent design (§1 contribution bullet #4 elevation from "secondary" to co-headline). Forwards §6.1 (Claude direction) and §6.2 (Codex direction); does not preview either mechanism.
+- **5.4 Agreement matrix + conditional cost** *(renumbered from former §5.6; content unchanged)*. Two small tables: (a) per-cell unanimous-pass / unanimous-fail / split counts under MAJORITY (per-arm pass-rate ≥ 2/3) and STRICT (9/9 trials); (b) conditional-cost row pair showing each cell's full-set Δcost_adj alongside the unanimous-pass-subset Δcost_adj. Empirical basis for §6.3 (capability-tie mechanism question). Sourced from [paper/data/agreement_matrix.csv](data/agreement_matrix.csv) and [paper/data/headline_unanimous.csv](data/headline_unanimous.csv) — **both files TO BE WRITTEN; production script `paper/data/scripts/q3_unanimous_pass.py` (promoted from `/tmp/q3_unanimous_only.py` + `/tmp/q3_headline_compare.py`) is the unblock step.** Full sentence-grain content already in [05_results.md](05_results.md).
 
-## 6. The Redundancy Table — Table 1 (0.5 page target; 0.75 ceiling)
-
-Lifted from issue #158:
-
-| Claude Code primitive | Bash equivalent | Capability beyond bash? |
-|---|---|---|
-| Read | `cat`, `head`, `tail`, `sed -n` | Bounded output, line numbering — UX, not capability |
-| Grep | `grep -rn`, `rg` | None |
-| Glob | `find`, `ls **/` | None |
-| Edit | `sed -i`, `patch`, heredoc | **Yes — atomic byte-precise replace with lint** |
-| Write | `cat > file <<EOF` | None |
-| Bash | (itself) | — |
-
-Lead the section: *"Five of six IDE primitives are bash subsets in capability. The sign-flip in §5 means the redundant tools nevertheless earn their token budget on the modification regime — by saving exploration turns, not by adding capability."*
+**Downstream edits triggered (for the editor of each file):**
+- `outline.md` decisions-log lines below: `§5.6` references → `§5.4`.
+- `03_method.md` line 90: drop "§5.4 reports per-category pass/cost" (per-category subsection is cut).
+- `04_experimental_setup.md` lines 16, 18: drop "per-category pass/cost is reported in §5.4" / "per-repo breakdowns appear in §5.4" (those subsections are cut).
+- `04_experimental_setup.md` line 26: "generalization probe in §5.6" → "co-headline finding in §5.3".
+- `06_discussion.md` lines 53, 99: `§5.6` → `§5.4`.
 
 ---
 
-## 7. Discussion (0.5 page target; 0.75 ceiling)
+## 6. Discussion (0.5 page target; 0.75 ceiling)
 
-- **Why the sign-flip exists.** Capability Overlap on computation tasks → IDE tools are pure overhead. On modification + exploration tasks, IDE tools save *turns* (better recall over code structure), offsetting the per-turn tax. Per-turn cost ranking (`tool_rich > code_only ≈ bash_only`) holds in both regimes; only the turn-count ranking flips.
+- **Mechanism questions: three open empirical questions raised by Table 1.** *(Was the single "Why the sign-flip exists" bullet; replaced 2026-05-28 with finer-grained 2×2 questions after the cross-seed data landed.)* The pre-2026-05-28 framing — capability-overlap on computation, turn-count savings on modification — explains the *regime* flip but cannot explain the *agent-dependent* SWE-bench split. Three concrete questions, each with a testable hypothesis and the covariate we'd correlate against:
+
+    1. **Why does Claude struggle with `onlycode` on SWE-bench specifically?** Claude SWE-bench `onlycode` is the only cell where code-only loses; cost runs +14% (NS) vs baseline and **output tokens are +40% (p<10⁻⁹)** vs baseline. *Hypothesis: edit friction.* `onlycode` must express each file edit as a Python script rather than as a single native `Edit`/`Write` call. Full investigation: [`paper/investigations/edit_friction_findings.md`](investigations/edit_friction_findings.md) (2026-05-28).
+        - **Lead with this number:** per-instance Δ_edit_chars (`onlycode` − `baseline`) vs Δ_output_tokens, **Spearman ρ ≈ +0.49, p < 10⁻⁶, n = 100** (averaged across seeds 1–3). "Extra characters typed" computed from JSONL logs (Write/Edit/MultiEdit/execute_code/Bash content) — *not* gold-patch lines. This is one primary test, no multiple-comparison concern. Pull from `\result{edit_friction}{rho_edit_chars}` — exact value lives in `paper/data/edit_friction.csv` and updates if seeds re-run.
+        - **Secondary:** median-split contrast — Δ_output_tokens is **+2,650** on the low-patch half (≤6 gold lines, n=52) vs **+6,378** on the high-patch half (>6 gold lines, n=48), one-sided Mann-Whitney p = 0.025. Frames the effect as scaling with edit volume, not constant.
+        - **Tertiary (placebo):** Codex onlycode−baseline output-tokens Δ ≈ −0.7% (NS), and per-instance Spearman with gold patch size is NS (ρ = −0.13). Apply_patch leakage in Codex onlycode logs is empirically 4 events in 110 instances (1 instance), so the soft-disable from §3.1 is substantively respected — back-reference §3.1, do not relitigate.
+        - **Cite the intercept caveat:** ~+4,000 of the +40% aggregate is fixed-cost regime verbosity (intercept at zero patch size), not edit-friction. Edit-friction is the *additional* per-line tax, not the whole gap.
+        - **Numbers come from** [`paper/data/edit_friction.csv`](data/edit_friction.csv) — produced by [`paper/data/scripts/edit_friction.py`](data/scripts/edit_friction.py). Add macros via `\result{edit_friction}{...}`.
+        - **Do NOT use** the OLS "3.6× slope ratio" framing the investigation drafted first; R² < 0.01 on the within-arm fit and reviewers will catch it. Theil-Sen / leverage-drop analysis confirms a real slope difference (+62 tok/line robust, larger after removing the influential 503-line instance), but the slope framing isn't what to lead with. The ρ = +0.36 result and the median-split are cleaner headlines.
+        - **Do NOT lean on** the `bash_only` slope-gradient (baseline < bash_only < onlycode) — it's pattern-matching, not a tested ordering.
+        - **Do NOT lean on** Artifact-as-clean-control — artifact differs from SWE-bench in many ways beyond edit-vs-write (codebase size, persistent kernel, test setup). Soften to "consistent with" rather than "confirms."
+        - **Figure decision:** *skip* a dedicated figure in main paper. Figure 1 (§5.2) already shows Claude SWE-bench `onlycode` right-tail losses, providing visual motivation. If a reviewer pushes back, the appendix figure would be a 4-bar median-split chart: low-patch and high-patch Δ_output_tokens for {Claude, Codex} side by side.
+
+    2. **Why does Codex's `onlycode` save *more* on input tokens than its LLM-call drop predicts?** On SWE-bench Codex, LLM-call counts are essentially identical across arms (~19), but `onlycode` uses **25% fewer input tokens** and **34% fewer tool calls** than `baseline`. The implication: each individual LLM call carries a smaller prompt. *Hypothesis: MCP output compression.* The `mcp__codebox__execute_code` tool returns structured Python repr output, while `bash_exec_command` returns verbatim stdout — the latter accumulates much faster across iterations. *Test:* measure mean `function_call_output` payload size per call across arms (recoverable from the rollout's `response_item.function_call_output` items). If hypothesis holds, the SWE-bench Codex cost win generalizes to *any* agent whose tool wrapper compresses output, which has direct prescriptive implications for tool-surface design.
+
+    3. **Why are pass rates statistically tied across arms in every cell despite 20–40% cost swings?** Pass rates differ by <3pp across all 4 cells × 3 arms (all NS), yet costs differ by 20–40% with overwhelming significance. The dissociation suggests **tool restriction is a harness-efficiency axis orthogonal to model capability** — the model can solve the task with any reasonable interface; the surface changes the *path*, not the *answer*. **Status (2026-05-28): confirmed empirically and decomposed.** §5.4 agreement matrix shows unanimous-outcome instances dominate every cell (>74% under strict 9/9 criterion; >91% under majority-vote). Splits are graded-difficulty mixes (not arm-specific easy-subsets). **`code-arm` is the cheaper arm in 3 of 4 cells** by significant margins (Artifact/Claude −24.6%, Artifact/Codex −6.7%, SWE-bench/Codex −19.9%) — preserved on the unanimous-pass subset. The lone anomaly is **Claude SWE-bench** (`onlycode` +14.4% full-set, NS); the v3 unanimous-pass analysis collapses that to **+4.1% (NS, t=+0.40, n=49)** with cache-floor median recomputed on the subset. The +14% headline gap therefore lives on unanimous-fail/split instances — a **failure-cost effect** on extended doomed-run trajectories, not a per-task cost-of-modification tax. **Two-mechanism decomposition on the same cell**: Δoutput tok stays at +44% on the unanimous-pass subset (§6.1's edit-friction path-cost persists on successes), while Δinput tok flips from significant +26% to NS +17% (failure-cost localizes to the input side). Cache-floor robustness: matches in 34/36 (benchmark, seed, agent, arm) groups; both differences are in the non-contrast arms. Full data and methodology defense live in [paper/q3_capability_tie_investigation.md](q3_capability_tie_investigation.md) §11.
+- **Benchmark reuse beyond this paper.** The artifact suite's grader contract (deterministic / offline / seeded-random only) plus the materialize-time leak invariant generalize to other coding-agent evaluations; one paragraph noting what a follow-up author would need to add a category or task.
 - **Where the method works / doesn't.** Section is a 4-paragraph honest accounting; update after numbers freeze.
-- **Implications for agent design.** Workshop audience expects actionable claims — a one-paragraph guideline like *"if your tasks are computation-dominated, drop the IDE surface; if modification-dominated, keep Edit at minimum."* Hold drafting until §5 numbers are final.
+- **Implications for agent design.** Workshop audience expects actionable claims — a one-paragraph guideline like *"if your tasks are computation-dominated, drop the IDE surface; if modification-dominated, keep Edit at minimum."* The prescription falls out of Table 1 (§3.4) plus the §5 sign-flip. Hold drafting until §5 numbers are final.
 
 ---
 
-## 8. Limitations (0.25 page target; 0.5 ceiling — required by ACM template, desk-reject if missing)
+## 7. Limitations (0.25 page target; 0.5 ceiling — required by ACM template, desk-reject if missing)
 
 - Two agent surfaces only (Claude Code, Codex CLI). No GPT-5 or Gemini 2.5.
-- Sample size: 93 artifact + 100 SWE-bench instances. Statistical power for the sign-flip is high (22pp gap); per-cell SWE-bench breakdowns are noisier.
+- Sample size: 93 artifact + 100 SWE-bench instances. Statistical power for the sign-flip is high; per-cell SWE-bench breakdowns are noisier.
+- **Artifact-suite scope.** Single-language (Python), Linux-only; categories skew analytical / numerical / ML. Cross-language and systems-engineering computation tasks (Rust kernels, distributed systems) are out of scope for v1.
 - `test_patch` is applied post-agent (standard SWE-bench protocol); pre-#287 legacy data is not comparable and is omitted.
 - 12 SWE-bench instances (sympy + mwaskom) hit auth-failures in seed_1 and were re-run; documented in appendix.
 
 ---
 
-## 9. Ethics Statement (optional)
+## 8. Ethics Statement (optional)
 
 Likely skip — no human subjects, no closed-model API misuse. Decide after the draft is whole.
 
@@ -182,13 +186,12 @@ Each section below should eventually have its own outline file (top-level `.md`)
 | `outline.md` | ✅ this file | — |
 | `figures_outline.md` | ✅ scaffolded | — |
 | `00_abstract.md` | pending | freeze last |
-| `01_introduction.md` | pending | day 1 |
-| `02_related_work.md` | ✅ materialized (was `related_work.md`) | maintain |
-| `03_method.md` | pending | day 2 |
-| `04_experimental_setup.md` | pending | day 2 |
-| `05_results.md` | pending | day 3 (after numbers freeze) |
-| `06_redundancy_table.md` | pending | day 3 |
-| `07_discussion.md` | pending | day 4 |
+| `01_introduction.md` | pending — refresh contributions block to lead with benchmark | day 1 |
+| `02_related_work.md` | ✅ materialized; add §2.4 coding-agent-benchmarks subsection | maintain |
+| `03_method.md` | pending — add §3.6 artifact-suite methodology; fold Table 1 (redundancy) into §3.4 | day 2 |
+| `04_experimental_setup.md` | pending — trim §4.1 once §3.6 owns the methodology | day 2 |
+| `05_results.md` | ✅ paragraph-grain outline for §5.1–§5.4 (2026-05-28); LaTeX prose drafting next | day 3 |
+| `06_discussion.md` | pending — renamed from `07_discussion.md` after Table 1 folded into §3.4 | day 4 |
 | `99_limitations.md` | pending | day 4 |
 | `sections/*.tex` | pending | day 5 — prose |
 | `main.tex` | ✅ scaffolded (acmart) | — |
@@ -197,23 +200,23 @@ Each section below should eventually have its own outline file (top-level `.md`)
 | `build_numbers.py` | ✅ ported | — |
 | `lint.py` | ✅ ported | — |
 | `Makefile` | ✅ ported | — |
-| `data/` | pending — first CSV after numbers freeze | day 3 |
+| `data/` | partial — `paired_contrasts.csv`, `paired_marginals.csv`, `edit_friction.csv` shipped; `agreement_matrix.csv` + `headline_unanimous.csv` pending (§5.4 / §6.3 unblock). `artifact_categories.csv` no longer needed — per-category §5.5 cut 2026-05-28. | day 3 |
 | `figures_src/` | pending | day 3 |
 
 ---
 
 ## Numbers-freeze gate
 
-Tables and figures in §5–§7 cannot be drafted until the post-#287 seed runs complete:
+✅ **Cleared 2026-05-28.** All 3 seeds × 2 agents × 2 benchmarks landed:
 
-- ✅ artifact seed_1 (Claude) — 93 tasks
-- ✅ SWE-bench seed_1 (Claude) — 88 valid instances (auth recovery for 12 in progress)
-- ✅ SWE-bench seed_1 (Codex) — 100 instances
-- 🟡 SWE-bench seed_2/3 (Claude) — in progress
-- 🟡 SWE-bench seed_2/3 (Codex) — in progress
-- 🟡 artifact seed_1 (Codex) — just started; seeds 2/3 not started
+- ✅ artifact seed_{1,2,3} (Claude) — 93 tasks
+- ✅ artifact seed_{1,2,3} (Codex) — 93 tasks
+- ✅ SWE-bench seed_{1,2,3} (Claude) — 100 instances
+- ✅ SWE-bench seed_{1,2,3} (Codex) — 100 instances
 
-**Sign-flip is detectable from seed_1 alone (22pp magnitude vs ~1–2pp seed noise expected).** Variance bands from seeds 2/3 are needed for the headline table, not for the qualitative claim.
+Final data files: [paper/data/paired_contrasts.csv](data/paired_contrasts.csv), [paper/data/paired_marginals.csv](data/paired_marginals.csv), [paper/data/edit_friction.csv](data/edit_friction.csv), [paper/generated/figures/01_distribution.numbers.csv](generated/figures/01_distribution.numbers.csv), [paper/generated/figures/02_signflip.numbers.csv](generated/figures/02_signflip.numbers.csv). §5.1–§5.3 are fully unblocked.
+
+**Still blocked (§5.4 + §6.3):** [paper/data/agreement_matrix.csv](data/agreement_matrix.csv) and [paper/data/headline_unanimous.csv](data/headline_unanimous.csv) — production script `paper/data/scripts/q3_unanimous_pass.py` must be promoted from `/tmp/q3_unanimous_only.py` + `/tmp/q3_headline_compare.py`. The investigation outputs already exist (see `paper/q3_capability_tie_investigation.md` §11); promoting them to a build-pipeline CSV is mechanical.
 
 ---
 
@@ -227,9 +230,40 @@ Standing decisions on harness configuration for the seed runs that feed §5. App
   Rationale: empirical 4-run sequential smoke tests on three code_only artifact tasks showed the same task's `cached_input_tokens` swing from 0 → 17,920 → 8,704 → 16,896 with no harness change, driven entirely by OpenAI's non-stationary prompt cache and cross-account/cross-process cache pollution. Neither view alone is faithful: cache-independent is methodologically clean but inflates absolute cost vs real deployments; observed reflects what we paid but is unreproducible. Reporting both makes the methodology honest and lets readers see the *gap* (= cache savings) which is itself a finding — it differs by arm and reflects how well each arm's prefix overlaps with ambient workloads on the same OpenAI account. Open OpenAI bugs that contribute to the observed-cost non-stationarity and motivated this dual choice: codex#20301 (gpt-5.5 cache rate), codex#5556 (ChatGPT-login auth caching), codex#19996 (cache-warming init call). **Must be documented in §3.5 of the method section, in the headline table caption of §5.1, and referenced in the Limitations bullet on cost measurement. §7 Discussion should also note the per-arm cache-savings gap as a secondary finding.**
 - **2026-05-26 (superseded above) — Option A "cache isolation = ON" was the prior tentative decision.** Rolled back in favor of dual reporting; cache isolation requires re-running every (instance, arm, run, seed) triple, while dual reporting can derive both columns from existing JSONL records. The `--cache-isolation` harness flag is retained for possible follow-up work but is **not** used for paper headline numbers.
 - **2026-05-26 (refines dual-reporting entry above) — Second cost column is "cache-adjusted", not "raw observed".** The original dual-reporting decision proposed reporting *raw* API-billed cost as the with-cache column. A subsequent empirical check on Claude — issue #296's symmetric cache-isolation implementation, smoke-tested on 3 sequential `tool_rich` artifact tasks — found that (a) the no-iso pass replicates the cross-task contamination signature (~9871 tokens of first-turn `cache_read` on tasks 2 and 3, primer task at 0), and (b) the iso pass fails to break the cache because Claude Code reports the stub MCP server as `status: pending` at session init and the nonced tool never reaches the outbound `tools[]` array before the first API call (`tool_count=28` and no `iso_nonce` strings in any of 3 iso-pass JSONLs). Codex #294 worked; Claude #296 does not. Reporting raw observed cost would therefore leak run-order asymmetry into the comparison whenever the harness can't reliably force a miss. The refined methodology reports **token-based** (charge everything at non-cached rates) and **cache-adjusted** (charge the shared per-arm prefix at the cache-read rate for every task, including the primer — formula in §3.5) instead of raw observed. This yields two run-order-independent numbers, the first an upper bound, the second a steady-state estimate. Open questions deferred: which cost is the "true" deployment number is workload-dependent; the paper reports both and lets the reader pick.
+- **2026-05-27 — Arm contrasts use per-task paired differences, not seed-marginal stderr.** *Supersedes "Mean ± stderr over seeds" in this outline §4 and in `04_experimental_setup.md:48`.* The seed-marginal approach pools across instances of wildly different difficulty (e.g. a knapsack instance vs. a sympy bug), so the reported σ is dominated by between-task variance and tells the reader nothing about whether arm A beats arm B. Empirical illustration on the completed Claude full runs: for SWE-bench `baseline` cost, cross-instance σ ≈ $0.76 (mean ≈ $0.44) — yet the *paired* per-task contrast `baseline − bash_only` has SE ≈ $0.044, an order of magnitude tighter, because each task acts as its own control. The same effect re-orders significance: cross-instance σ obscures the SWE-bench turn-count gap; pairing exposes it as ~8 turns with p<10⁻¹². **Headline statistic for every arm comparison in §5:**
+  1. Collapse the 3 seeds within each (task, arm) cell to a single per-task mean. Seeds are replicates of the *same task*, not independent samples of the population of interest; treating them as the unit of inference inflates n and confuses noise sources.
+  2. For each ordered arm pair (A, B) within a benchmark, compute the per-task vector of differences Δ_t = mean_A(t) − mean_B(t). Report **mean Δ, SE_Δ = SD(Δ)/√n_tasks, and a 95% CI** (normal approximation is fine at n=93/100).
+  3. Pair the CI with a **Wilcoxon signed-rank** p-value on the Δ vector for continuous metrics (cost, turns, token counts). Wilcoxon is preferred over the paired t-test because the per-task distributions are heavy-tailed — a handful of pathological SWE-bench instances dominate parametric variance while the median direction is clear.
+  4. **Pass rate** uses the same per-task-Δ machinery on per-task pass rates ∈ {0, 1/3, 2/3, 1}; this is a Wilcoxon-on-rates analogue of McNemar that respects the 3-seeds-within-task structure. (Classical 2×2 McNemar on the full 3·n_tasks paired observations is reported only if a referee asks; it ignores within-task seed correlation.)
+  5. **Marginal per-arm summary** (the "row" in the headline table) is `mean over tasks of the per-task mean ± SD_task / √n_tasks` — i.e., the SE that respects task as the unit of replication. Per-seed values still go in the appendix, but they are not the inferential unit.
+
+  Implementation lives at `paper/data/scripts/paired_contrasts.py` and is fully reproducible from the released JSONL / `result.json` records. **Required surface changes:** rewrite outline §4 bullet on variance (line 117), rewrite `04_experimental_setup.md:48`, and update the §5.1 headline-table caption to read "mean per-task value ± SE_task; paired Wilcoxon p reported in adjacent column for each contrast." `paper/lint.py` should grow a check that any `\result*` macro tied to an arm comparison carries an accompanying p-value macro.
+- **2026-05-27 — Consolidate arm names to `baseline` / `bash_only` / `code_only` across both benchmarks in the paper.** The harness currently uses two parallel naming conventions: artifact = `tool_rich`/`bash_only`/`code_only`, SWE-bench = `baseline`/`bash_only`/`onlycode` (see outline §4 line 116 and `CLAUDE.md` "Arm naming"). The split is a legacy artifact: `tool_rich` and `baseline` are the **same arm** — the default Claude Code tool surface with no restriction — and the `tool_rich` name was coined back when the artifact harness was framed as "extra tools vs. fewer tools" before the project pivoted to the regime-dependent sign-flip framing. It is now actively misleading: it implies that arm has *more* tools than the other two, when in fact it is just the unmodified default. `onlycode` and `code_only` are likewise the same arm (MCP `execute_code`-only) under two names. **Paper convention going forward:**
+  - **`baseline`** — default Claude Code tool surface, no restriction. (Renames `tool_rich`; retires the misnomer.)
+  - **`bash_only`** — Bash + Read/Glob/Grep, native built-ins, no Edit/Write/MultiEdit/NotebookEdit.
+  - **`code_only`** — MCP `execute_code` + `list_tools` only; all native built-ins disallowed. (Renames `onlycode`.)
+
+  Every table, figure, caption, in-prose mention, and macro name in `paper/macros.tex` uses the consolidated trio. Source-data CSVs under `paper/data/` and `paper/generated/figures/*.numbers.csv` should also be regenerated with the consolidated arm column so `paper/lint.py` doesn't drift. **Do NOT rename the on-disk run directories or harness flags** — that would invalidate the entire `runs/{swebench,artifact}/full_run_seed_{1,2,3}/` corpus and force a re-sweep. Instead, the analysis scripts that build `paper/data/*.csv` perform a one-line rename (`tool_rich → baseline`, `onlycode → code_only`) at the boundary between the harness output and the paper's data layer. Update outline §4 line 116, `CLAUDE.md` "Arm naming" reference, and the §3 method prose accordingly; add a one-sentence footnote on first use in §4 noting the legacy harness names for readers who go look at the released code.
+- **2026-05-28 — Pathology / failure-mode pipeline is OUT of paper scope.** The codebase carries an `analyze/` module with a three-stage pathology pipeline — mechanical-flag extractor → Claude-classifier subagents → `synthesizer.json` → merge into `patterns.json` (see top-level [CLAUDE.md](../CLAUDE.md) "Module Map" and "Analysis Sidecar Layout" sections). **None of that pipeline lands in the paper.** Pathology results, failure-mode taxonomies, mechanical-flag distributions, subagent-classified findings, and per-instance pattern hits are explicitly excluded from §3, §5, §6, and §7. The paper's full metric surface is pass rate + cache-adjusted cost + input/output tokens; nothing else. Rationale:
+  - **(a) Story-completeness.** The sign-flip + capability-invariance pair stands on its own. Pathology is interesting but not load-bearing for any contribution bullet in §1.
+  - **(b) Page budget.** Failure-mode analysis across 193 instances × 3 arms × 3 seeds is at minimum a half-page of additional tables and a figure; we have no slack against the 7.80 / 8.0-page line.
+  - **(c) Methodology debt.** The pipeline uses Claude as a subagent classifier. Including its output in a paper requires defending the classifier (prompt, validation against a hand-coded subset, inter-rater reliability against a second model, contamination control). That defense is a half-section of method we cannot afford in an 8-page workshop format, and shipping the pathology results without the defense is methodologically dishonest.
+
+  **Surface effects (audit these on every paper edit):**
+  - **§02 Related Work** — no failure-mode taxonomy citations (τ-bench failure breakdown, SWE-bench-Live error analyses, etc.). [02_related_work.md](02_related_work.md)'s "Last updated" entry for 2026-05-28 records this exclusion in writing.
+  - **§3 Method** — no `§3.7 Pathology pipeline`. The non-negotiable §3.3 / §3.5 / §3.6 floors are unchanged.
+  - **§4 Experimental Setup** — no pathology-related metric in the "Metrics" bullet.
+  - **§5 Main Results** — no §5.x pathology subsection. The §5 outline (5.1 headline → 5.4 agreement matrix; restructured 2026-05-28 from the prior 7-subsection plan, see [05_results.md](05_results.md)) is final.
+  - **§6 Discussion** — no per-arm failure-mode paragraph. "Where the method works / doesn't" stays a 4-paragraph honest accounting, not a pathology table.
+  - **§7 Limitations** — pathology is **not** listed as a limitation. If a reviewer asks for failure-mode analysis, the answer is "future work" — the harness can produce it; doing so honestly requires a methodology defense the workshop format cannot fund.
+  - **Build pipeline** — no `paper/data/pathology*.csv`, no `paper/figures_src/*pathology*.py`, no `make values` step touching `analyze/` outputs.
+
+  **Future agents:** do not re-add pathology content under any section heading. If you see the word "pathology", "failure mode taxonomy", "mechanical flag", or "subagent classifier" appearing in a paper file outside this decision-log entry, that is a regression — revert and re-read this entry before reopening the decision.
+
+- **2026-05-28 — §6.3 (Q3 capability-tie) now reports the unanimous-pass-conditional contrast alongside the full-set headline.** The headline Table 1 contrast for Claude SWE-bench `onlycode` vs `baseline` is +14.4% Δcost (NS, t=+1.77). Restricting the same contrast to unanimous-pass instances (n=49 of 100, MAJORITY definition) and **recomputing the cache-floor median on the subset** following the §3.5 methodology, the contrast collapses to **+4.1% (NS, t=+0.40)**. The full-set gap is concentrated on unanimous-fail/split instances — a failure-cost on doomed-run trajectories, not a per-task cost-of-modification tax. **Two-mechanism decomposition** on the same cell: Δoutput tok stays at +44% on the unanimous-pass subset (§6.1's edit-friction path-cost persists on successes), while Δinput tok flips from significant +26% to NS +17% (failure-cost localizes to input-side). The other three cells (Artifact × {Claude, Codex}, SWE-bench/Codex) show code-arm as the cheaper arm on both the full set and the unanimous-pass subset; localization is specific to Claude SWE-bench. **Required surface changes**: (1) §5.4 reports per-cell unanimous counts (strict + majority); (2) §6.3 prose includes the unanimous-pass-conditional Claude SWE-bench numbers and the two-mechanism decomposition; (3) §6.1 cross-references §6.3 for the path-vs-failure cost split on its cell; (4) §6.6 prescription distinguishes high- vs low-solve-rate modification workloads. Source-of-truth data: `paper/data/agreement_matrix.csv` and `paper/data/headline_unanimous.csv` (both TO BE WRITTEN — promote `/tmp/q3_unanimous_only.py` and `/tmp/q3_headline_compare.py` to `paper/data/scripts/q3_unanimous_pass.py`). **Cache-floor robustness check**: the recomputed median matches the full-set median in 34/36 (benchmark, seed, agent, arm) groups; the two exceptions are Claude SWE-bench seed 2 baseline + bash_only (rival arms, not the contrast arm `onlycode`), differing by 360 tokens with ≤$0.001/instance impact. Full data trail: [paper/q3_capability_tie_investigation.md](q3_capability_tie_investigation.md) §11.
 
 ---
 
 ## Backup venue
 
-If KDD June 1 slips, **[SE 3.0 — Agentic Software Engineering Workshop at KDD 2026](https://agent-se.github.io/)** is a likely deadline-extension fallback (same conference, more coding-agent-focused audience). **[NeurIPS 2026 workshops](https://neurips.cc/)** (CFPs announced ~July 11, deadlines ~Aug 29) is the realistic backup with 8–12 more weeks of polish.
+Primary venue is now SE 3.0 (see header). Same-deadline emergency pivot is **[KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI](https://kdd-eval-workshop.github.io/agenticai-evaluation-kdd2026/)** — same June 1 deadline, same ACM template family, 9 pg vs 8 pg ceiling, non-archival; topical fit is weaker (one bullet vs four) but the paper as drafted would pass desk-check there. **[NeurIPS 2026 workshops](https://neurips.cc/)** (CFPs announced ~July 11, deadlines ~Aug 29) remain the realistic polish-time backup with 8–12 more weeks of revision.

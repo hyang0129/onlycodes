@@ -1,94 +1,146 @@
-# Figure Candidates — KDD 2026 Workshop Submission
+# Figure Candidates — KDD 2026 SE 3.0 Workshop Submission
 
-Working list of figure candidates. Not a commitment — the final cut depends on which numbers freeze cleanly in days 3–4.
+Working list. **2026-05-28 revision:** scoped to **Table 1 + Figure 1 + Figure 2** —
+the four cells × multiple metrics produce more visual claims than 8 pages can
+absorb, and the cleaner story is one rigorous headline table plus two figures
+that each defend a distinct claim. Other candidates (capability invariance,
+agreement matrix, edit-friction scatter, cost decomposition) are tracked
+below as **deferred** — they get appendix slots only if space allows after the
+prose stabilises.
 
-Sources: [outline.md](outline.md) §5–§7; issue [#158](https://github.com/hyang0129/onlycodes/issues/158).
-
----
-
-## Recommended cut (3 figures + Table 1)
-
-These map one-to-one onto the three contribution bullets in [outline.md](outline.md) §1.
-
-### Figure 1 — Sign-flip headline
-- **Section:** §5.2 (Main Results).
-- **Content:** Two-bar chart per regime. Y-axis: cost ratio `code_only / tool_rich`. Artifact bar `<1.0` (code_only cheaper); SWE-bench bar `>1.0` (tool_rich cheaper). Error bars from seed variance. One panel per agent surface (Claude Code primary, Codex CLI secondary).
-- **Why:** Defends contribution bullet #1 — the regime-dependent sign-flip. **The single figure that justifies the paper.**
-- **Source assets:** Numbers from [seed_1 summary CSVs](#numbers-data). Plot script: `figures_src/01_signflip.py`. Sidecar: `fig.01_signflip.numbers.csv`.
-
-### Figure 2 — Capability invariance
-- **Section:** §5.3 (Main Results).
-- **Content:** 3×2 grid of pass-rate bars (3 arms × 2 regimes). Y-axis: pass rate with 95% CI. Shows ≤2pp spread within each regime — capability is regime-invariant across arms.
-- **Why:** Defends contribution bullet #2. Visualizes that the sign-flip is in cost, not in capability — critical for the "tool-use tax exists but is regime-conditional" framing.
-- **Source assets:** Same CSV as Figure 1. Plot script: `figures_src/02_capability_invariance.py`.
-
-### Figure 3 — Per-regime cost decomposition
-- **Section:** §5.1 / §5.4.
-- **Content:** Stacked-bar or grouped-bar showing total cost decomposed by (cost-per-turn × turn-count) for each arm × regime. Highlights that `tool_rich`'s per-turn cost is always higher (~$0.024 vs ~$0.019) but its turn count is lower on the modification regime.
-- **Why:** Defends the mechanism in §7 — *the per-turn tax is real but is more-than-offset by exploration efficiency in the right regime.*
-- **Source assets:** Plot script: `figures_src/03_cost_decomposition.py`.
-
-### Table 1 — IDE primitive ↔ bash redundancy
-- **Section:** §6 (its own short section). Static — does not require numbers freeze.
-- **Content:** 6-row table (Read / Grep / Glob / Edit / Write / Bash) × 3 columns (primitive / bash equivalent / "capability beyond bash?").
-- **Why:** Pedagogical anchor. Establishes that five of six tools are bash subsets, isolating `Edit` as the one non-redundant primitive — and the sign-flip says even the redundant tools earn their keep on modification tasks via exploration efficiency.
+Sources: [outline.md](outline.md) §5–§6.
 
 ---
 
-## On the bubble (would be Figure 4 if budget allowed)
+## Cut to ship (1 table + 2 figures)
 
-### Agreement matrix per regime
-- **Section:** §5.5.
-- **Content:** Sankey or matrix showing PASS/FAIL agreement across arms per instance. Most instances unanimous; signal lives in 6-ish split instances per repo.
-- **Why considered:** Calibrates Reviewer 2 on noise — *"we're not chasing 6 instances out of 50."*
-- **Why not in top 3:** Could ride as a table in §5.5 prose. Promote to a figure only if the discriminating-instance analysis becomes a contribution by itself.
-- **Swap criterion:** If §5.4 per-repo breakdown comes in flat, promote agreement matrix in place of Figure 3.
+These map onto the contribution bullets in [outline.md](outline.md) §1 and the
+mechanism questions in §6.
 
-### Agent-surface comparison
-- **Section:** §5.6 (Codex generalization).
-- **Content:** Two panels — Claude vs Codex — showing `code_only / tool_rich` cost ratio on SWE-bench. Codex's ratio is <1.0 (code_only cheaper), Claude's is >1.0 (tool_rich cheaper).
-- **Why considered:** Defends contribution bullet #3 (agent-design dependence) with one image.
-- **Why not in top 3:** Could combine with Figure 1 as a second panel. Probably better as panel-of-Figure-1 than standalone.
+### Table 1 — Code-only vs cheapest rival (headline contrasts)
+
+- **Section:** §5.1 (Main Results). LaTeX label `tab:code-only-headline`.
+- **Content:** 4 rows × (pass Δ, cost-adj Δ%, input-tok Δ%, output-tok Δ%) with
+  paired Wilcoxon p. Closest-rival contrast per cell: `code_only-vs-bash_only`
+  on Artifact, `onlycode-vs-baseline` on SWE-bench.
+- **Status:** ✅ implemented in [sections/05_results.tex](sections/05_results.tex);
+  data in [data/paired_contrasts.csv](data/paired_contrasts.csv); macros
+  `\resp`, `\respp`, `\respct` in [macros.tex](macros.tex).
+- **Why:** The numerical headline. Defends both the regime-flip framing and
+  the agent-flip refinement (Codex onlycode wins SWE-bench; Claude onlycode
+  loses). Loads §6 mechanism questions 1 and 2.
+
+### Figure 1 — Per-cell Δ distribution
+
+- **Section:** §5.2 (Main Results). LaTeX label `fig:cost-distribution`.
+- **Content:** 2×2 small-multiples panel — one panel per `(benchmark, agent)`
+  cell. Each panel: sorted per-instance Δ_cost_adj (code-only − cheapest rival,
+  per-instance mean across 3 seeds), with a horizontal zero line and the
+  median Δ annotated as a horizontal dashed line. Rows = benchmark (Artifact
+  top, SWE-bench bottom); columns = agent (Claude left, Codex right).
+- **Why:** Shows the headline Δ in Table 1 isn't a few-instance fluke. The
+  anticipated reading: SWE-bench Codex panel is asymmetric (long left tail —
+  big wins on sphinx/sympy/xarray, small losses elsewhere); SWE-bench Claude
+  panel is the opposite skew (long right tail — edit-heavy tasks make
+  `onlycode` more expensive). Motivates §6 question 1 (edit friction) by
+  showing the loss is task-structural, not random.
+- **Data:** [data/raw/all_results.csv](data/raw/all_results.csv) (per-instance
+  costs); cheapest rival per cell hardcoded in the script (matches Table 1).
+- **Script:** `figures_src/01_distribution.py`. Sidecar:
+  `generated/figures/01_distribution.numbers.csv`.
+
+### Figure 2 — Sign-flip headline (4-bar)
+
+- **Section:** §5.3 (Main Results). LaTeX label `fig:signflip`.
+- **Content:** Single panel, 4 bars. Y-axis: cost ratio `code_only / rival`
+  (1.0 horizontal reference line). X-axis: 4 cells grouped as
+  `[Artifact-Claude, Artifact-Codex | SWE-bench-Claude, SWE-bench-Codex]`.
+  Bars colored by sign and significance:
+  green-solid (<1.0 with p<0.05), grey (NS), red-solid (>1.0 with p<0.05).
+  Significance annotated above each bar via `*` / `**` / `***` / `ns`.
+- **Why:** The single visual that exposes the **agent-dependent flip** on
+  SWE-bench: Claude bar `>1.0` (code-only loses), Codex bar `<1.0`
+  (code-only wins) — the same restriction does opposite things to the
+  two agents. Defends contribution bullet on agent-design dependence.
+- **Data:** [data/paired_marginals.csv](data/paired_marginals.csv) (per-arm
+  means) + [data/paired_contrasts.csv](data/paired_contrasts.csv) (p-values).
+- **Script:** `figures_src/02_signflip.py`. Sidecar:
+  `generated/figures/02_signflip.numbers.csv`.
 
 ---
 
-## Cut (table-only or appendix)
+## Deferred (appendix only if pages allow)
 
-### Per-instance cost scatter
-- Same data as Figure 3 — redundant. Push to appendix.
+These were in the original cut but lose to the headline three under the
+revised 8-page budget. Listed in priority order if any one of them gets a
+slot back.
 
-### Token-overhead decomposition (system prompt vs tool defs vs results vs reasoning)
-- From issue #158 stretch list. Interesting but not load-bearing for the sign-flip story. Appendix.
+### Figure A1 — Capability invariance (was Figure 2)
+- **Why deferred:** Same claim is already visible in Table 1's pass column
+  (all four cells show pass Δ NS). A standalone bar chart adds visual weight
+  but no new information. Could come back if a reviewer asks "but pass rate
+  variance per instance might matter."
 
-### Pass-rate histograms
-- Capability invariance is better shown as bars (Figure 2). Histograms add nothing.
+### Figure A2 — Agreement matrix (was on-bubble Figure 4)
+- **Why deferred:** Anchors §6 question 3 (capability vs harness dissociation)
+  but the question can be defended in prose with the pass-rate numbers from
+  Table 1 + a single sentence citing the unanimous fraction. Promote to
+  appendix figure if the §6 question becomes load-bearing.
+
+### Figure A3 — Edit-friction correlate (new candidate for §6 Q1)
+- **Why deferred:** Per-instance Δ_cost vs gold-patch size, Claude SWE-bench
+  only. Needs a join with `problems/swe/*/<id>.yaml`. Strong but the §6
+  question can also be defended via the +40% output-tokens observation alone
+  (already in Table 1). Promote if Figure A1/A2 don't earn their slots.
+
+### Cut entirely
+- **Per-regime cost decomposition (was Figure 3).** Original frame
+  (per-turn × turn-count) is broken for Codex (always 1 turn). A re-spec
+  in terms of input/output tokens duplicates Table 1's last two columns.
+- **Agent-surface comparison (was on-bubble).** Fully subsumed by the new
+  4-bar sign-flip in Figure 2.
+- **IDE primitive ↔ bash redundancy table.** Kept as inline `tabular` in
+  [sections/06_redundancy_table.tex](sections/06_redundancy_table.tex);
+  no longer numbered as a top-level table.
+- **Per-instance cost scatter** and **token-overhead decomposition** —
+  redundant or non-load-bearing as before.
 
 ---
 
 ## Production order
 
-1. **Table 1 (redundancy table)** — static markdown → LaTeX, no data dependency. Write today.
-2. **Figure 2 (capability invariance)** — pass rates already stable from seed_1; can produce immediately.
-3. **Figure 1 (sign-flip headline)** — depends on seed_1 + post-recovery aggregates. Block on auth-failed sympy/mwaskom rerun.
-4. **Figure 3 (cost decomposition)** — same data dependency as Figure 1; produce alongside.
+1. ✅ Table 1 — implemented and verified through `make values`.
+2. **Figure 1** — produce now. Data ready in
+   [data/raw/all_results.csv](data/raw/all_results.csv).
+3. **Figure 2** — produce now. Data ready in
+   [data/paired_marginals.csv](data/paired_marginals.csv) and
+   [data/paired_contrasts.csv](data/paired_contrasts.csv).
 
 ---
 
-## Open questions
+## Design decisions
 
-1. **One panel per agent surface or fold Codex into Figure 1?** Codex as a second panel of Figure 1 keeps the agent-surface story visible without spending a figure slot.
-2. **Y-axis units for Figure 1: ratio, percent delta, or absolute dollars?** Ratio is regime-comparable; percent delta is intuitive; dollars are reviewer-grippable. Default to ratio with absolute dollars in caption text.
-3. **Color encoding for the three arms.** Need a 3-class palette readable in B&W (workshop print). Default to `tool_rich = blue solid`, `bash_only = orange dashed`, `code_only = green dotted`.
+1. **Y-axis units for Figure 2.** Cost ratio (1.0-anchored) chosen over absolute
+   $ or % Δ. Ratio is regime-comparable (cost magnitudes vary 5× between
+   Artifact and SWE-bench), and the 1.0 reference line is the visual story.
+   % equivalents go in the caption.
+2. **Color encoding.** B&W-print-readable: solid bars with significance
+   indicated by hatch on NS bars, plus textual `*/**/***/ns` annotations
+   above each bar.
+3. **Per-instance values for Figure 1.** Cost-adjusted (`cost_usd_adjusted`),
+   *not* raw `cost_usd`. The cache-floor adjustment changes the sign of
+   exactly one cell (Artifact Codex `code_only` vs `bash_only`) and using the
+   adjusted column keeps the figure consistent with Table 1.
 
 ---
 
 ## Numbers data
 
-Each figure script reads from `paper/data/` (the canonical CSVs) and writes a sidecar `*.numbers.csv` to `paper/generated/figures/` for `build_numbers.py` to pick up. Numbers cited in prose use `\result{fig.signflip}{...}` etc.
+Each figure script reads from `paper/data/` and writes a sidecar
+`*.numbers.csv` to `paper/generated/figures/`. Caption-cited numbers use
+`\result{fig.01_distribution}{...}` / `\result{fig.02_signflip}{...}`.
 
 | Figure | CSV stem | Generator |
 |---|---|---|
-| Figure 1 | `fig.01_signflip` | `figures_src/01_signflip.py` |
-| Figure 2 | `fig.02_capability_invariance` | `figures_src/02_capability_invariance.py` |
-| Figure 3 | `fig.03_cost_decomposition` | `figures_src/03_cost_decomposition.py` |
-| Table 1 | (static) | hand-authored in `sections/06_redundancy_table.tex` |
+| Figure 1 | `fig.01_distribution` | `figures_src/01_distribution.py` |
+| Figure 2 | `fig.02_signflip` | `figures_src/02_signflip.py` |

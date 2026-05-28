@@ -23,20 +23,20 @@ Python 3.11+ + pandas + matplotlib.
 
 ---
 
-## Submission target: KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI
+## Submission target: Agentic Software Engineering (SE 3.0) Workshop at KDD 2026
 
-- **Workshop CFP:** https://kdd-eval-workshop.github.io/agenticai-evaluation-kdd2026/
+- **Workshop CFP:** https://agent-se.github.io/
 - **Submission deadline:** 2026-06-01 AOE
-- **Notification:** 2026-07-01
-- **Camera-ready:** 2026-07-10
-- **Workshop dates:** 2026-08-09 or 08-10, ICC Jeju, Korea
-- **Page limit:** 9 pages excl. references, ACM Conference Proceeding template
-- **Page target:** ~7.5 pages (see [`outline.md`](outline.md#page-budget-target-75-pages-not-9)). 9 is the ceiling, not the goal — dense > stuffed.
-- **Submission portal:** [OpenReview](https://openreview.net/group?id=KDD.org/2026/Workshop/Agentic_AI_Evaluation_and_Trustworthiness)
-- **Anonymous review:** yes
-- **Archival:** posted on workshop website only — not in KDD proceedings (does not preclude later journal/main-conference submission)
+- **Workshop dates:** August 2026, ICC Jeju, Korea (alongside KDD 2026)
+- **Page limit:** **8 pages excl. references** (long paper); 4 pages for short/position. ACM KDD template.
+- **Page target:** ~7.5 pages (see [`outline.md`](outline.md)). 8 is the ceiling — slack absorbs the 1-page haircut from the prior 9-page target but no further ceiling room remains.
+- **Required template line:** `\documentclass[sigconf,anonymous,review]{acmart}` (the `review` option is mandated by the SE 3.0 CFP).
+- **Double-blind:** yes — anonymize before submission.
+- **Archival:** non-archival, no formal proceedings — does not preclude later journal/main-conference submission.
 
-`main.tex` declares `\documentclass[sigconf, anonymous]{acmart}` — anonymous mode adds the placeholder authorship for blind review. Drop the `anonymous` option for the camera-ready.
+**Venue switch (2026-05-27):** moved from the KDD Eval & Trustworthiness workshop to SE 3.0 (same conference, same June 1 deadline, same ACM template family, both non-archival). SE 3.0 directly lists "Agent Tool Use & Environments", "Failure Modes & Root Causes", "Economic Cost & Impact", and "Trustworthiness & Reliability" among its tracks — four direct topic hits versus one ("Agent-centric benchmarks") for the prior venue. Reviewer pool is coding-agent researchers rather than monitoring/governance. The cost is one page off the ceiling (9 → 8); §3.3/§3.5/§3.6 minima are unchanged. See issue #158 comment thread for the full comparison.
+
+`main.tex` declares `\documentclass[sigconf,anonymous,review]{acmart}` — `anonymous` and `review` both stay on through submission. Drop `anonymous` (and optionally `review`) for the camera-ready.
 
 ### LaTeX dependencies
 

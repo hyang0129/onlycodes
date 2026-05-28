@@ -18,7 +18,9 @@ import csv
 import io
 import json
 import re
+import statistics
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Iterator
 
@@ -27,7 +29,13 @@ from typing import Iterator
 # on sys.path). The directory has no __init__.py, so a bare ``import parse_run``
 # is the form that works under both invocations once we put scripts/ on path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from parse_run import RunResult, parse_run  # noqa: E402
+from parse_run import (  # noqa: E402
+    CLAUDE_DEFAULT_MODEL,
+    CLAUDE_PRICES,
+    RunResult,
+    _codex_price_table,
+    parse_run,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS_SWEBENCH = REPO_ROOT / "runs" / "swebench"
@@ -70,6 +78,19 @@ FIELDNAMES = [
                             # Codex: cached_input_tokens).
     "output_tokens",        # output tokens (Codex output_tokens already includes reasoning).
     "reasoning_tokens",     # codex-only (reasoning_output_tokens); None for Claude.
+    "first_call_input_tokens",  # raw signal for the cache-floor adjustment: total prompt tokens
+                                # of the first billed model call (Claude: first unique assistant
+                                # message; Codex: first non-handshake token_count event).
+    "first_call_cache_read",    # raw signal: cache_read_input_tokens of the first billed call.
+    "cost_usd_adjusted",        # cache-floor-adjusted cost. Per-arm-per-seed median first-call
+                                # cache_read is computed over the WARM subset (cache_read>0);
+                                # tasks whose first call had below-median cache_read get floored
+                                # UP to median (system prompt assumed warm in steady state). The
+                                # delta is computed at standard-tier rates: codex uses
+                                # codex_prices.toml for its model; Claude uses CLAUDE_PRICES
+                                # (sonnet-4-6 standard tier).
+    "cache_floor_moved_tokens", # audit: how many tokens were moved from input → cache_read for
+                                # this row (==0 if the row was already at or above median).
     "agent_surface",        # claude_code | codex_cli (from meta line; source of truth)
     "agent_version",
     "result_path",          # JSONL (swebench) or result.json (artifact)
@@ -115,6 +136,7 @@ def _empty_result() -> RunResult:
         surface=None, model=None, agent_version=None,
         cost_usd=None, num_turns=None, tool_calls=None, llm_calls=None,
         input_tokens=None, cached_input_tokens=None, output_tokens=None, reasoning_tokens=None,
+        first_call_input_tokens=None, first_call_cache_read=None,
         wall_secs=None,
     )
 
@@ -164,10 +186,78 @@ def _row_from_run(
         "cached_input_tokens": rr.cached_input_tokens,
         "output_tokens": rr.output_tokens,
         "reasoning_tokens": rr.reasoning_tokens,
+        "first_call_input_tokens": rr.first_call_input_tokens,
+        "first_call_cache_read": rr.first_call_cache_read,
+        "cost_usd_adjusted": None,           # filled by _apply_cache_floor_adjustment
+        "cache_floor_moved_tokens": None,    # filled by _apply_cache_floor_adjustment
+        "_model": rr.model,                  # transient, stripped before write
         "agent_surface": rr.surface or surface_default,
         "agent_version": rr.agent_version or agent_version_default,
         "result_path": str(result_path.relative_to(REPO_ROOT)),
     }
+
+
+def _per_token_input_gap(agent: str, model: str | None) -> float | None:
+    """USD per token saved when moving 1 token from input rate → cache_read rate.
+
+    Returns ``None`` when the model is unknown — in that case the row is left
+    unadjusted (cost_usd_adjusted = cost_usd).
+    """
+    if agent == "claude":
+        rates = CLAUDE_PRICES.get(model or CLAUDE_DEFAULT_MODEL) or CLAUDE_PRICES[CLAUDE_DEFAULT_MODEL]
+        return (rates["input"] - rates["cache_read"]) / 1_000_000.0
+    if agent == "codex":
+        if model is None:
+            return None
+        rates = _codex_price_table().get(model)
+        if rates is None:
+            return None
+        return (rates["input"] - rates["cached_input"]) / 1_000_000.0
+    return None
+
+
+def _apply_cache_floor_adjustment(rows: list[dict]) -> None:
+    """Per-arm-per-seed median floor on first-call cache_read; mutates rows in place.
+
+    Scope: ``(benchmark, seed, agent, arm)``. For each group, the median is taken
+    over rows where ``first_call_cache_read > 0`` (the warm subset — cold zeros
+    bias the median downward and are what we're trying to compensate). For each
+    row in the group:
+
+        adj_cached = max(first_cached, min(median, first_input))
+        moved = adj_cached - first_cached
+        delta = -moved × (input_rate − cache_read_rate) / 1e6
+        cost_usd_adjusted = cost_usd + delta
+
+    Cap at ``first_input`` because you can't cache more tokens than were sent.
+    Δ is non-positive: flooring raises the cached share and lowers cost.
+    """
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for row in rows:
+        groups[(row["benchmark"], row["seed"], row["agent"], row["arm"])].append(row)
+
+    for key, group_rows in groups.items():
+        warm = [r["first_call_cache_read"] for r in group_rows if isinstance(r["first_call_cache_read"], int) and r["first_call_cache_read"] > 0]
+        median = int(statistics.median(warm)) if warm else 0
+
+        for row in group_rows:
+            cost = row["cost_usd"]
+            first_input = row["first_call_input_tokens"]
+            first_cached = row["first_call_cache_read"]
+            if not isinstance(cost, (int, float)) or first_input is None or first_cached is None:
+                # No signal to adjust on — leave cost as-is so adjusted = orig.
+                row["cost_usd_adjusted"] = cost
+                row["cache_floor_moved_tokens"] = 0 if first_input is not None else None
+                continue
+
+            adj_cached = max(first_cached, min(median, first_input))
+            moved = adj_cached - first_cached
+            row["cache_floor_moved_tokens"] = moved
+            gap = _per_token_input_gap(row["agent"], row.get("_model"))
+            if gap is None or moved == 0:
+                row["cost_usd_adjusted"] = cost
+                continue
+            row["cost_usd_adjusted"] = cost - moved * gap
 
 
 def collect_swebench(dataset_map: dict[str, str]) -> Iterator[dict]:
@@ -240,13 +330,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--out",
-        default=str(REPO_ROOT / "paper" / "data" / "all_results.csv"),
-        help="Output CSV path (default: paper/data/all_results.csv)",
+        default=str(REPO_ROOT / "paper" / "data" / "raw" / "all_results.csv"),
+        help="Output CSV path (default: paper/data/raw/all_results.csv). "
+             "Lives under raw/ so paper/build_numbers.py — which globs top-level "
+             "paper/data/*.csv — skips it; the paper cites only the derived "
+             "paired_contrasts.csv / paired_marginals.csv.",
     )
     args = parser.parse_args()
 
     dataset_map = _swebench_dataset_map()
     rows = list(collect_swebench(dataset_map)) + list(collect_artifact())
+
+    # Per-arm-per-seed median floor on first-call cache_read. See docstring on
+    # _apply_cache_floor_adjustment. Must run after all rows are collected, since
+    # the median is computed across an entire (benchmark, seed, agent, arm) cell.
+    _apply_cache_floor_adjustment(rows)
+
+    # Strip transient fields that the adjustment pass needed but the CSV doesn't.
+    for row in rows:
+        row.pop("_model", None)
 
     # Build the entire CSV in memory, then write it in one go. An earlier
     # incremental-writerow version produced sporadic 4-byte boundary corruption

@@ -1,13 +1,70 @@
 % paper/sections/05_results.tex
-% TODO: full prose + tables/figures. Numbers blocked until seeds 2/3 +
-% auth recovery complete.
+% Prose stubs and figures are TODO; this file currently holds only the
+% paired-contrast headline table. The macros it uses (\resp, \respp, \respct)
+% are defined in paper/macros.tex; data is in paper/data/paired_contrasts.csv.
 %
-% Subsections:
-%   Headline table (per-arm by per-regime aggregates)
+% Subsections to draft once prose lands:
+%   Headline table (this file — paired contrasts) ✓
 %   Sign-flip figure (Figure 1)
 %   Capability invariance (Figure 2)
 %   Per-repo breakdown (SWE-bench)
 %   Agreement matrix
 %   Generalization to Codex CLI
 
-To be drafted once numbers freeze.
+\begin{table*}[t]
+\centering
+\caption{Code-only vs.\ its cheapest rival in each (benchmark, agent) cell.
+$\Delta_{\text{pass}}$ in percentage points; $\Delta_{\text{cost adj.}}$,
+$\Delta_{\text{input}}$, $\Delta_{\text{output}}$ are relative changes
+($(\text{code-only} - \text{rival}) / \text{rival}$, in \%); cost is
+cache-floor-adjusted (\S\ref{sec:cost-adjustment}). All $p$ values are paired
+Wilcoxon signed-rank, two-sided. $n=93$ for Artifact (per-instance means
+across 3 seeds), $n=100$ for SWE-bench.}
+\label{tab:code-only-headline}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l@{\hspace{6pt}}l rr rr rr rr}
+\toprule
+& & \multicolumn{2}{c}{Pass (pp)} & \multicolumn{2}{c}{Cost adj.} & \multicolumn{2}{c}{Input tok} & \multicolumn{2}{c}{Output tok} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}
+Bench & Agent & $\Delta$ & $p$ & $\Delta$ & $p$ & $\Delta$ & $p$ & $\Delta$ & $p$ \\
+\midrule
+Artifact & Claude
+  & \respp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:pass:mean_delta}
+  & \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:pass:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_b}
+  & \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:input_tokens:mean_delta}{artifact:claude:code_only-vs-bash_only:input_tokens:mean_b}
+  & \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:input_tokens:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:output_tokens:mean_delta}{artifact:claude:code_only-vs-bash_only:output_tokens:mean_b}
+  & \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:output_tokens:wilcoxon_p} \\
+Artifact & Codex
+  & \respp{paired_contrasts}{artifact:codex:code_only-vs-bash_only:pass:mean_delta}
+  & \resp{paired_contrasts}{artifact:codex:code_only-vs-bash_only:pass:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_b}
+  & \resp{paired_contrasts}{artifact:codex:code_only-vs-bash_only:cost_adj:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:input_tokens:mean_delta}{artifact:codex:code_only-vs-bash_only:input_tokens:mean_b}
+  & \resp{paired_contrasts}{artifact:codex:code_only-vs-bash_only:input_tokens:wilcoxon_p}
+  & \respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:output_tokens:mean_delta}{artifact:codex:code_only-vs-bash_only:output_tokens:mean_b}
+  & \resp{paired_contrasts}{artifact:codex:code_only-vs-bash_only:output_tokens:wilcoxon_p} \\
+SWE-bench & Claude
+  & \respp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:pass:mean_delta}
+  & \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:pass:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}
+  & \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:input_tokens:mean_delta}{swebench:claude:onlycode-vs-baseline:input_tokens:mean_b}
+  & \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:input_tokens:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_b}
+  & \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:wilcoxon_p} \\
+SWE-bench & Codex
+  & \respp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:pass:mean_delta}
+  & \resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:pass:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_b}
+  & \resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_b}
+  & \resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:wilcoxon_p}
+  & \respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_b}
+  & \resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:wilcoxon_p} \\
+\bottomrule
+\end{tabular}
+\end{table*}
