@@ -341,6 +341,16 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
     leave the venv's egg-link pointing at a path with no egg-info, causing
     confusing ImportErrors at test time.
     """
+    # matplotlib__matplotlib-19763: setup.py rebuilds ~40 C++ extensions on
+    # every `pip install -e .` even when the cached .so files at repo/lib/
+    # are current, which OOMed bash_only under concurrent load. The .dist-info
+    # is in venv_lower and the .so files are inplace under repo/lib (surfaced
+    # via overlay at merged/lib), so only the editable .pth needs retargeting.
+    if "matplotlib__matplotlib-19763" in repo_dir:
+        _retarget_editable_pth(venv_dir, repo_dir)
+        _prune_easy_install_pth(venv_dir, repo_dir)
+        return
+
     pip = os.path.join(venv_dir, "bin", "pip")
     result = subprocess.run(
         [pip, "install", "--quiet", "--no-deps", "--no-build-isolation", "-e", repo_dir],
@@ -354,6 +364,30 @@ def reinstall_editable(venv_dir: str, repo_dir: str) -> None:
         )
 
     _prune_easy_install_pth(venv_dir, repo_dir)
+
+
+def _retarget_editable_pth(venv_dir: str, repo_dir: str) -> None:
+    """Rewrite editable-install .pth files to point at *repo_dir* without running pip."""
+    import glob as _glob
+    import re as _re
+
+    target_lib = os.path.join(repo_dir, "lib")
+    site_packages_glob = os.path.join(venv_dir, "lib", "python*", "site-packages")
+    for sp in _glob.glob(site_packages_glob):
+        for pth in _glob.glob(os.path.join(sp, "__editable__*.pth")):
+            with open(pth, "w", encoding="utf-8") as f:
+                f.write(target_lib + "\n")
+        for nspkg in _glob.glob(os.path.join(sp, "*-nspkg.pth")):
+            with open(nspkg, "r", encoding="utf-8") as f:
+                content = f.read()
+            new = _re.sub(
+                r"/tmp/swebench-cache/instances/[^/]+/repo/lib",
+                target_lib,
+                content,
+            )
+            if new != content:
+                with open(nspkg, "w", encoding="utf-8") as f:
+                    f.write(new)
 
 
 def _prune_easy_install_pth(venv_dir: str, repo_dir: str) -> None:

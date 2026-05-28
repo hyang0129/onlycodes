@@ -75,7 +75,9 @@ _INSTANCE_PYTHON: dict[str, str] = {
     "scikit-learn__scikit-learn-3840": "python3.9",
     # sympy 1.0–1.1 era (2016–2017): uses collections.abc removed in 3.10+
     "sympy__sympy-11232": "python3.9",
+    "sympy__sympy-13091": "python3.9",
     "sympy__sympy-13259": "python3.9",
+    "sympy__sympy-13480": "python3.9",
     "sympy__sympy-14180": "python3.9",
     # sphinx 4.0.x era (May 2021): sphinx/util/typing.py has a buggy guard
     # ``if sys.version_info > (3, 10): from types import Union as types_Union``.

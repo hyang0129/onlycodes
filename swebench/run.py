@@ -1016,17 +1016,6 @@ def run_command(
 
     problems = [Problem.from_yaml(f) for f in yaml_files]
 
-    # Deduplicate: the same instance_id may appear in multiple set directories
-    # (e.g. swebench-datasci-5 and swebench-verified-mini share instances).
-    # Keep only the first occurrence (sorted order is stable).
-    _deduped: list[Problem] = []
-    _seen: set[str] = set()
-    for _p in problems:
-        if _p.instance_id not in _seen:
-            _seen.add(_p.instance_id)
-            _deduped.append(_p)
-    problems = _deduped
-
     # Apply filter
     if filter_ids:
         ids = {s.strip() for s in filter_ids.split(",")}
