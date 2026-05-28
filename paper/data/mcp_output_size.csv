@@ -1,0 +1,29 @@
+# source_commit: bac5eb5528e722ed554d0e8b7659a2c760d51397
+# generated: 2026-05-28T21:07:05Z
+# generator: paper/data/scripts/mcp_output_size.py
+# key_schema: cell:arm
+# default_precision: 2
+#
+# Per-tool-call output distribution by (agent × benchmark × arm).
+# Pooled across seeds 1/2/3. Mirrors inline analysis in
+# paper/q2_token_gap_investigation.md sections 2/3/4/5/8.1.
+#
+# Cells become \result{mcp_output_size}{<cell>:<arm>:<metric>}.
+# Example: \result{mcp_output_size}{codex_swebench:onlycode:p99_chars}
+#
+# Char counts are raw len() of tool_result content or function_call_output payload
+# strings (no tokenization). Cross-arm comparisons within a cell are valid; cross-cell
+# absolute comparisons are biased by JSON-envelope vs verbatim-stdout serialization.
+cell,arm,n_runs,n_calls,tools_per_llm,mean_chars,median_chars,p75_chars,p90_chars,p95_chars,p99_chars,max_chars,calls_per_run,args_per_call,agent_msg_chars_per_run,llm_calls_per_run
+codex_swebench,baseline,330,7564,1.261,3760.7,1648,3769,8461,16028,40154,40167,22.9,210.9,9567.6,18.2
+codex_swebench,bash_only,330,8286,1.412,3659.1,1554,3614,8408,16007,40154,40167,25.1,366.1,9841.4,17.8
+codex_swebench,onlycode,330,5629,0.945,2998.8,1747,3965,7613,10575,16736,40156,17.1,511.9,12230.3,18.0
+codex_artifact,tool_rich,279,1652,1.298,600.3,255,499,1337,2518,4182,24152,5.9,476.9,8410.7,4.6
+codex_artifact,bash_only,279,1027,0.910,900.8,442,836,1976,3537,10199,19473,3.7,809.7,8508.6,4.0
+codex_artifact,code_only,279,671,0.706,641.1,291,586,1076,1825,11442,15266,2.4,1403.0,8923.9,3.4
+claude_swebench,baseline,300,8377,0.649,1577.3,669,1712,3309,5070,14153,97143,27.9,320.9,1839.1,43.0
+claude_swebench,bash_only,300,9012,0.614,1073.5,542,1446,2621,3573,7299,25331,30.0,350.5,2232.3,48.9
+claude_swebench,onlycode,300,9037,0.601,1236.2,666,1663,3017,4125,7858,17214,30.1,374.4,2390.6,50.1
+claude_artifact,tool_rich,279,1499,0.588,893.7,183,500,1528,4038,14782,41615,5.4,658.2,778.7,9.1
+claude_artifact,bash_only,279,1410,0.601,594.6,137,481,1154,2094,13449,19603,5.1,732.6,813.5,8.4
+claude_artifact,code_only,279,1207,0.598,568.8,288,524,1002,1413,9533,16454,4.3,998.1,831.4,7.2

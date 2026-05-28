@@ -1,15 +1,15 @@
 % paper/sections/05_results.tex
-% Prose stubs and figures are TODO; this file currently holds only the
-% paired-contrast headline table. The macros it uses (\resp, \respp, \respct)
-% are defined in paper/macros.tex; data is in paper/data/paired_contrasts.csv.
+% Prose stubs are TODO. This file currently holds the float blocks for §5:
+%   Table 1 (tab:code-only-headline)           — §5.1
+%   Figure 1 (fig:cost-distribution)            — §5.2
+%   Figure 2 (fig:cost-structure)               — §5.3
+%   Table 2 (tab:agreement-matrix)              — §5.4
+%   Table 3 (tab:headline-unanimous)            — §5.4
 %
-% Subsections to draft once prose lands:
-%   Headline table (this file — paired contrasts) ✓
-%   Sign-flip figure (Figure 1)
-%   Capability invariance (Figure 2)
-%   Per-repo breakdown (SWE-bench)
-%   Agreement matrix
-%   Generalization to Codex CLI
+% Floats land here; section headings + prose are drafted around them once
+% §5.1-§5.4 numbers are stable. Macros (\result, \resp, \respp, \respct)
+% are defined in paper/macros.tex; data lives in paper/data/*.csv and the
+% figure sidecars at paper/generated/figures/*.numbers.csv.
 
 \begin{table*}[t]
 \centering
@@ -17,7 +17,7 @@
 $\Delta_{\text{pass}}$ in percentage points; $\Delta_{\text{cost adj.}}$,
 $\Delta_{\text{input}}$, $\Delta_{\text{output}}$ are relative changes
 ($(\text{code-only} - \text{rival}) / \text{rival}$, in \%); cost is
-cache-floor-adjusted (\S\ref{sec:cost-adjustment}). All $p$ values are paired
+cache-floor-adjusted (\S\ref{sec:m-cost}). All $p$ values are paired
 Wilcoxon signed-rank, two-sided. $n=93$ for Artifact (per-instance means
 across 3 seeds), $n=100$ for SWE-bench.}
 \label{tab:code-only-headline}
@@ -68,3 +68,101 @@ SWE-bench & Codex
 \bottomrule
 \end{tabular}
 \end{table*}
+
+% ---------------------------------------------------------------------------
+% Figure 1 — §5.2 — per-cell Δcost_adj distribution (2×2 small multiples)
+% ---------------------------------------------------------------------------
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{generated/figures/01_distribution}
+\caption{Per-instance $\Delta_{\text{cost adj.}} = (\text{code-only} - \text{cheapest rival})$, sorted within each $(\text{benchmark}, \text{agent})$ cell. Zero line marks cost-parity; the per-cell median is annotated. Per-instance values are means across 3 seeds; $n{=}93$ per Artifact panel, $n{=}100$ per SWE-bench panel.}
+\label{fig:cost-distribution}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+% Figure 2 — §5.3 — four-cell cost structure (renamed from "sign-flip" framing)
+% ---------------------------------------------------------------------------
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{generated/figures/02_signflip}
+\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Significance from paired Wilcoxon: $^{***}\,p{<}10^{-3}$, ns $= p{\geq}0.05$. Per-cell magnitudes in Table~\ref{tab:code-only-headline}.}
+\label{fig:cost-structure}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+% Table 2 — §5.4 — agreement matrix (unanimous vs split, MAJORITY + STRICT)
+% ---------------------------------------------------------------------------
+\begin{table}[t]
+\centering
+\caption{Per-cell agreement across the $n_{\text{seeds}}{\times}n_{\text{arms}}{=}9$ trials per instance. \emph{Unanimous (majority)}: every arm has per-arm pass-rate ${\geq}2/3$ across 3 seeds. \emph{Unanimous (strict $9/9$)}: every arm passes on every seed or every arm fails on every seed. \emph{Split (majority)}: arms disagree under the majority definition.}
+\label{tab:agreement-matrix}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l@{\hspace{6pt}}l r rr r}
+\toprule
+& & & \multicolumn{2}{c}{Unanimous} & Split \\
+\cmidrule(lr){4-5}\cmidrule(lr){6-6}
+Bench & Agent & $n$ & Majority & Strict $9/9$ & Majority \\
+\midrule
+Artifact & Claude & 93
+  & \result{agreement_matrix}{artifact:claude:unanimous_majority_pct}[1]\%
+  & \result{agreement_matrix}{artifact:claude:unanimous_strict_pct}[1]\%
+  & \result{agreement_matrix}{artifact:claude:split_majority_pct}[1]\% \\
+Artifact & Codex  & 93
+  & \result{agreement_matrix}{artifact:codex:unanimous_majority_pct}[1]\%
+  & \result{agreement_matrix}{artifact:codex:unanimous_strict_pct}[1]\%
+  & \result{agreement_matrix}{artifact:codex:split_majority_pct}[1]\% \\
+SWE-bench & Claude & 100
+  & \result{agreement_matrix}{swebench:claude:unanimous_majority_pct}[1]\%
+  & \result{agreement_matrix}{swebench:claude:unanimous_strict_pct}[1]\%
+  & \result{agreement_matrix}{swebench:claude:split_majority_pct}[1]\% \\
+SWE-bench & Codex  & 100
+  & \result{agreement_matrix}{swebench:codex:unanimous_majority_pct}[1]\%
+  & \result{agreement_matrix}{swebench:codex:unanimous_strict_pct}[1]\%
+  & \result{agreement_matrix}{swebench:codex:split_majority_pct}[1]\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------------
+% Table 3 — §5.4 — conditional cost (full set vs unanimous-pass subset)
+% ---------------------------------------------------------------------------
+\begin{table}[t]
+\centering
+\caption{Code-arm cost contrast on the full set vs.\ restricted to the unanimous-pass subset (every arm passes by majority across 3 seeds). Cache-floor median is recomputed on the subset per the cost-adjustment methodology. $\Delta_{\text{cost adj.}}$ is the paired mean of $(\text{code-arm} - \text{rival})$ as a percentage of the rival mean; $p$ is paired Wilcoxon two-sided on the subset.}
+\label{tab:headline-unanimous}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l@{\hspace{6pt}}l rr rrr}
+\toprule
+& & \multicolumn{2}{c}{Full set} & \multicolumn{3}{c}{Unanimous-pass} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-7}
+Bench & Agent & $n$ & $\Delta_{\text{cost adj.}}$ & $n$ & $\Delta_{\text{cost adj.}}$ & $p$ \\
+\midrule
+Artifact & Claude
+  & \result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:full_n}[0]
+  & \result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:full_mean_delta_pct}[1]\%
+  & \result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:unanimous_majority_n}[0]
+  & \result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+  & \resp{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:unanimous_majority_wilcoxon_p} \\
+Artifact & Codex
+  & \result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:full_n}[0]
+  & \result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:full_mean_delta_pct}[1]\%
+  & \result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:unanimous_majority_n}[0]
+  & \result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+  & \resp{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:unanimous_majority_wilcoxon_p} \\
+SWE-bench & Claude
+  & \result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_n}[0]
+  & \result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}[1]\%
+  & \result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_n}[0]
+  & \result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+  & \resp{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_wilcoxon_p} \\
+SWE-bench & Codex
+  & \result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:full_n}[0]
+  & \result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}[1]\%
+  & \result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:unanimous_majority_n}[0]
+  & \result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+  & \resp{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:unanimous_majority_wilcoxon_p} \\
+\bottomrule
+\end{tabular}
+\end{table}

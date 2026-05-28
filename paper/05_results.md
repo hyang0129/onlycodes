@@ -9,8 +9,8 @@
 - [paper/data/paired_marginals.csv](data/paired_marginals.csv) — key schema `benchmark:agent:arm:metric`
 - [paper/generated/figures/01_distribution.numbers.csv](generated/figures/01_distribution.numbers.csv) — per-cell distribution stats
 - [paper/generated/figures/02_signflip.numbers.csv](generated/figures/02_signflip.numbers.csv) — per-cell ratios + p
-- [paper/data/agreement_matrix.csv](data/agreement_matrix.csv) **TO BE WRITTEN**
-- [paper/data/headline_unanimous.csv](data/headline_unanimous.csv) **TO BE WRITTEN**
+- [paper/data/agreement_matrix.csv](data/agreement_matrix.csv) ✅ shipped 2026-05-28
+- [paper/data/headline_unanimous.csv](data/headline_unanimous.csv) ✅ shipped 2026-05-28
 
 **Section budget.** §5 target 2.0 pg, ceiling 2.15. Per-subsection: §5.1 ≈ 0.5 pg, §5.2 ≈ 0.45 pg, §5.3 ≈ 0.55 pg, §5.4 ≈ 0.40 pg. Total ≈ 1.9 pg.
 
@@ -99,31 +99,31 @@
 
 | Cell | n | Unanimous (majority) | Strict 9/9 | Split (majority) |
 |---|---|---|---|---|
-| Artifact / Claude | 93 | `\result{agreement_matrix}{artifact_claude_unanimous_majority_pct}` | `\result{agreement_matrix}{artifact_claude_unanimous_strict_pct}` | `\result{agreement_matrix}{artifact_claude_split_majority_pct}` |
-| Artifact / Codex  | 93 | `\result{agreement_matrix}{artifact_codex_unanimous_majority_pct}`  | `\result{agreement_matrix}{artifact_codex_unanimous_strict_pct}`  | `\result{agreement_matrix}{artifact_codex_split_majority_pct}` |
-| SWE-bench / Claude| 100| `\result{agreement_matrix}{swebench_claude_unanimous_majority_pct}` | `\result{agreement_matrix}{swebench_claude_unanimous_strict_pct}` | `\result{agreement_matrix}{swebench_claude_split_majority_pct}` |
-| SWE-bench / Codex | 100| `\result{agreement_matrix}{swebench_codex_unanimous_majority_pct}`  | `\result{agreement_matrix}{swebench_codex_unanimous_strict_pct}`  | `\result{agreement_matrix}{swebench_codex_split_majority_pct}` |
+| Artifact / Claude | 93 | `\result{agreement_matrix}{artifact:claude:unanimous_majority_pct}` | `\result{agreement_matrix}{artifact:claude:unanimous_strict_pct}` | `\result{agreement_matrix}{artifact:claude:split_majority_pct}` |
+| Artifact / Codex  | 93 | `\result{agreement_matrix}{artifact:codex:unanimous_majority_pct}`  | `\result{agreement_matrix}{artifact:codex:unanimous_strict_pct}`  | `\result{agreement_matrix}{artifact:codex:split_majority_pct}` |
+| SWE-bench / Claude| 100| `\result{agreement_matrix}{swebench:claude:unanimous_majority_pct}` | `\result{agreement_matrix}{swebench:claude:unanimous_strict_pct}` | `\result{agreement_matrix}{swebench:claude:split_majority_pct}` |
+| SWE-bench / Codex | 100| `\result{agreement_matrix}{swebench:codex:unanimous_majority_pct}`  | `\result{agreement_matrix}{swebench:codex:unanimous_strict_pct}`  | `\result{agreement_matrix}{swebench:codex:split_majority_pct}` |
 
 Note in caption: under STRICT, splits are 9.7–26.0% across cells; under MAJORITY they are 1.1–9.0%. The ~13pp gap on SWE-bench cells matches the seed-leave-one-out reclassification rate, so MAJORITY counts the "stable" splits and STRICT counts both stable and noise-driven splits.
 
-One sentence on split structure: only `\result{agreement_matrix}{swebench_claude_strictly_arm_specific_count}` of `\result{agreement_matrix}{swebench_claude_split_majority_count}` split instances on Claude SWE-bench have a single arm carrying all the passes — splits are graded-difficulty mixes near each cell's solvability boundary, not arm-specific easy-subsets. Numerical claim only; no figure.
+One sentence on split structure: only `\result{agreement_matrix}{swebench:claude:strictly_arm_specific_split_n}` of `\result{agreement_matrix}{swebench:claude:split_majority_n}` split instances on Claude SWE-bench have a single arm carrying all the passes — splits are graded-difficulty mixes near each cell's solvability boundary, not arm-specific easy-subsets. Numerical claim only; no figure.
 
 2. **Conditional-cost row pair** (the v3 finding). For each (benchmark, agent) cell, report the full-set headline cost contrast alongside the unanimous-pass-conditional contrast:
 
 | Cell | Contrast (code-arm − rival) | n | Full-set Δcost adj. | Unanimous-pass Δcost adj. |
 |---|---|---|---|---|
-| Artifact / Claude  | code_only − bash_only | 93 → 92 | `\result{headline_unanimous}{artifact_claude_cost_adj_full_pct}`     | `\result{headline_unanimous}{artifact_claude_cost_adj_unanimous_pct}` |
-| Artifact / Codex   | code_only − bash_only | 93 → 89 | `\result{headline_unanimous}{artifact_codex_cost_adj_full_pct}`      | `\result{headline_unanimous}{artifact_codex_cost_adj_unanimous_pct}` |
-| SWE-bench / Claude | onlycode − baseline   | 100 → 49 | **`\result{headline_unanimous}{swebench_claude_cost_adj_full_pct}` (NS)** | **`\result{headline_unanimous}{swebench_claude_cost_adj_unanimous_pct}` (NS)** |
-| SWE-bench / Codex  | onlycode − baseline   | 100 → 42 | `\result{headline_unanimous}{swebench_codex_cost_adj_full_pct}`      | `\result{headline_unanimous}{swebench_codex_cost_adj_unanimous_pct}` |
+| Artifact / Claude  | code_only − bash_only | 93 → 92 | `\result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:full_mean_delta_pct}`     | `\result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}` |
+| Artifact / Codex   | code_only − bash_only | 93 → 89 | `\result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:full_mean_delta_pct}`      | `\result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}` |
+| SWE-bench / Claude | onlycode − baseline   | 100 → 49 | **`\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}` (NS)** | **`\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}` (NS)** |
+| SWE-bench / Codex  | onlycode − baseline   | 100 → 42 | `\result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}`      | `\result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}` |
 
-**Caption must say:** unanimous-pass-conditional contrast is computed with the **cache-floor median recomputed on the subset** per the §3.5 methodology (not the full-set floor reused on the subset). Cache-floor stability across the two: matches in `\result{agreement_matrix}{cache_floor_unchanged_groups}` of `\result{agreement_matrix}{cache_floor_total_groups}` (benchmark, seed, agent, arm) groups; the two exceptions are Claude SWE-bench seed 2 baseline + bash_only (rival arms, not the contrast arm), with ≤$0.001/instance perturbation.
+**Caption must say:** unanimous-pass-conditional contrast is computed with the **cache-floor median recomputed on the subset** per the §3.5 methodology (not the full-set floor reused on the subset). Cache-floor stability across the two: matches in `\result{agreement_matrix}{_all:_all:cache_floor_unchanged_majority}` of `\result{agreement_matrix}{_all:_all:cache_floor_total_groups}` (benchmark, seed, agent, arm) groups; the two exceptions are Claude SWE-bench seed 2 baseline + bash_only (rival arms, not the contrast arm), with ≤$0.001/instance perturbation.
 
 **Reading (one sentence, compiled prose):** in 3 of 4 cells the cost gap is preserved on the unanimous-pass subset (Artifact × {Claude, Codex} and SWE-bench/Codex), supporting the "tool surface = path, not answer" reading; in the Claude SWE-bench cell the +14% gap collapses to +4% NS, indicating the full-set gap is a failure-cost effect (mechanism analyzed in §6.3).
 
 **Figure decision.** *No dedicated figure for §5.4.* The two small tables above are the content; promoting them to a figure would not buy additional visual signal. Reserved appendix figure if a reviewer pushes back: 4-panel small-multiples of per-instance Δcost (code-arm − rival) sorted, color-coded by agreement category — the same structure as Figure 1 (§5.2) but stratified by unanimous-pass / unanimous-fail / split. Production script: `paper/data/scripts/q3_unanimous_pass.py` (TO BE WRITTEN; promote `/tmp/q3_unanimous_only.py` and `/tmp/q3_headline_compare.py`).
 
-**Numbers source-of-truth:** [`paper/data/agreement_matrix.csv`](data/agreement_matrix.csv) (per-cell unanimous counts, split structure, cache-floor stability metrics); [`paper/data/headline_unanimous.csv`](data/headline_unanimous.csv) (full-set vs unanimous-pass-subset contrast metrics in the same layout as `paired_contrasts.csv`). Both files **TO BE WRITTEN** — pre-condition for §5.4 prose drafting.
+**Numbers source-of-truth:** [`paper/data/agreement_matrix.csv`](data/agreement_matrix.csv) (per-cell unanimous counts, split structure, cache-floor stability metrics); [`paper/data/headline_unanimous.csv`](data/headline_unanimous.csv) (full-set vs unanimous-pass-subset contrast metrics in the same layout as `paired_contrasts.csv`). Both files ✅ shipped 2026-05-28 via `paper/data/scripts/q3_unanimous_pass.py`; §5.4 prose is now unblocked.
 
 **Investigation note (full data trail):** [`paper/q3_capability_tie_investigation.md`](q3_capability_tie_investigation.md) §1–§11 (v3, corrected after Opus reviewer + user pushback 2026-05-28). §11 is the canonical conditional-cost analysis; §11.1 documents the cache-floor robustness check.
 

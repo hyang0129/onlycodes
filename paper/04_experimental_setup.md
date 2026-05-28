@@ -75,3 +75,143 @@ Implementation: `paper/data/scripts/paired_contrasts.py`, reproducible from the 
 - **§4.3 must defend the inference unit, not just declare it.** State why per-task pairing (not per-seed) and why Wilcoxon (not paired-t). This is the subsection the page-budget bump was for; do not under-spend.
 - **Single source of truth for arm names.** §4.2 is the only place the legacy harness names (`tool_rich`, `onlycode`) appear in the paper. Don't reintroduce them in §3 or §5 captions.
 - **No bare digits.** Lint will fail the build on any unmacroed number, exactly as in §3.
+
+---
+
+## Citations needed for §4
+
+Single staging ground for citations that originate in §4. Same workflow as the staging block in [02_related_work.md](02_related_work.md#L186): inline metadata stays here until a human approves and copies into `paper/references.bib`. Per [CLAUDE.md](../CLAUDE.md), agents do not edit `references.bib` directly. Citation-key prefixes (`repo:` / `report:` / `blog:` / unprefixed for peer-reviewed) follow the 02 convention.
+
+**Already staged in [02_related_work.md](02_related_work.md#L186) — reuse keys, do not duplicate:**
+
+| §4 location | Use key |
+|---|---|
+| §4.1 SWE-bench Mini (the substrate) | `jimenez2024swebench` |
+| §4.1 verified-mini ("a subset of SWE-bench Verified") | `report:openai2024swebenchverified` |
+| §4.2 Claude Code (architectural walkthrough as product anchor — see note below) | `liu2026divecc` |
+
+> **Decision pending — Claude Code product cite.** `liu2026divecc` is an *architectural survey* of Claude Code, not the product release itself. If §4.2 wants a primary product cite (release notes, official docs) rather than a third-party description, stage a separate entry below (`repo:anthropic-claude-code` / `blog:anthropic-claude-code`). Otherwise reuse `liu2026divecc` and accept it as the canonical reference for what "Claude Code" denotes in this paper.
+
+### Staging block — new entries originating in §4
+
+These are the candidates a human reviewer should fix any `TBD` fields on, then copy into `paper/references.bib`. Until then, §4 prose must keep inline metadata (CLI name, version macro, vendor, URL) so each entry can be reconstructed from the section alone.
+
+```bibtex
+% ─── Agent surfaces (§4.2) ─────────────────────────────────────────────
+
+@misc{repo:openai-codex,
+  author       = {{OpenAI}},
+  title        = {Codex {CLI}},
+  howpublished = {GitHub repository \url{https://github.com/openai/codex}},
+  year         = {2025--2026},
+  note         = {The CLI binary cited in \S 4.2. Pin exact version via
+                  \result{codex_cli_version} macro --- bib entry refers to
+                  the project, not a frozen release. URL TBD-verify against
+                  the canonical openai/codex repo at submission time.}
+}
+
+@misc{report:openai-gpt55,
+  author       = {{OpenAI}},
+  title        = {{GPT-5.5} Model Card},
+  howpublished = {OpenAI model card / release announcement},
+  year         = {2026},
+  url          = {TBD --- verify against the official OpenAI model-card URL},
+  note         = {Cited only to fix the model identifier (`gpt-5.5`) used in
+                  the Codex CLI arm. If OpenAI publishes a system card or
+                  technical report instead of a model card, swap the type
+                  field accordingly. URL and exact title TBD --- verify.}
+}
+
+@misc{report:anthropic-sonnet46,
+  author       = {{Anthropic}},
+  title        = {{Claude Sonnet 4.6} Model Card},
+  howpublished = {Anthropic model card / release announcement},
+  year         = {2026},
+  url          = {TBD --- verify against the official Anthropic model-card URL},
+  note         = {Cited only to fix the model identifier (`claude-sonnet-4-6`)
+                  used in the Claude Code arm. URL and exact title TBD ---
+                  verify.}
+}
+
+% Optional: only stage if §4.2 wants a primary product cite rather than
+% reusing liu2026divecc. Leave commented out by default; uncomment after
+% the "Decision pending" note above is resolved.
+%
+% @misc{repo:anthropic-claude-code,
+%   author       = {{Anthropic}},
+%   title        = {{Claude Code}},
+%   howpublished = {GitHub repository \url{https://github.com/anthropics/claude-code}},
+%   year         = {2025--2026},
+%   note         = {Primary product cite. Pin exact CLI version via
+%                   \result{claude_cli_version} macro. Use this OR
+%                   liu2026divecc, not both, for the §4.2 "what Claude Code is"
+%                   reference.}
+% }
+
+% ─── Statistical machinery (§4.3) ──────────────────────────────────────
+
+@article{wilcoxon1945,
+  author    = {Wilcoxon, Frank},
+  title     = {Individual Comparisons by Ranking Methods},
+  journal   = {Biometrics Bulletin},
+  volume    = {1},
+  number    = {6},
+  pages     = {80--83},
+  year      = {1945},
+  doi       = {10.2307/3001968},
+  note      = {Cited once in §4.3 to anchor the choice of paired Wilcoxon
+               signed-rank over paired-$t$ for the heavy-tailed per-task
+               $\Delta$ distributions. Classical reference; no `TBD` fields.}
+}
+
+@article{mcnemar1947,
+  author    = {McNemar, Quinn},
+  title     = {Note on the Sampling Error of the Difference between
+               Correlated Proportions or Percentages},
+  journal   = {Psychometrika},
+  volume    = {12},
+  number    = {2},
+  pages     = {153--157},
+  year      = {1947},
+  doi       = {10.1007/BF02295996},
+  note      = {OPTIONAL --- only stage if §4.3 keeps the prose
+               "a Wilcoxon-on-rates analogue of McNemar". If the McNemar
+               framing is dropped during drafting, drop this entry.
+               Classical reference; no `TBD` fields.}
+}
+
+% ─── Per-Mtok cost rates (§4.4) ────────────────────────────────────────
+
+@misc{report:anthropic-pricing,
+  author       = {{Anthropic}},
+  title        = {{Anthropic API} Pricing},
+  howpublished = {Anthropic pricing page},
+  year         = {2026},
+  url          = {https://www.anthropic.com/pricing},
+  note         = {Documentary source for the Claude per-Mtok rates in
+                  `paper/data/cost_rates.csv`. Pricing pages mutate; pin
+                  the access date in the entry note before submission.
+                  Access date TBD --- verify at freeze.}
+}
+
+@misc{report:openai-pricing,
+  author       = {{OpenAI}},
+  title        = {{OpenAI API} Pricing},
+  howpublished = {OpenAI pricing page},
+  year         = {2026},
+  url          = {https://openai.com/api/pricing/},
+  note         = {Documentary source for the GPT-5.5 per-Mtok rates in
+                  `paper/data/cost_rates.csv`. Pricing pages mutate; pin
+                  the access date in the entry note before submission.
+                  Access date TBD --- verify at freeze.}
+}
+```
+
+### `TBD` fields a human reviewer must resolve before insertion
+
+- `repo:openai-codex` — confirm canonical URL (`github.com/openai/codex`) at submission time.
+- `report:openai-gpt55` — model-card URL + exact title; decide if it's a model card vs. system card vs. blog announcement.
+- `report:anthropic-sonnet46` — model-card URL + exact title.
+- `repo:anthropic-claude-code` (commented) — only uncomment if the "Decision pending" note above resolves in favour of a primary product cite.
+- `mcnemar1947` — stage only if §4.3 keeps the McNemar analogue framing.
+- `report:anthropic-pricing` / `report:openai-pricing` — record the **access date** in the bib note at freeze time (pricing pages have no stable archival URL).

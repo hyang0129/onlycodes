@@ -1,0 +1,12 @@
+# source_commit: bac5eb5528e722ed554d0e8b7659a2c760d51397
+# generated: 2026-05-28T20:13:51Z
+# generator: paper/data/scripts/q3_unanimous_pass.py
+# key_schema: benchmark:agent
+# default_precision: 2
+# Per-cell agreement-matrix counts under STRICT (9/9 trials) and MAJORITY (per-arm pass-rate >= 2/3) definitions. The _all:_all row carries global scalars (min unanimous pct across cells, cache-floor stability counts: total and unchanged groups out of (benchmark, seed, agent, arm) tuples).
+benchmark,agent,n_instances,unanimous_strict_pct,unanimous_strict_pass_n,unanimous_strict_fail_n,split_strict_n,split_strict_pct,unanimous_majority_pct,unanimous_majority_pass_n,unanimous_majority_fail_n,split_majority_n,split_majority_pct,per_seed_agreement_pct,seed_flip_rate_pct,strictly_arm_specific_split_n,min_unanimous_strict_pct,min_unanimous_majority_pct,cache_floor_total_groups,cache_floor_unchanged_strict,cache_floor_unchanged_majority,cache_floor_max_diff_tokens_strict,cache_floor_max_diff_tokens_majority
+artifact,claude,93,90.32,84,0,9,9.68,98.92,92,0,1,1.08,97.49,8.6,0,,,,,,,
+artifact,codex,93,94.62,87,1,5,5.38,96.77,89,1,3,3.23,96.77,2.15,0,,,,,,,
+swebench,claude,100,74.0,37,37,26,26.0,91.0,49,42,9,9.0,87.33,14.0,1,,,,,,,
+swebench,codex,100,79.0,36,43,21,21.0,91.0,42,49,9,9.0,87.0,9.0,1,,,,,,,
+_all,_all,,,,,,,,,,,,,,,74.0,91.0,36,34,34,360,360

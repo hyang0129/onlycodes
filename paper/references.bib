@@ -3,20 +3,410 @@
 % IMPORTANT: per CLAUDE.md, agents must NOT edit this file directly. Add
 % citation candidates to ../02_related_work.md with enough context for a
 % human to verify, then a human inserts into this file.
-
-% Placeholder — populate as section prose lands.
 %
-% Candidate entries (drawn from 02_related_work.md, pending human verify):
-%   yang2024sweagent          — SWE-agent NeurIPS 2024
-%   wang2024codeact           — CodeAct ICML 2024
-%   liu2026claudecode         — Dive into Claude Code, arXiv:2604.14228
-%   rombaut2026taxonomy       — Source-code taxonomy, arXiv:2604.03515
-%   zhang2026tooltax          — Are Tools All We Need?, arXiv:2605.00136
-%   xia2025liveswe            — Live-SWE-agent, arXiv:2511.13646
-%   bechard2026terminal       — Terminal Agents Suffice, arXiv:2604.00073
-%   anthropic2025codemcp      — Anthropic blog "Code execution with MCP", Nov 2025
-%   cloudflare2025codemode    — Cloudflare "Code Mode", Sept 2025
-%   cloudflare2026codemodemcp — Cloudflare "Code Mode MCP", Feb 2026
-%   farquhar2024semantic      — Semantic entropy
-%   kossen2024sep             — SEP, semantic entropy probe
-%   xia2025openhands          — OpenHands / CodeAct 2.1, arXiv:2511.03690
+% Current state (2026-05-28): 32 verified entries moved from
+% paper/02_related_work.md staging block following human approval
+% (see chat log + arXiv verification of MLE-Bench / SWE-Lancer author
+% lists on 2026-05-28).
+%
+% Still pending in the staging block (unsafe — TBD flags):
+%   jimenez2024swebench           (author list reconstructed, verify ICLR)
+%   zhang2024autocoderover        (author list reconstructed)
+%   gao2023pal                    (author list reconstructed)
+%   chen2023pot                   (author list reconstructed)
+%   wang2025openhands             (full author list TBD)
+%   amazon2025swepolybench        (full author list TBD)
+%   toolscope                     (author field literally "TBD")
+%   fan2025sweeffi                (full author list TBD)
+%   aidev2026                     (preprint URL not yet public)
+
+% ─── Foundational substrate (must-cite, we run on these) ───────────────
+
+@misc{report:openai2024swebenchverified,
+  author       = {{OpenAI Preparedness Team}},
+  title        = {Introducing {SWE-bench} Verified},
+  howpublished = {OpenAI blog + dataset release},
+  year         = {2024},
+  month        = aug,
+  url          = {https://openai.com/index/introducing-swe-bench-verified/},
+  note         = {500-instance human-validated subset of {SWE-bench}.}
+}
+
+@misc{anthropic2024mcp,
+  author       = {{Anthropic}},
+  title        = {Introducing the {Model Context Protocol}},
+  howpublished = {Protocol specification + announcement},
+  year         = {2024},
+  month        = nov,
+  url          = {https://www.anthropic.com/news/model-context-protocol},
+  note         = {Published 2024-11-25.}
+}
+
+% ─── Direct precedent ──────────────────────────────────────────────────
+
+@inproceedings{yang2024sweagent,
+  author    = {Yang, John and Jimenez, Carlos E. and Wettig, Alexander and
+               Lieret, Kilian and Yao, Shunyu and Narasimhan, Karthik and
+               Press, Ofir},
+  title     = {{SWE-agent}: Agent-Computer Interfaces Enable Automated
+               Software Engineering},
+  booktitle = {NeurIPS},
+  year      = {2024},
+  eprint    = {2405.15793},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE}
+}
+
+@article{bechard2026terminal,
+  author    = {Bechard, Patrice and Marquez Ayala, Orlando and
+               Chen, Emily and Skelton, Jordan and Davasam, Sagar and
+               Sunkara, Srinivas and Yadav, Vikas and Rajeswar, Sai},
+  title     = {Terminal Agents Suffice for Enterprise Automation},
+  journal   = {arXiv preprint arXiv:2604.00073},
+  year      = {2026},
+  month     = mar,
+  note      = {ServiceNow Research.}
+}
+
+% ─── SWE-bench scaffold prior art (competing architectures) ────────────
+
+@article{xia2024agentless,
+  author    = {Xia, Chunqiu Steven and Deng, Yinlin and
+               Dunn, Soren and Zhang, Lingming},
+  title     = {Agentless: Demystifying {LLM}-based Software Engineering
+               Agents},
+  journal   = {arXiv preprint arXiv:2407.01489},
+  year      = {2024},
+  month     = jul
+}
+
+@misc{repo:moatless,
+  author       = {{\"O}rwall, Albert},
+  title        = {Moatless Tools},
+  howpublished = {GitHub repository},
+  year         = {2024--2025},
+  url          = {https://github.com/aorwall/moatless-tools},
+  note         = {SWE-bench Verified leaderboard scaffold. No standalone paper for
+                  moatless-tools itself; the related SWE-Search paper
+                  (arXiv:2410.20285) uses a separate moatless-tree-search repo.}
+}
+
+% ─── Industry priors ───────────────────────────────────────────────────
+
+@misc{blog:anthropic2025codemcp,
+  author       = {{Anthropic}},
+  title        = {Code execution with {MCP}: building more efficient agents},
+  howpublished = {Anthropic Engineering Blog},
+  year         = {2025},
+  month        = nov,
+  url          = {https://www.anthropic.com/engineering/code-execution-with-mcp}
+}
+
+@misc{blog:cloudflare2025codemode,
+  author       = {Varda, Kenton and Pai, Sunil},
+  title        = {Code Mode: the better way to use {MCP}},
+  howpublished = {Cloudflare Blog},
+  year         = {2025},
+  month        = sep,
+  url          = {https://blog.cloudflare.com/code-mode/},
+  note         = {Published 2025-09-26.}
+}
+
+@misc{blog:cloudflare2026codemodemcp,
+  author       = {{Cloudflare}},
+  title        = {Code Mode {MCP}: give agents an entire {API} in 1,000 tokens},
+  howpublished = {Cloudflare Blog},
+  year         = {2026},
+  month        = feb,
+  url          = {https://blog.cloudflare.com/code-mode-mcp/},
+  note         = {Published 2026-02-20.}
+}
+
+@misc{report:verdent2025swebench,
+  author       = {{Verdent}},
+  title        = {{SWE-bench} Verified Technical Report},
+  howpublished = {Verdent blog / technical report},
+  year         = {2025},
+  url          = {https://www.verdent.ai/blog/swe-bench-verified-technical-report},
+  note         = {Tool-ablation finding: removing advanced tools while keeping
+                  bash+read+write+edit produced little performance change.
+                  76.1\% pass@1 on SWE-bench Verified (Claude Sonnet 4.5).}
+}
+
+% ─── Bash-only lineage ─────────────────────────────────────────────────
+
+@misc{repo:miniswagent,
+  author       = {{SWE-agent contributors}},
+  title        = {{mini-SWE-agent}},
+  howpublished = {GitHub repository \url{https://github.com/SWE-agent/mini-swe-agent}},
+  year         = {2025},
+  note         = {No standalone paper; ~100 LoC bash-only scaffold,
+                  HAL {SWE-bench} Verified Mini leaderboard.}
+}
+
+@article{xia2025liveswagent,
+  author    = {Xia, Chunqiu Steven and Wang, Zhe and Yang, Yan and
+               Wei, Yuxiang and Zhang, Lingming},
+  title     = {Live-{SWE-agent}: Can Software Engineering Agents Self-Evolve on the Fly?},
+  journal   = {arXiv preprint arXiv:2511.13646},
+  year      = {2025},
+  month     = nov
+}
+
+% ─── Code-as-action lineage ────────────────────────────────────────────
+
+@inproceedings{wang2024codeact,
+  author    = {Wang, Xingyao and Chen, Yangyi and Yuan, Lifan and
+               Zhang, Yizhe and Li, Yunzhu and Peng, Hao and Ji, Heng},
+  title     = {Executable Code Actions Elicit Better {LLM} Agents},
+  booktitle = {ICML},
+  year      = {2024},
+  eprint    = {2402.01030},
+  archivePrefix = {arXiv}
+}
+
+% ─── Theoretical framing (Zhang, NOT Wang) ─────────────────────────────
+
+@article{zhang2026tooltax,
+  author    = {Zhang, Kaituo and Xiong, Zhen and Zhong, Mingyu and
+               Jiang, Zhimeng and Yuan, Zhouyuan and Li, Zhecheng and
+               Lin, Ying},
+  title     = {Are Tools All We Need? Unveiling the Tool-Use Tax in {LLM} Agents},
+  journal   = {arXiv preprint arXiv:2605.00136},
+  year      = {2026},
+  month     = apr,
+  note      = {Earlier roadmap drafts misattributed to ``Wang et al.''. Correct
+               attribution is Zhang et al.}
+}
+
+% ─── Claude-Code-specific architectural descriptions ───────────────────
+
+@article{liu2026divecc,
+  author    = {Liu, Jiacheng and Zhao, Xiaohan and Shang, Xinyi and
+               Shen, Zhiqiang},
+  title     = {Dive into {Claude Code}: The Design Space of Today's and
+               Future {AI} Agent Systems},
+  journal   = {arXiv preprint arXiv:2604.14228},
+  year      = {2026},
+  month     = apr,
+  note      = {MBZUAI VILA Lab + UCL.}
+}
+
+@article{rombaut2026scaffold,
+  author    = {Rombaut, Benjamin},
+  title     = {Inside the Scaffold: A Source-Code Taxonomy of Coding Agent
+               Architectures},
+  journal   = {arXiv preprint arXiv:2604.03515},
+  year      = {2026},
+  month     = apr
+}
+
+@article{bui2026opendev,
+  author    = {Bui, Nghi D. Q.},
+  title     = {Building Effective {AI} Coding Agents for the Terminal:
+               Scaffolding, Harness, Context Engineering, and Lessons Learned},
+  journal   = {arXiv preprint arXiv:2603.05344},
+  year      = {2026},
+  month     = mar,
+  note      = {Describes OPENDEV, a Rust-based terminal coding agent.}
+}
+
+% ─── Stratified SWE-bench evaluation ───────────────────────────────────
+
+@article{scaleai2025swebenchpro,
+  author    = {Deng, Xiang and Da, Jeff and Pan, Edwin and He, Yannis Yiming and
+               Ide, Charles and Garg, Kanak and Lauffer, Niklas and Park, Andrew and
+               Pasari, Nitin and Rane, Chetan and Sampath, Karmini and
+               Krishnan, Maya and Kundurthy, Srivatsa and Hendryx, Sean and
+               Wang, Zifan and Bharadwaj, Vijay and Holm, Jeff and Aluri, Raja and
+               Zhang, Chen Bo Calvin and Jacobson, Noah and Liu, Bing and
+               Kenstler, Brad},
+  title     = {{SWE-Bench Pro}: Can {AI} Agents Solve Long-Horizon Software
+               Engineering Tasks?},
+  journal   = {arXiv preprint arXiv:2509.16941},
+  year      = {2025},
+  month     = sep,
+  note      = {Scale AI.}
+}
+
+@article{bytedance2025multiswebench,
+  author    = {Zan, Daoguang and Huang, Zhirong and Liu, Wei and
+               Chen, Hanwu and Zhang, Linhao and Xin, Shulin and
+               Chen, Lu and Liu, Qi and Zhong, Xiaojian and Li, Aoyan and
+               Liu, Siyao and Xiao, Yongsheng and Chen, Liangqiang and
+               Zhang, Yuyu and Su, Jing and Liu, Tianyu and Long, Rui and
+               Shen, Kai and Xiang, Liang},
+  title     = {{Multi-SWE-bench}: A Multilingual Benchmark for Issue Resolving},
+  journal   = {arXiv preprint arXiv:2504.02605},
+  year      = {2025},
+  month     = apr,
+  note      = {ByteDance Seed team.}
+}
+
+@article{sweatlas2026,
+  author    = {Raghavendra, Mohit and Dan, Soham and
+               Romero Calvo, Miguel and He, Yannis Yiming and
+               Mols, Johannes Baptist and Anand, Gautam and
+               McCollum, Cole and Arakelyan, Edgar and Bharadwaj, Vijay and
+               Park, Andrew and Da, Jeff and Rezaei, MohammadHossein and
+               Liu, Bing and Kenstler, Brad and He, Yunzhong},
+  title     = {{SWE Atlas}: Benchmarking Coding Agents Beyond Issue Resolution},
+  journal   = {arXiv preprint arXiv:2605.08366},
+  year      = {2026},
+  month     = may,
+  note      = {Published 2026-05-08.}
+}
+
+@misc{blog:ganhotra2025multifile,
+  author       = {Ganhotra, Jatin},
+  title        = {Do {SWE-Agents} Solve Multi-File Issues Like Humans?
+                  A Deep Dive into {SWE-Bench} Verified},
+  howpublished = {Blog post (jatinganhotra.dev)},
+  year         = {2025},
+  month        = jan,
+  note         = {Source of the 85.8\% single-file figure. Published 2025-01-05.
+                  Follow-up ``The Multi-File Frontier'' (2025-03-30) restates
+                  the finding; this Jan deep-dive is the originating source.}
+}
+
+% ─── Computation-regime precedents ─────────────────────────────────────
+
+@article{chan2024mlebench,
+  author    = {Chan, Jun Shern and Chowdhury, Neil and Jaffe, Oliver and
+               Aung, James and Sherburn, Dane and Mays, Evan and
+               Starace, Giulio and Liu, Kevin and Maksin, Leon and
+               Patwardhan, Tejal and Weng, Lilian and M{\k a}dry, Aleksander},
+  title     = {{MLE-bench}: Evaluating Machine Learning Agents on Machine
+               Learning Engineering},
+  journal   = {arXiv preprint arXiv:2410.07095},
+  year      = {2024},
+  month     = oct,
+  note      = {OpenAI. Author list verified against arXiv:2410.07095 on
+               2026-05-28.}
+}
+
+@inproceedings{huang2024mlagentbench,
+  author    = {Huang, Qian and Vora, Jian and Liang, Percy and
+               Leskovec, Jure},
+  title     = {{MLAgentBench}: Evaluating Language Agents on Machine
+               Learning Experimentation},
+  booktitle = {ICML},
+  year      = {2024},
+  eprint    = {2310.03302},
+  archivePrefix = {arXiv}
+}
+
+@article{wijk2024rebench,
+  author    = {Wijk, Hjalmar and Lin, Tao and Becker, Joel and
+               Jawhar, Sami and Parikh, Neev and Broadley, Thomas and
+               Chan, Lawrence and Chen, Michael and Clymer, Josh and
+               Dhyani, Jai and Ericheva, Elena and Garcia, Katharyn and
+               Goodrich, Brian and Jurkovic, Nikola and Karnofsky, Holden and
+               Kinniment, Megan and Lajko, Aron and Nix, Seraphina and
+               Sato, Lucas and Saunders, William and Taran, Maksym and
+               West, Ben and Barnes, Elizabeth},
+  title     = {{RE-Bench}: Evaluating Frontier {AI} {R}\&{D} Capabilities
+               of Language Model Agents Against Human Experts},
+  journal   = {arXiv preprint arXiv:2411.15114},
+  year      = {2024},
+  month     = nov,
+  note      = {METR.}
+}
+
+@article{miserendino2025swelancer,
+  author    = {Miserendino, Samuel and Wang, Michele and
+               Patwardhan, Tejal and Heidecke, Johannes},
+  title     = {{SWE-Lancer}: Can Frontier {LLM}s Earn \$1 Million from
+               Real-World Freelance Software Engineering?},
+  journal   = {arXiv preprint arXiv:2502.12115},
+  year      = {2025},
+  month     = feb,
+  note      = {OpenAI. Author list verified against arXiv:2502.12115 on
+               2026-05-28.}
+}
+
+@article{siegel2024corebench,
+  author    = {Siegel, Zachary S. and Kapoor, Sayash and Nagdir, Nitya and
+               Stroebl, Benedikt and Narayanan, Arvind},
+  title     = {{CORE-Bench}: Fostering the Credibility of Published
+               Research Through a Computational Reproducibility Agent
+               Benchmark},
+  journal   = {arXiv preprint arXiv:2409.11363},
+  year      = {2024},
+  month     = sep
+}
+
+% ─── Tool-pruning / tool-budget literature ─────────────────────────────
+
+@article{budgetawaretooluse2025,
+  author    = {Liu, Tengxiao and Wang, Zifeng and Miao, Jin and
+               Hsu, I-Hung and Yan, Jun and Chen, Jiefeng and Han, Rujun and
+               Xu, Fangyuan and Chen, Yanfei and Jiang, Ke and
+               Daruki, Samira and Liang, Yi and Wang, William Yang and
+               Pfister, Tomas and Lee, Chen-Yu},
+  title     = {Budget-Aware Tool-Use Enables Effective Agent Scaling},
+  journal   = {arXiv preprint arXiv:2511.17006},
+  year      = {2025},
+  month     = nov
+}
+
+@article{tooltree2026,
+  author    = {Yang, Shuo and Han, Soyeon Caren and Ding, Yihao and
+               Wang, Shuhe and Hoy, Eduard},
+  title     = {{ToolTree}: Efficient {LLM} Agent Tool Planning via
+               Dual-Feedback {Monte Carlo Tree Search} and Bidirectional
+               Pruning},
+  journal   = {arXiv preprint arXiv:2603.12740},
+  year      = {2026},
+  month     = mar,
+  note      = {Accepted ICLR 2026.}
+}
+
+@article{trajectoryreduction2025,
+  author    = {Xiao, Yuan-An and Gao, Pengfei and Peng, Chao and
+               Xiong, Yingfei},
+  title     = {Reducing Cost of {LLM} Agents with Trajectory Reduction},
+  journal   = {arXiv preprint arXiv:2509.23586},
+  year      = {2025},
+  month     = sep,
+  note      = {Accepted FSE 2026. System name: AgentDiet.}
+}
+
+@article{mcptooldescsmelly2026,
+  author    = {Hasan, Mohammed Mehedi and Li, Hao and
+               Rajbahadur, Gopi Krishnan and Adams, Bram and
+               Hassan, Ahmed E.},
+  title     = {{Model Context Protocol (MCP)} Tool Descriptions Are Smelly!
+               Towards Improving {AI} Agent Efficiency with Augmented
+               {MCP} Tool Descriptions},
+  journal   = {arXiv preprint arXiv:2602.14878},
+  year      = {2026},
+  month     = feb,
+  note      = {Ablates descriptions, not the tool set --- do not conflate
+               with surface ablation when paraphrasing.}
+}
+
+% ─── Scaffold-component ablations ──────────────────────────────────────
+
+@article{confuciuscodeagent2025,
+  author    = {Wong, Sherman and Qi, Zhenting and Wang, Zhaodong and
+               Hu, Nathan and Lin, Samuel and Ge, Jun and Gao, Erwin and
+               Chen, Wenlin and Du, Yilun and Yu, Minlan and Zhang, Ying},
+  title     = {{Confucius Code Agent}: Scalable Agent Scaffolding for
+               Real-World Codebases},
+  journal   = {arXiv preprint arXiv:2512.10398},
+  year      = {2025},
+  month     = dec
+}
+
+@article{agenticharnessengineering2026,
+  author    = {Lin, Jiahang and Liu, Shichun and Pan, Chengjun and
+               Lin, Lizhi and Dou, Shihan and Xi, Zhiheng and
+               Huang, Xuanjing and Yan, Hang and Han, Zhenhua and
+               Gui, Tao and Jiang, Yu-Gang},
+  title     = {Agentic Harness Engineering: Observability-Driven Automatic
+               Evolution of Coding-Agent Harnesses},
+  journal   = {arXiv preprint arXiv:2604.25850},
+  year      = {2026},
+  month     = apr
+}

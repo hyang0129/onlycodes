@@ -3,7 +3,7 @@
 
 Inventory of prior work relevant to onlycodes, with one to two sentences on how onlycodes differs. Maintained as the canonical "defend the novelty gap" document — keep it current before any draft circulates.
 
-Last updated: 2026-05-28. Today's edits, in order: (a) added Staging bibliography block (BibTeX, gated behind human review); (b) added foundational must-cite block — SWE-bench / SWE-bench Verified / MCP / PAL / PoT / Agentless / AutoCodeRover / Moatless — works the paper runs on or directly contrasts with that the prior draft silently omitted; (c) added Computation-regime precedents block (MLE-Bench / MLAgentBench / RE-Bench / SWE-Lancer / CORE-Bench) to balance the regime axis; (d) reconciled three stale "TBD" prose flags whose staging-block BibTeX is already verified — `report:openai2024swebenchverified`, `anthropic2024mcp`, and `repo:moatless` — bringing the safe-to-add count to 32. **Pathology / failure-mode taxonomy citations deliberately not added** — the pathology pipeline is being dropped from the paper (2026-05-28 decision); a separate sweep over `outline.md` / `03_method.md` / `05_results.md` is still needed to remove pipeline references elsewhere. Prior: 2026-05-27 §AIDev positioning for SE 3.0 venue switch; original population 2026-05-16 from issue #158.
+Last updated: 2026-05-28. Today's edits, in order: (a) added Staging bibliography block (BibTeX, gated behind human review); (b) added foundational must-cite block — SWE-bench / SWE-bench Verified / MCP / PAL / PoT / Agentless / AutoCodeRover / Moatless — works the paper runs on or directly contrasts with that the prior draft silently omitted; (c) added Computation-regime precedents block (MLE-Bench / MLAgentBench / RE-Bench / SWE-Lancer / CORE-Bench) to balance the regime axis; (d) reconciled three stale "TBD" prose flags whose staging-block BibTeX is already verified — `report:openai2024swebenchverified`, `anthropic2024mcp`, and `repo:moatless`; (e) added "Vendor documentation (cited in §3.5)" block — seven entries (`docs:anthropic2026promptcaching`, `docs:anthropic2026contextediting`, `docs:claudecode2026cli`, `docs:claudecode2026settings`, `docs:openai2026promptcaching`, `docs:openai2026convstate`, `repo:openai2026codex`) for the cost-methodology documentation-survey claim, all gated behind human URL re-fetch (vendor docs are unversioned and the cite is "this knob is not documented", which only holds at the access date noted in each entry); not counted toward the safe-to-add total — bringing the safe-to-add count to 32; (e) verified `chan2024mlebench` and `miserendino2025swelancer` author lists directly against arXiv and removed their stale prose `[Full author list TBD]` flags; (f) **32 verified entries moved from the staging block into [`references.bib`](references.bib)** following explicit human approval — staging block now holds only the 8 entries with unresolved `TBD` flags plus the `aidev2026` preprint-pending placeholder. **Pathology / failure-mode taxonomy citations deliberately not added** — the pathology pipeline is being dropped from the paper (2026-05-28 decision); a separate sweep over `outline.md` / `03_method.md` / `05_results.md` is still needed to remove pipeline references elsewhere. Prior: 2026-05-27 §AIDev positioning for SE 3.0 venue switch; original population 2026-05-16 from issue #158.
 
 ---
 
@@ -137,7 +137,7 @@ Empirically shows SWE-bench Verified is 85.8% single-file. **Delta:** motivates 
 The modification regime is well-covered by stratified-SWE-bench variants above. The *computation* regime — tasks graded by the numerical or behavioural output of the agent's code rather than by a diff against a held-out test patch — has its own precedent line, equally must-cite for a paper whose headline is a regime-dependent sign-flip. The prior draft populated only the modification half of the axis; this block fixes that asymmetry.
 
 ### MLE-Bench — Chan et al. (OpenAI). *MLE-bench: Evaluating Machine Learning Agents on Machine Learning Engineering.* arXiv:2410.07095, Oct 2024.
-75 Kaggle ML-engineering competitions as agent tasks: data exploration, model training, submission generation. Grading is by submission score against the Kaggle leaderboard. **Delta:** the canonical computation-flavoured coding-agent benchmark — success is gated by *what the code computes*, not by whether a held-out unit test now passes. Direct precedent for the computation half of our regime split; we do not run MLE-Bench but cite it to establish that this cell is an established research object. **[Full author list TBD — verify.]**
+75 Kaggle ML-engineering competitions as agent tasks: data exploration, model training, submission generation. Grading is by submission score against the Kaggle leaderboard. **Delta:** the canonical computation-flavoured coding-agent benchmark — success is gated by *what the code computes*, not by whether a held-out unit test now passes. Direct precedent for the computation half of our regime split; we do not run MLE-Bench but cite it to establish that this cell is an established research object.
 
 ### MLAgentBench — Huang, Vora, Liang, Leskovec. *MLAgentBench: Evaluating Language Agents on Machine Learning Experimentation.* ICML 2024. arXiv:2310.03302.
 ML experimentation tasks (Kaggle-style + research-derived) with an agent loop over `edit_file` + `python` exec + `retrieve`. **Delta:** same computation flavour as MLE-Bench but earlier; treats Python execution as a first-class action — making its tool surface much closer to our `code_only` arm than to SWE-bench's edit-centric design. Cite to anchor that "give the agent a Python REPL" is an established choice in the computation regime, not a code-only-arm novelty we are claiming.
@@ -146,7 +146,7 @@ ML experimentation tasks (Kaggle-style + research-derived) with an agent loop ov
 Open-ended ML R&D tasks scored against human-expert baselines, hours-long horizons. **Delta:** the long-horizon, outcome-quality end of the computation regime. Our computation tasks are deliberately shorter so paired comparison stays clean; cite to position the regime axis against the field's most ambitious computation-flavoured benchmark.
 
 ### SWE-Lancer — Miserendino et al. (OpenAI). *SWE-Lancer: Can Frontier LLMs Earn \$1 Million from Real-World Freelance Software Engineering?* arXiv:2502.12115, Feb 2025.
-Real Upwork freelance jobs, mix of bug-fix and full-feature delivery, graded by end-to-end tests and SWE-manager review. **Delta:** mixes modification and computation in a single benchmark — different jobs fall in different cells. Cite as third-party evidence that the regime distinction is increasingly load-bearing; SWE-Lancer-style results cannot be summarised by a single pass rate, any more than ours can. **[Full author list TBD — verify.]**
+Real Upwork freelance jobs, mix of bug-fix and full-feature delivery, graded by end-to-end tests and SWE-manager review. **Delta:** mixes modification and computation in a single benchmark — different jobs fall in different cells. Cite as third-party evidence that the regime distinction is increasingly load-bearing; SWE-Lancer-style results cannot be summarised by a single pass rate, any more than ours can.
 
 ### CORE-Bench — Siegel et al. *CORE-Bench: Fostering the Credibility of Published Research Through a Computational Reproducibility Agent Benchmark.* arXiv:2409.11363, Sept 2024.
 The agent runs published author code and recovers reported numerical results (or fixes the script until it does). **Delta:** "compare a number the agent computed to a reference number" is the formal grading discipline closest to ours. Cite to establish numerical-output grading as respectable in adjacent communities — not a one-off harness convenience.
@@ -180,6 +180,35 @@ Introduces resource-aware effectiveness metrics for coding agents; primary findi
 - Agentic Harness Engineering — arXiv:2604.25850
 
 **Delta:** ablate components (memory, middleware, individual tools) on evolved harnesses; we hold the harness fixed and swap the entire tool surface.
+
+---
+
+## Vendor documentation (cited in §3.5 to document the absence of a cache-isolation knob)
+
+The §3.5 cost-methodology argument turns on a documentation-survey claim: across all four agent surfaces this paper touches, no vendor exposes a parameter, flag, environment variable, or namespace knob that forces a cache miss or scopes cached tokens to a single caller. The entries below are the sources behind that claim. URLs were accessed on **2026-05-28**; documentation pages change without versioning, so the staging notes pin the specific behavior the cite is being used to assert (i.e. *which knob the page does not provide*) rather than a transient page snippet. **None of these should be auto-inserted into `references.bib`** — they wait for human verification per repo policy. The compiled prose in §3.5 should `\citep{...}` these keys in the order the surfaces are introduced (Anthropic API → Claude Code CLI → OpenAI API → Codex CLI).
+
+### Anthropic Messages API — prompt caching reference (`docs:anthropic2026promptcaching`).
+Documents `cache_control` as a per-block opt-in cache breakpoint with a default 5-minute TTL (1-hour optional); describes scope as "Organization" by default. **What the page does not provide:** any inverse parameter (`skip_cache`, `cache_namespace`, `cache_key` equivalent) or per-session isolation knob. URL: <https://docs.claude.com/en/docs/build-with-claude/prompt-caching>.
+
+### Anthropic context-editing reference (`docs:anthropic2026contextediting`).
+Documents context editing as a server-side compaction-class primitive that retains and reshapes conversation state across turns; describes lifecycle and scope. **What the page does not provide:** any per-session isolation knob for the retained state. URL: <https://platform.claude.com/docs/en/build-with-claude/context-editing> (canonical; `docs.claude.com/...` 302-redirects here).
+
+### Claude Code CLI reference (`docs:claudecode2026cli`).
+The complete CLI reference enumerating every supported flag. **What the page does not provide:** `--no-cache`, `--cache-key`, `--fresh-session`, or any flag that bypasses the upstream API cache; the closest existing flag, `--no-session-persistence`, controls only local session state. URL: <https://docs.claude.com/en/docs/claude-code/cli-reference>.
+
+### Claude Code settings reference (`docs:claudecode2026settings`).
+The complete `settings.json` and environment-variable reference. **What the page does not provide:** any setting or env var that scopes / bypasses the upstream API prompt cache. URL: <https://docs.claude.com/en/docs/claude-code/settings>.
+
+### OpenAI Responses API — prompt-caching guide (`docs:openai2026promptcaching`).
+Documents caching as automatic with no opt-out; defines `prompt_cache_key` as a routing / partition hint combined with the prefix hash for cache lookup, and explicitly **not a security boundary**. **What the page does not provide:** a disable switch, or any mechanism that prevents other sessions from hitting the same cache when prefixes collide. URL: <https://platform.openai.com/docs/guides/prompt-caching>.
+
+### OpenAI Responses API — conversation-state guide (`docs:openai2026convstate`).
+Documents `store=true` (default) retaining the response object server-side for 30 days, `previous_response_id` for chaining requests, plus the Sessions API, `conversation_id`, and `auto_previous_response_id` as alternative stateful primitives (mutually exclusive — the docs forbid combining Sessions with the others in a single run). **What the page does not provide:** a per-session isolation parameter; the only documented opt-out is `store=false`, which disables server-side retention entirely. Isolation between callers is achieved implicitly via project / API-key scoping at the account level. URL: <https://developers.openai.com/api/docs/guides/conversation-state> (this URL resolves; the earlier `platform.openai.com/docs/api-reference/responses` 403'd in agent-side WebFetch and may require auth).
+
+### OpenAI Codex CLI repository (`repo:openai2026codex`).
+The Codex CLI README and configuration documentation, surveyed for cache-control surface. **What the repo does not provide:** any cache flag or environment variable in the documented configuration. URL: <https://github.com/openai/codex> (verify against the README at the commit hash cited in §4 once the agent-version table is finalized).
+
+**Delta:** these are not prior work in the academic sense; they are the primary sources for a documentation-survey claim. Listing them here keeps the §3.5 cite-points in the same staging workflow as every other reference in the paper.
 
 ---
 
@@ -677,6 +706,108 @@ Citation keys follow `firstauthorYEARkeyword` (e.g. `yang2024sweagent`) with non
   year      = {2026},
   month     = apr,
   note      = {Author list and title verified against arXiv:2604.25850.}
+}
+
+% ─── Vendor documentation (cited in §3.5 — cache-isolation absence) ───
+%
+% None of the seven entries below are academic prior work; they are the
+% primary sources behind the §3.5 documentation-survey claim (no vendor
+% offers a cache-isolation knob). URLs were accessed 2026-05-28; vendor
+% docs change without versioning, so a human reviewer should re-fetch
+% each URL before approval and verify the page still does not document
+% the knob the cite is being used to deny.
+
+@misc{docs:anthropic2026promptcaching,
+  author       = {{Anthropic}},
+  title        = {Prompt caching},
+  howpublished = {Claude API documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
+                  Anthropic Messages API exposes no parameter that forces
+                  a cache miss or scopes cached tokens per session.
+                  \texttt{cache\_control} controls breakpoints, not bypass.},
+  url          = {https://docs.claude.com/en/docs/build-with-claude/prompt-caching}
+}
+
+@misc{docs:anthropic2026contextediting,
+  author       = {{Anthropic}},
+  title        = {Context editing},
+  howpublished = {Claude API documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Canonical URL on \texttt{platform.claude.com};
+                  \texttt{docs.claude.com/...} 302-redirects here.
+                  Used in \S3.5 to assert that the server-side context-editing
+                  primitive exposes no per-session isolation knob.},
+  url          = {https://platform.claude.com/docs/en/build-with-claude/context-editing}
+}
+
+@misc{docs:claudecode2026cli,
+  author       = {{Anthropic}},
+  title        = {{Claude Code} CLI reference},
+  howpublished = {Claude Code documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
+                  Claude Code CLI exposes no \texttt{--no-cache},
+                  \texttt{--cache-key}, or \texttt{--fresh-session} flag;
+                  \texttt{--no-session-persistence} controls only local
+                  session state, not the upstream API cache.},
+  url          = {https://docs.claude.com/en/docs/claude-code/cli-reference}
+}
+
+@misc{docs:claudecode2026settings,
+  author       = {{Anthropic}},
+  title        = {{Claude Code} settings},
+  howpublished = {Claude Code documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that
+                  \texttt{settings.json} and the documented environment
+                  variables expose no setting that scopes or bypasses the
+                  upstream API prompt cache.},
+  url          = {https://docs.claude.com/en/docs/claude-code/settings}
+}
+
+@misc{docs:openai2026promptcaching,
+  author       = {{OpenAI}},
+  title        = {Prompt caching},
+  howpublished = {OpenAI Platform documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that
+                  \texttt{prompt\_cache\_key} is a routing / partition
+                  hint, not a disable switch, and explicitly not a
+                  security boundary --- cache hits cross sessions when
+                  prefixes collide.},
+  url          = {https://platform.openai.com/docs/guides/prompt-caching}
+}
+
+@misc{docs:openai2026convstate,
+  author       = {{OpenAI}},
+  title        = {Conversation state},
+  howpublished = {OpenAI Platform documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. URL on \texttt{developers.openai.com}
+                  resolves; the older \texttt{platform.openai.com/docs/api-reference/responses}
+                  403'd in agent-side WebFetch and may require auth.
+                  Used in \S3.5 to assert that \texttt{store=true} (default)
+                  retains responses server-side for 30 days, that
+                  \texttt{previous\_response\_id} / Sessions / \texttt{conversation\_id}
+                  / \texttt{auto\_previous\_response\_id} are mutually
+                  exclusive alternative stateful channels (not isolation
+                  knobs), and that the only documented opt-out is
+                  \texttt{store=false} (disables retention entirely).},
+  url          = {https://developers.openai.com/api/docs/guides/conversation-state}
+}
+
+@misc{repo:openai2026codex,
+  author       = {{OpenAI}},
+  title        = {{Codex} {CLI}},
+  howpublished = {GitHub repository},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
+                  Codex CLI README and configuration documentation expose
+                  no cache flag or environment variable. Verify against
+                  the README at the commit hash cited in \S4 once the
+                  agent-version table is finalized.},
+  url          = {https://github.com/openai/codex}
 }
 
 % ─── Workshop anchor dataset (positioning, not yet citable) ────────────
