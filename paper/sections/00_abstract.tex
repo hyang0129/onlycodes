@@ -9,8 +9,8 @@
 % The significant same-regime divergence is Codex *** vs Claude NS on
 % SWE-bench, which is an agent-design claim, not a regime claim. The
 % body below uses placeholder prose pending a full rewrite against the
-% paired_contrasts.csv macros — the prior \resratio{headline}{...} macros
-% pointed at a `headline` CSV that has been superseded by
+% paired_contrasts.csv macros — the prior resratio macros pointed at a
+% `headline` CSV (since deleted) that has been superseded by
 % `paired_contrasts.csv` (schema `benchmark:agent:contrast:metric`).
 % See ../05_results.md §5.1 framing-change note for the full rationale.
 
@@ -36,4 +36,5 @@ successful runs. Two implications: the cheapest tool surface is
 \emph{jointly} determined by task regime and agent design rather than
 by either axis alone, and the headline cost signal lives in cache-adjusted
 cost --- not pass rate, which is invariant across surfaces at the model
-sizes we evaluate.
+sizes we evaluate. The benchmark harness, task suite, and analysis code
+will be released to enable replication.

@@ -1,12 +1,24 @@
 # Figure Candidates — KDD 2026 SE 3.0 Workshop Submission
 
-Working list. **2026-05-28 revision (rev. 2):** §5.4 agreement-matrix + conditional-cost
+Working list. **2026-05-28 revision (rev. 3):** Adds Figures 3 and 4 as §6.2
+case-study floats — concrete-instance illustrations of the batching (H1) and
+upper-tail-suppression (H2) mechanisms identified in
+[q2_token_gap_investigation.md](q2_token_gap_investigation.md) and instantiated
+in [investigations/concrete_examples_h1_h2.md](investigations/concrete_examples_h1_h2.md).
+These partially supersede the deferred Figure A2 (aggregate CDF / batching) by
+making each mechanism concrete on a named instance pair. **Design constraint:
+intent-only labeling.** Cards/bars carry *what the agent was trying to do*
+(e.g., "find callers", "broad keyword sweep") rather than literal commands or
+Python source — the visual punchline is the structural collapse (3 boxes → 1
+box; 40k bar → 1.5k bar), not the typography. Cap is now **3 tables + 4
+figures**; page-budget impact tracked in Design decisions §6.
+
+**2026-05-28 revision (rev. 2):** §5.4 agreement-matrix + conditional-cost
 tables promoted from "deferred appendix" to main-text floats (now Tables 2 and 3) —
 they are load-bearing for §6.3's two-mechanism decomposition. Figure 2's framing
 shifted from "regime-dependent sign-flip" to "four-cell cost structure" after
 sanity-check on Codex (Codex wins both regimes; only Claude flips between regimes,
-so the sign-flip is one-cell, not regime-axis). Cap is now **3 tables + 2 figures**;
-appendix candidates remain tracked below. Also, the §3.4 redundancy table is dropped entirely — the empirical mechanism layer in §6 replaces its scaffolding role.
+so the sign-flip is one-cell, not regime-axis). Also, the §3.4 redundancy table is dropped entirely — the empirical mechanism layer in §6 replaces its scaffolding role.
 
 Sources: [outline.md](outline.md) §5–§6, [05_results.md](05_results.md), [06_discussion.md](06_discussion.md).
 
@@ -83,6 +95,75 @@ mechanism questions in [06_discussion.md](06_discussion.md).
   column) to "instance-level outcomes are unanimous" — much stronger
   empirical claim. Anchors §6.3's path-not-answer framing.
 
+### Figure 3 — H1 batching: case study (`fig:batching-case`)
+
+- **Section:** §6.2 (Q2 — batching mechanism). Concrete LLM step illustrating
+  the aggregate Codex 1.35 → 0.89 tools/LLM-call shift.
+- **Float:** `figure` (single-column). Wired in [sections/06_discussion.tex](sections/06_discussion.tex).
+- **Source instance:** `sphinx-doc__sphinx-7757`, Codex, seed 3, both arms PASS.
+  Rollout excerpts in [investigations/concrete_examples_h1_h2.md](investigations/concrete_examples_h1_h2.md).
+- **What the agent was doing:** Gathering context for a fix — needs to see
+  the definition site, see how an existing test exercises it, and find other
+  callers. Three independent lookups that don't depend on each other.
+- **Content (intent-only labels, NOT literal commands).** Vertical two-panel
+  diagram of one LLM step:
+  - **Top (baseline):** assistant turn → three stacked rounded cards,
+    each captioned by *purpose* — "read definition site", "read existing
+    test", "search call sites". A tiny grey subtitle on each card cites
+    the file (e.g., `sphinx/domains/python.py`) for grounding, but no
+    line ranges or command syntax.
+  - **Bottom (onlycode):** same assistant turn → a single rounded card
+    captioned "one script: read + read + search". Card body shows three
+    short stacked intent rows (same wording as the baseline cards) inside
+    one outline. No Python source.
+- **Visual punchline:** 3 boxes → 1 box, at the same LLM-step boundary.
+- **Caption (intent, 1 sentence):** "On a context-gathering step, the
+  baseline arm emits three parallel tool calls; the code-only arm bundles
+  the same three lookups into a single script."
+- **Status:** ❌ to render. Format: inline TikZ in
+  [sections/06_discussion.tex](sections/06_discussion.tex) (structural mockup,
+  not a data plot — no `figures_src/` script).
+- **Why:** §6.2 prose claims the batching mechanism with aggregate ratios;
+  reviewers without coding-agent experience need a single LLM-step picture
+  to translate "1.35 → 0.89 tools/LLM-call" into a mechanism. Intent-only
+  labels keep typography to a minimum so the silhouette dominates.
+
+### Figure 4 — H2 per-call truncation: case study (`fig:truncation-case`)
+
+- **Section:** §6.2 (Q2 — upper-tail-suppression mechanism). Concrete
+  illustration of the `exec_command` `max_output_tokens` ceiling pinning.
+- **Float:** `figure` (single-column). Wired in [sections/06_discussion.tex](sections/06_discussion.tex).
+- **Source instance:** `django__django-11848`, Codex, seed 1, both arms PASS.
+  Rollout excerpts in [investigations/concrete_examples_h1_h2.md](investigations/concrete_examples_h1_h2.md).
+- **What the agent was doing:** Searching the codebase for the function
+  that parses HTTP `Date` headers (`parse_http_date`). The agent needs to
+  locate call sites before editing.
+- **Content (intent-only labels, NOT literal commands).** Horizontal bar
+  chart, x-axis = per-call output character count (0–45,000). Two bars
+  for the same logical search step:
+  - **Baseline bar:** fills to 40,165 with a red shaded segment past
+    40,154 (the `exec_command` cap). Inline annotation at the cap line:
+    "cap = 40,154 chars" with a small arrow to a faint "…3 918 tokens
+    truncated…" label inside the red segment. Bar label (intent):
+    "broad keyword sweep" (small grey subtitle: `rg` over the repo).
+  - **Onlycode bar:** fills to 1,514 (visually tiny). Bar label (intent):
+    "single-pattern grep" (small grey subtitle: `codebox.grep`).
+- **Visual punchline:** the cap line + truncation tail on the baseline
+  bar vs. the negligible onlycode bar. The two intent labels explain
+  *why* (broad vs. targeted), without showing either regex verbatim.
+- **Caption (intent, 1 sentence):** "Searching for call sites of one
+  function, the baseline arm's broad pattern matched unrelated fixture
+  data and pinned the per-call output cap; the code-only arm's narrower
+  pattern returned cleanly."
+- **Status:** ❌ to render. Format: matplotlib
+  (`figures_src/04_h2_truncation.py`) → PDF + sidecar CSV. Numbers
+  (40,165 / 40,154 / 1,514) exposed via `\result{fig.04_h2_truncation}{...}`
+  macros so lint guards against drift.
+- **Why:** §6.2 prose claims the upper-tail-suppression mechanism with
+  aggregate p99 statistics; reviewers need to see the cap-pinning happen
+  on a named tool call to believe the mechanism. Intent labels carry the
+  *why* — the comparison is broad-vs-targeted scope, not regex syntax.
+
 ### Table 3 — Conditional cost (`tab:headline-unanimous`)
 
 - **Section:** §5.4. The v3 finding that decomposes the Claude × SWE-bench anomaly.
@@ -115,14 +196,21 @@ Listed in priority order if any one of them gets a slot back.
 - **Backup form:** 4-bar median-split chart of Δ_output_tokens for
   {Claude, Codex} × {low-patch, high-patch}.
 
-### Figure A2 — MCP output / batching (`fig:mcp-output`)
+### Figure A2 — MCP output / batching (aggregate) (`fig:mcp-output`)
 
 - **Mechanism:** §6.2 (Q2, batching + upper-tail suppression).
+- **Status (rev. 3, 2026-05-28):** Partially superseded by main-text Figures
+  3 and 4, which carry the same two mechanisms via concrete case studies.
+  This aggregate version is now the *backup* that would land alongside
+  reviewer pushback specifically asking for population-level evidence
+  (CDFs / ratios across all instances) rather than named instances.
 - **Why deferred:** §6.2 makes two claims: (H1) `execute_code` averages more tool
   calls per LLM step (Codex only); (H2) per-call output p99 collapses from the
   `exec_command` ceiling to a paginated regime. Both are testable with a CDF or
-  bar chart, but the prose-level macros suffice for the §6.2 word budget.
-- **Promotion trigger:** reviewer asks for evidence beyond aggregate numbers.
+  bar chart, but the prose-level macros plus Figures 3 and 4 suffice for the
+  §6.2 word budget.
+- **Promotion trigger:** reviewer dismisses the case studies as cherry-picked
+  and asks for population-level evidence.
 - **Data:** TO BE WRITTEN — [data/scripts/mcp_output_size.py](data/scripts/) →
   [data/mcp_output_size.csv](data/) (the §6.2 macros are unresolved until the
   script lands).
@@ -171,11 +259,14 @@ Listed in priority order if any one of them gets a slot back.
 | Figure 2 | ✅ wired | [figures_src/02_signflip.py](figures_src/02_signflip.py) → `make figures` |
 | Table 2 | ✅ wired | hand-authored in [sections/05_results.tex](sections/05_results.tex); data from [q3_unanimous_pass.py](data/scripts/q3_unanimous_pass.py) |
 | Table 3 | ✅ wired | hand-authored in [sections/05_results.tex](sections/05_results.tex); data from same script |
+| Figure 3 | ❌ to render | inline TikZ in [sections/06_discussion.tex](sections/06_discussion.tex) (no `figures_src/` script; structural mockup) |
+| Figure 4 | ❌ to render | `figures_src/04_h2_truncation.py` → `make figures`; source numbers in [data/h2_truncation_example.csv](data/) (to be authored) |
 
-All five main-text floats are assembled as of 2026-05-28. Remaining gaps:
+Five of seven main-text floats are assembled as of 2026-05-28. Remaining gaps:
 - Figure 1 / Figure 2 captions in [sections/05_results.tex](sections/05_results.tex) cross-reference `\ref{tab:headline-unanimous}` and `\ref{tab:code-only-headline}` — verify on first build that the labels resolve (they should; all five floats live in the same `.tex` file).
 - §5 prose is still TODO — once it lands, Figure 1's caption can sharpen the
   "right-tail loss" reading with a forward-reference to §6.1 by section number.
+- Figures 3 and 4 to be rendered per [the rendering plan adjacent to this outline](#rendering-plan-figures-3-and-4) once §6.2 prose is stable enough to anchor the captions.
 
 ---
 
@@ -201,6 +292,30 @@ All five main-text floats are assembled as of 2026-05-28. Remaining gaps:
    (`02_signflip.py`) and sidecar CSV (`02_signflip.numbers.csv`) retain
    the old stem to avoid invalidating the `make values` cache and the
    downstream `\result{fig.02_signflip}{...}` macro keys.
+6. **Intent-only labels on Figures 3 and 4 (rev. 3).** Tool-call cards
+   and bar labels carry *what the agent was trying to do*, not the
+   literal command or regex. The point of the figures is the structural
+   collapse (3 boxes → 1; 40k bar → 1.5k); literal command syntax adds
+   typography without adding signal, and would force readers to parse
+   `rg`/`cat`/`codebox.grep` arguments instead of seeing the silhouette.
+   File paths appear only as small grey subtitles for grounding. Verbatim
+   excerpts stay in [investigations/concrete_examples_h1_h2.md](investigations/concrete_examples_h1_h2.md).
+7. **Page-budget impact of Figures 3 and 4 (rev. 3).** Going from 2 to 4
+   figures + 3 tables = 7 floats inside an 8-page workshop ceiling is
+   tight. Fallback paths if the layout doesn't accommodate both at
+   single-column:
+   - **(a) Combine into one `figure*` (two-column-wide) with 1×2 panels**:
+     Figure 3 left (tool-card mockup), Figure 4 right (bar chart). Saves
+     one float at the cost of cramming the H1 mockup to roughly half
+     width. Inline TikZ + matplotlib `\includegraphics` side-by-side
+     inside one `figure*`. **Default fallback.**
+   - **(b) Move one of A1/A2/A3 further down**: already deferred — no
+     additional savings there.
+   - **(c) Demote Figure 3 to a `tcolorbox` listing inline in §6.2 prose**:
+     not a float, costs no figure slot, but loses the centered visual.
+     Use only if `figure*` combine also overflows.
+   - **(d) Demote Table 2 or Table 3 to appendix**: not recommended;
+     both are load-bearing for §6.3.
 
 ---
 
@@ -220,3 +335,5 @@ Table macros pull from the underlying CSV stems directly
 | Figure 2 | `fig.02_signflip` | [figures_src/02_signflip.py](figures_src/02_signflip.py) |
 | Table 2 | `agreement_matrix` | [data/scripts/q3_unanimous_pass.py](data/scripts/q3_unanimous_pass.py) |
 | Table 3 | `headline_unanimous` | [data/scripts/q3_unanimous_pass.py](data/scripts/q3_unanimous_pass.py) |
+| Figure 3 | *(none)* | inline TikZ — structural mockup, no numbers to bind |
+| Figure 4 | `fig.04_h2_truncation` | [figures_src/04_h2_truncation.py](figures_src/04_h2_truncation.py) (to be authored) |

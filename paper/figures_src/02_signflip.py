@@ -16,7 +16,7 @@ Bar colour encodes significance × sign:
   * red-solid   : ratio > 1.0 AND Wilcoxon p < 0.05 (code-only loses)
   * grey-hatched: NS (p ≥ 0.05)
 
-Significance is annotated above each bar (***/**/* /ns) for B&W print legibility.
+The numeric p-value is annotated above each bar (e.g., ``p<0.001``, ``p=0.12``).
 
 Reads:  paper/data/paired_marginals.csv (per-arm marginal means)
         paper/data/paired_contrasts.csv (paired-Δ p-values)
@@ -94,14 +94,10 @@ def lookup_pvals(contrasts: list[dict]) -> dict[tuple, float]:
     return out
 
 
-def stars(p: float) -> str:
+def p_label(p: float) -> str:
     if p < 0.001:
-        return "***"
-    if p < 0.01:
-        return "**"
-    if p < 0.05:
-        return "*"
-    return "ns"
+        return "p<0.001"
+    return f"p={p:.2f}"
 
 
 def render_figure(marginals, contrasts, out_path: Path):
@@ -132,7 +128,7 @@ def render_figure(marginals, contrasts, out_path: Path):
         p = pvals[(bench, agent, contrast_id)]
         ratios.append(ratio)
         p_vals.append(p)
-        p_strs.append(stars(p))
+        p_strs.append(p_label(p))
 
         sig = p < 0.05
         if not sig:

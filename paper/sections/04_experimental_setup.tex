@@ -1,16 +1,18 @@
 % paper/sections/04_experimental_setup.tex
 %
 % First draft. Structure follows paper/04_experimental_setup.md (four
-% subsections: inventory → agent surfaces & arm names → seeds & inference
-% unit → metrics, cost rates, exclusions). Methodology lives in §3; §4
-% reports only the scope of what was actually run. Numbers resolve through
+% subsections: inventory → agents → seeds & inference unit → metrics,
+% cost rates, exclusions). Methodology lives in §3; §4 reports only
+% the scope of what was actually run. Numbers resolve through
 % \result / \respct / \resp macros backed by paper/data/*.csv; literal
 % versions/sample sizes (claude-sonnet-4-6, gpt-5.5, n=93, n=100, 3 seeds)
 % are whitelist-allowed in paper/lint.py.
 %
-% Forward references: \S\ref{sec:m-cost} (§3.5 cost methodology),
-% \S\ref{sec:m-integrity} (§3.3 SWE-bench integrity), \S\ref{sec:m-artifact}
-% (§3.6 artifact-suite contract); these labels will be added when §3 lands.
+% Forward references: \S\ref{sec:method-arms} (§3.1 three-arm tool surface),
+% \S\ref{sec:method-harness} (§3.2 harness design / subprocess isolation /
+% wall-time cap), \S\ref{sec:m-integrity} (§3.3 SWE-bench integrity),
+% \S\ref{sec:m-cost} (§3.5 cost methodology), \S\ref{sec:m-artifact}
+% (§3.6 artifact-suite contract).
 
 % ──────────────────────── §4.1 Benchmark inventory ─────────────────────
 \subsection{Benchmark inventory}
@@ -43,36 +45,27 @@ Verified.
 % TODO macro: per-repo n-counts via \result{swebench_repos}{...}
 % — blocked on paper/data/swebench_repos.csv promotion.
 
-% ──────────────────── §4.2 Agent surfaces and arm names ────────────────
-\subsection{Agent surfaces and arm names}
+% ──────────────────────────── §4.2 Agents ──────────────────────────────
+\subsection{Agents}
 \label{sec:setup-surfaces}
 
-\paragraph{Agents.} We instantiate the three-arm ablation on two
-production coding agents.
+We instantiate the three-arm ablation of \S\ref{sec:method-arms}
+(\texttt{baseline}, \texttt{bash\_only}, \texttt{code\_only}) on two
+production coding agents:
 \emph{Claude Code}~\cite{repo:anthropic2026claudecode}
-(model \texttt{claude-sonnet-4-6}, Claude Code 2.1.139) is invoked with
-\texttt{--dangerously-skip-permissions --no-session-persistence} and a
-per-run isolated \texttt{CLAUDE\_CONFIG\_DIR}
-(\S\ref{sec:m-integrity}). \emph{Codex CLI}~\cite{repo:openai2026codex}
-(model \texttt{gpt-5.5}) is invoked with
-\texttt{--dangerously-bypass-approvals-and-sandbox} on the same harness.
-Codex is reported as a co-headline finding, not a footnote-level
-generalisation probe: the agent-design contrast on SWE-bench
-(Codex $^{***}$ vs.\ Claude NS for the \texttt{code\_only} cost
-contrast) is one of the four cells that Table~\ref{tab:code-only-headline}
-in \S\ref{sec:results} reports.
+(model \texttt{claude-sonnet-4-6}, Claude Code 2.1.139) and
+\emph{Codex CLI}~\cite{repo:openai2026codex} (model \texttt{gpt-5.5}).
+Both are invoked under the per-arm subprocess-isolation protocol of
+\S\ref{sec:method-harness} (per-run isolated config dir, no
+session-persistence, sandbox/permission bypass). Codex is reported as
+a co-headline finding, not a footnote-level generalisation probe: the
+agent-design contrast on SWE-bench
+(Codex $p=$\,\resp{fig.02_signflip}{swebench-codex:p} vs.\ Claude
+$p=$\,\resp{fig.02_signflip}{swebench-claude:p} on the
+\texttt{code\_only} cost contrast) is one of the four cells that
+Table~\ref{tab:code-only-headline} in \S\ref{sec:results} reports.
 % TODO macro: \result{setup}{codex_cli_version} — blocked on
 % paper/data/setup_constants.csv promotion. Pin verbatim once landed.
-
-\paragraph{Arm names.} The paper uses a single consolidated trio
-throughout. \texttt{baseline}: each agent's default tool surface, no
-restriction. \texttt{bash\_only}: Bash plus read-only browsing
-primitives (Read, Glob, Grep on Claude Code;
-\texttt{exec\_command} on Codex CLI), with every edit/write primitive
-disabled. \texttt{code\_only}: a single MCP tool,
-\texttt{mcp\_\_codebox\_\_execute\_code}, exposing a persistent
-Python$+$Bash REPL~\cite{anthropic2024mcp}; every native built-in is
-disallowed.
 
 % ──────────────────── §4.3 Seeds and inference unit ────────────────────
 \subsection{Seeds and the unit of inference}
@@ -151,22 +144,10 @@ in the setup section is what makes every cost column in
 % — blocked on paper/data/cost_rates.csv promotion.
 
 \paragraph{Wall budget.} A single wall-clock budget is applied per
-\texttt{(instance, arm, run)} (\S\ref{sec:m-integrity}); the harness
+\texttt{(instance, arm, run)} (\S\ref{sec:method-harness}); the harness
 declared \texttt{max\_code\_runs} and \texttt{max\_wall\_seconds}
 fields are reserved for future enforcement and are left unenforced
 throughout this paper's runs.
 % TODO macro: \result{setup}{wall_budget_seconds}
 % — blocked on paper/data/setup_constants.csv promotion.
 
-\paragraph{Exclusions.} Two classes of instance are reported separately
-rather than scored against the main metric surface.
-\emph{\texttt{env\_fail}}: a pre-flight \texttt{pytest --collect-only}
-returns zero items, indicating a broken or unsupported repository state
-rather than an agent failure; per Issue \#238 these are excluded from
-pass-rate denominators and reported as a separate count in
-\S\ref{sec:results}. \emph{Auth re-runs}: twelve SWE-bench instances in
-the \texttt{sympy} and \texttt{mwaskom} repositories hit ChatGPT-login
-authentication failures during the initial seed sweep and were re-run
-on the same harness commit; these instances \emph{are} carried in the headline
-numbers as re-runs rather than excluded. Full accounting in
-\S\ref{sec:limitations}.

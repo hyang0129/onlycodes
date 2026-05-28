@@ -10,56 +10,36 @@
 
 \item \textbf{Two agent surfaces.} The crossed
 $3\,{\times}\,2\,{\times}\,2$ design exercises Claude Code
-(\texttt{claude-sonnet-4-6}, v2.1.139) and Codex CLI (\texttt{gpt-5.5})
-and no other agents. GPT-5, Gemini~2.5, and open-weight coding scaffolds
-(Qwen-Coder, DeepSeek-Coder, and similar) are out of scope. The
-three-mechanism account in \S\ref{sec:discussion} predicts where each
-component should generalise---batching is API-shape-dependent,
-edit-friction scales with edit volume on any agent that lacks a native
-byte-precise editor, and failure-cost scales with the unsolvable-instance
-fraction---but the \emph{joint} four-cell footprint is verified only on
-the two agents reported here.
+(\texttt{claude-sonnet-4-6}) and Codex CLI (\texttt{gpt-5.5}); GPT-5,
+Gemini~2.5, and open-weight scaffolds are out of scope. The
+three-mechanism account (\S\ref{sec:discussion}) predicts where each
+component should generalise, but the joint four-cell footprint is
+verified only on these two agents.
 
-\item \textbf{Sample size and power.} Per-cell $n$ is $93$ for Artifact
-and $100$ for SWE-bench Mini, three independent seeds each. Two of the
-four headline \texttt{code\_only}-vs-rival contrasts are significant at
-$p < 10^{-8}$; the SWE-bench/Claude cost gap of
+\item \textbf{Sample size.} Per-cell $n$ is $93$ for Artifact and $100$
+for SWE-bench Mini, three seeds each. The SWE-bench/Claude cost gap of
 $\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$
 ($p = \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:wilcoxon_p}$)
-is reported as directional rather than significant, and a
-SWE-bench-Verified-scale replication is reserved for follow-up work.
+is directional rather than significant; SWE-bench-Verified-scale
+replication is reserved for follow-up work.
 
 \item \textbf{Artifact-suite scope.} Tasks are single-language (Python)
-on Linux, with category coverage skewed toward analytical, numerical,
-and ML-flavoured computation. The grader contract in
-\S\ref{sec:method-artifact} is language-agnostic but has not been
-exercised on Rust, systems-engineering tasks, or long-horizon
-multi-day scenarios, so the four-cell pattern's stability outside
-that scope is an open empirical question.
+on Linux, skewed toward analytical and ML-flavoured computation; the
+grader contract in \S\ref{sec:method-artifact} has not been exercised
+on Rust, systems-engineering tasks, or long-horizon scenarios.
 
 \item \textbf{Cost is cache-adjusted, not cache-isolated.} Neither the
 Anthropic Messages API nor the OpenAI Responses API exposes a
-documented knob that disables, scopes, or partitions the server-side
-prompt cache or any related token-caching primitive
-(\S\ref{sec:method-cost}). We therefore charge every token at the
-non-cached rate and floor each instance's first-turn
-\texttt{cache\_read} at the per-arm median to normalise the
-system-prompt warm/cold lottery without claiming isolation beyond it.
-Within-task multi-turn cache reads and any deeper server-side state we
-cannot observe are not adjusted; the residual gap to a true
-steady-state production cost is therefore unmeasured.
+documented knob to disable or partition the server-side prompt cache
+(\S\ref{sec:method-cost}). We charge every token at the non-cached rate
+and floor each instance's first-turn \texttt{cache\_read} at the per-arm
+median; within-task multi-turn cache reads and deeper server-side state
+are not adjusted.
 
-\item \textbf{Single-shot, internal-surface, post-\#287 protocol.} Each
+\item \textbf{Single-shot, internal-surface scope.} Each
 $(\text{instance}, \text{arm}, \text{seed})$ triple is a single agent
-invocation: multi-shot prompting, self-consistency, and
-scaffold-evolution variants are out of scope, as are external MCP tool
-surfaces (Drive, Slack, vendor APIs) of the kind studied by the
-industry write-ups we position against (\S\ref{sec:related}). On the
-modification benchmark we report only the post-Issue~\#287 protocol
-with post-agent \texttt{test\_patch} application
-(\S\ref{sec:method-integrity}); pre-\#287 legacy data is not
-comparable and is omitted entirely. Twelve SWE-bench instances
-(\texttt{sympy} + \texttt{mwaskom}) returned API auth-failures on
-seed~1 and were re-run on the same agent version.
+invocation; multi-shot prompting, self-consistency, scaffold evolution,
+and external MCP tool surfaces (Drive, Slack, vendor APIs;
+\S\ref{sec:related}) are out of scope.
 
 \end{itemize}

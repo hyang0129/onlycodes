@@ -162,15 +162,14 @@ Figure~\ref{fig:cost-structure} reduces the four cost-adjusted contrasts
 to one panel. Left to right, the per-cell ratios
 $(\text{code-only}\,/\,\text{cheapest rival})$ are
 \result{fig.02_signflip}{artifact-claude:ratio}
-(Artifact/Claude, $^{***}$),
+(Artifact/Claude, $p=$\,\resp{fig.02_signflip}{artifact-claude:p}),
 \result{fig.02_signflip}{artifact-codex:ratio}
-(Artifact/Codex, ns),
+(Artifact/Codex, $p=$\,\resp{fig.02_signflip}{artifact-codex:p}),
 \result{fig.02_signflip}{swebench-claude:ratio}
-(SWE-bench/Claude, ns), and
+(SWE-bench/Claude, $p=$\,\resp{fig.02_signflip}{swebench-claude:p}), and
 \result{fig.02_signflip}{swebench-codex:ratio}
-(SWE-bench/Codex, $^{***}$); exact $p$-values are in
-Table~\ref{tab:code-only-headline}. The unity-parity line is crossed by
-the SWE-bench/Claude bar alone.
+(SWE-bench/Codex, $p=$\,\resp{fig.02_signflip}{swebench-codex:p}).
+The unity-parity line is crossed by the SWE-bench/Claude bar alone.
 
 The SWE-bench/Claude cell is the only one where restricting the agent
 to a single \texttt{execute\_code} tool makes it directionally costlier
@@ -191,7 +190,7 @@ direction (tool-call batching and upper-tail output suppression) in
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{generated/figures/02_signflip}
-\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Significance from paired Wilcoxon: $^{***}\,p{<}10^{-3}$, ns $= p{\geq}0.05$. Per-cell magnitudes in Table~\ref{tab:code-only-headline}.}
+\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Paired Wilcoxon signed-rank $p$-values are reported inline in \S\ref{sec:results-structure}; per-cell magnitudes and additional contrasts in Table~\ref{tab:code-only-headline}.}
 \label{fig:cost-structure}
 \end{figure}
 
