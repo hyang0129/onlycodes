@@ -33,7 +33,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Approved macro patterns — digits inside these are safe.
 # ---------------------------------------------------------------------------
-_CITATION_MACROS = r"(?:result|resdelta|resratio|resultCI|resultPM|ref|cite|citep|citet|eqref|label)"
+_CITATION_MACROS = r"(?:result|resdelta|resratio|resultCI|resultPM|respct|respp|resp|ref|cite|citep|citet|eqref|label)"
 
 _APPROVED_RE = re.compile(
     r"\\"
