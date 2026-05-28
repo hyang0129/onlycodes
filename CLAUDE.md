@@ -16,6 +16,27 @@ The single source of truth for numbers cited in the paper is `paper/data/*.csv` 
 
 **Target venue:** [Agentic Software Engineering (SE 3.0) Workshop at KDD 2026](https://agent-se.github.io/) — submission deadline **2026-06-01 AOE**, **8 pages excl. references** (long paper), ACM KDD template (`\documentclass[sigconf,anonymous,review]{acmart}`), double-blind, non-archival. **Venue switched 2026-05-27** from the KDD 2026 Workshop on Evaluation and Trustworthiness of Agentic AI (now backup venue — same June 1 deadline, 9-page ceiling, same ACM template family). SE 3.0 hits four direct topic axes (Agent Tool Use & Environments, Failure Modes & Root Causes, Economic Cost & Impact, Trustworthiness & Reliability) vs. one for the prior venue, and the reviewer pool is coding-agent researchers rather than monitoring/governance. Cost is one page off the ceiling (9 → 8). Full rationale in [paper/outline.md](paper/outline.md) header and [paper/README.md](paper/README.md) "Submission target" section.
 
+### Overleaf sync (subtree split)
+
+The `paper/` directory is mirrored to a standalone repo, [`hyang0129/onlycodes-paper`](https://github.com/hyang0129/onlycodes-paper), which Overleaf imports as a project. The mirror exists because Overleaf's GitHub import struggles with the full `onlycodes` repo's size. The remote is configured as `paper` (alongside `origin`) in this clone.
+
+**Sync workflow (run from `onlycodes/` repo root):**
+
+```sh
+# Push local paper/ edits out to onlycodes-paper → Overleaf pulls
+git subtree push --prefix=paper paper main
+
+# Pull Overleaf edits back into paper/ as a merge commit
+git subtree pull --prefix=paper paper main --squash
+```
+
+Always `git subtree pull` before editing `paper/` locally if Overleaf may have changes; otherwise you'll get divergent histories. After pulling, the merge commit lands on `main`.
+
+**Caveats:**
+- **`paper/lint.py` does NOT run on Overleaf.** A stale `\result{...}` macro value is a build failure locally (CLAUDE.md guarantee above) but renders silently on Overleaf. Re-run `make` locally before treating any Overleaf-rendered PDF as authoritative.
+- **The mirror repo is public.** Fine for editing; before submitting to the double-blind venue, scrub the PDF's author metadata and ensure no Overleaf/GitHub URL is embedded.
+- **Subtree split rewrites commit SHAs.** A commit in `onlycodes` has a different hash in `onlycodes-paper`. Don't cherry-pick across the two repos by SHA.
+
 ## Architecture Overview
 
 Two independent evaluation modes sharing a common subprocess harness:
