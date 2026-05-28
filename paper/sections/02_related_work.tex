@@ -1,13 +1,143 @@
 % paper/sections/02_related_work.tex
-% TODO: condense the related-work outline to ~0.75 page.
 %
-% Subsections:
-%   IDE-tool-surface ablation: SWE-agent, mini-SWE-agent, Live-SWE-agent,
-%     Liu et al. (Claude Code design space, no ablation), Rombaut taxonomy,
-%     Verdent (informal).
-%   Code-execution-as-action: CodeAct, OpenHands/CodeAct, Anthropic blog,
-%     Cloudflare Code Mode posts, Terminal Agents Suffice.
-%   Tool-use tax / capability overlap: Zhang et al. (tool-tax framing),
-%     Budget-Aware Tool Use, ToolTree, MCP description ablation.
+% First draft 2026-05-28. Structure follows paper/outline.md §2 and the
+% inventory in paper/02_related_work.md.
+%
+% Drafting rules:
+%   * \section{Related Work} and \label{sec:related} come from main.tex; this
+%     file owns only subsections.
+%   * The intro forward-references \S\ref{sec:relwork-artifacts}; that label
+%     lives on §2.4 (coding-agent benchmarks).
+%   * Bare digits are masked by paper/lint.py only inside math mode or
+%     whitelisted strings — keep numerical claims in §5; this section
+%     characterises directionality, not magnitudes.
+%   * Framing follows the 2026-05-28 retune (paper/outline.md L278): the
+%     headline is "four-cell agent-conditional cost structure" / "code_only
+%     cheaper or tied in 3 of 4 cells", NOT "regime-dependent sign-flip".
+%   * Only cite keys present in references.bib. Per CLAUDE.md, this file
+%     does not propose new bib entries.
 
-To be drafted.
+% ─────────────── 2.1 IDE-tool-surface ablation on coding agents ────────
+\subsection{IDE-tool-surface ablation on coding agents}
+\label{sec:relwork-ide}
+
+The closest precedent is SWE-agent, whose two-arm Agent--Computer
+Interface (ACI) vs.\ raw shell ablation established that structured
+IDE primitives beat free-form shell at the model size of late
+$2024$~\cite{yang2024sweagent}. Two subsequent points have left the
+conclusion partly stale: mini-SWE-agent, a ${\sim}\!100$-line
+bash-only scaffold, posts competitive numbers on SWE-bench Verified
+with no IDE primitives at all~\cite{repo:miniswagent}, and
+Live-SWE-agent shows a self-evolving scaffold seeded from it can climb
+higher~\cite{xia2025liveswagent}. Engineered surfaces continue to be
+explored on the other end --- AutoCodeRover layers AST-aware retrieval
+primitives over the SWE-agent design~\cite{zhang2024autocoderover},
+Moatless Tools tunes a semantic-search-and-edit surface for SWE-bench
+Verified~\cite{repo:moatless}, and Agentless removes the agent loop
+entirely in favour of a fixed localize--repair--validate
+pipeline~\cite{xia2024agentless}. None of these crosses three internal
+IDE surfaces under a single integrity-clean harness with regime
+stratification; each fixes a single axis. Descriptive surveys of
+Claude Code's primitive surface~\cite{liu2026divecc,rombaut2026scaffold,bui2026opendev}
+explicitly do not run such an ablation, and component-evolution work
+on coding-agent harnesses~\cite{confuciuscodeagent2025,agenticharnessengineering2026}
+ablates internal components on an evolved harness rather than swapping
+the entire surface. The vendor signal closest in spirit to ours is the
+Verdent technical report~\cite{report:verdent2025swebench}, which
+informally notes that removing advanced tools while keeping
+bash$+$read$+$write$+$edit produced little SWE-bench Verified change;
+single-vendor and without public methodology, we treat it as
+motivation rather than a scoop.
+
+% ───────────── 2.2 Code execution as the action interface ──────────────
+\subsection{Code execution as the action interface}
+\label{sec:relwork-codeact}
+
+The \texttt{code\_only} arm sits in a line of work that replaces
+structured tool calls with executable code. PAL and Program-of-Thoughts
+established Python as the medium of model reasoning for arithmetic
+and symbolic computation~\cite{gao2023pal,chen2023pot}; CodeAct
+extended the move to the action layer of agentic systems, contrasting
+executable Python with JSON tool calls on general-purpose agent
+benchmarks~\cite{wang2024codeact}, and the OpenHands
+platform~\cite{wang2025openhands} ships the CodeAct interface at scale.
+The most directly relevant industry signals are Anthropic's
+``code execution with MCP'' write-up and Cloudflare's two ``Code
+Mode'' posts, which report large token reductions when an LLM writes
+code that calls external MCP tools rather than calling them
+directly~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode,blog:cloudflare2026codemodemcp}.
+All four target \emph{external} tool surfaces --- Drive, Salesforce,
+Stripe, Cloudflare's REST API --- not the agent's internal IDE
+primitives, and none reports a coding-benchmark evaluation. Bechard
+et~al.~\cite{bechard2026terminal} argue the analogous ``less is
+more'' point for enterprise API automation, again outside the
+code-repair domain. Our \texttt{code\_only} arm ports code-as-action
+into the agent's IDE-primitive layer and evaluates it on the
+benchmarks where Claude Code, Codex CLI, and their peers actually
+run.
+
+% ─────────────── 2.3 Tool-use tax and capability overlap ───────────────
+\subsection{Tool-use tax and capability overlap}
+\label{sec:relwork-tax}
+
+We frame the surface choice through Zhang et al.'s ``tool-use tax''
+inequality: a tool delivers net benefit only when its task-specific
+capability gain exceeds the per-call cost of carrying its definition
+in the prompt~\cite{zhang2026tooltax}. Their evidence is on general
+math and question-answering; ours supplies the coding-agent receipt.
+The orthogonal tool-pruning and tool-budgeting literature ---
+Budget-Aware Tool Use~\cite{budgetawaretooluse2025},
+ToolTree~\cite{tooltree2026}, Trajectory
+Reduction~\cite{trajectoryreduction2025}, ToolScope~\cite{toolscope},
+and the MCP description audit of Hasan
+et~al.~\cite{mcptooldescsmelly2026} --- all ask which $k$ tools to
+select from a large pool, holding the surface design itself fixed.
+We instead compare three fixed surfaces on the same harness. Fan
+et~al.'s SWE-Effi~\cite{fan2025sweeffi} introduces resource-aware
+effectiveness metrics for coding agents and reports that failed runs
+consume an order of magnitude more compute than successes; this
+``expensive failures'' framing motivates the cache-adjusted cost
+methodology in §\ref{sec:m-cost} and is consistent with the
+failure-cost mechanism we identify on SWE-bench/Claude
+(§\ref{sec:disc-failurecost}).
+
+% ───────────────────── 2.4 Coding-agent benchmarks ─────────────────────
+\subsection{Coding-agent benchmarks}
+\label{sec:relwork-artifacts}
+
+Our paired evaluation spans both halves of an established benchmark
+axis. On the modification side, SWE-bench~\cite{jimenez2024swebench}
+and its human-validated Verified
+subset~\cite{report:openai2024swebenchverified} are the substrate;
+stratified follow-ons --- SWE-bench Pro~\cite{scaleai2025swebenchpro},
+Multi-SWE-bench~\cite{bytedance2025multiswebench},
+SWE-PolyBench~\cite{amazon2025swepolybench}, and SWE
+Atlas~\cite{sweatlas2026} --- cross SWE-bench with difficulty,
+language, and task-shape axes but never with the agent's tool surface.
+Ganhotra's audit~\cite{blog:ganhotra2025multifile} that the bulk of
+SWE-bench Verified is single-file motivates our targeted multi-file
+sampling. On the computation side, MLE-Bench~\cite{chan2024mlebench}
+and MLAgentBench~\cite{huang2024mlagentbench} grade Kaggle-style
+submissions by the numerical output of agent-written code,
+RE-Bench~\cite{wijk2024rebench} pushes the same shape to longer-horizon
+ML R\&D, CORE-Bench~\cite{siegel2024corebench} grades reproduction of
+published numerical results, and SWE-Lancer~\cite{miserendino2025swelancer}
+mixes modification and computation in a single corpus. We do not
+propose a new computation benchmark --- the space is crowded. The
+artifact suite we run is the methodological vehicle that makes the
+four-cell agent-conditional cost structure of §\ref{sec:results}
+observable at all: without a computation cell on the same harness,
+every (regime, agent) contrast collapses to a single column of
+SWE-bench numbers, and the same-regime divergence between Claude and
+Codex on SWE-bench cannot be read against any computation baseline.
+
+\medskip
+\noindent This paper is the empirical complement to Liu et al.'s
+architectural taxonomy of Claude Code's primitive
+surface~\cite{liu2026divecc}: they describe the design space; we
+ablate three points in it under regime and agent-design stratification,
+on the benchmark pair that spans the field's two graded regimes.
+Observational mining of in-the-wild agent pull requests, exemplified
+by the SE 3.0 anchor dataset AIDev~\cite{aidev2026}, holds neither
+the model nor the tool surface fixed and so does not substitute for
+the controlled ablation we report.

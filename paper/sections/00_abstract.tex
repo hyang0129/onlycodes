@@ -1,21 +1,39 @@
 % paper/sections/00_abstract.tex
 % Placeholder abstract. Do not finalize until §5 numbers freeze.
 % See ../00_abstract.md for the working draft outline.
+%
+% FRAMING RETUNE 2026-05-28: "sign-flip between regimes" wording dropped.
+% The cell-level pattern in paired_contrasts.csv is "code_only is cheaper
+% or tied in 3 of 4 (regime, agent) cells, with the lone exception
+% (SWE-bench/Claude +14%) NS at p=0.12" — not a clean two-regime sign-flip.
+% The significant same-regime divergence is Codex *** vs Claude NS on
+% SWE-bench, which is an agent-design claim, not a regime claim. The
+% body below uses placeholder prose pending a full rewrite against the
+% paired_contrasts.csv macros — the prior \resratio{headline}{...} macros
+% pointed at a `headline` CSV that has been superseded by
+% `paired_contrasts.csv` (schema `benchmark:agent:contrast:metric`).
+% See ../05_results.md §5.1 framing-change note for the full rationale.
 
 Modern coding agents expose multiple tool surfaces --- IDE primitives,
 bash, and MCP code-execution --- and the field has shipped three
 contradictory claims about which one matters. We run the missing
 crossed comparison: an integrity-clean three-arm ablation
-(\texttt{tool\_rich} / \texttt{bash\_only} / \texttt{code\_only}) on
+(\texttt{baseline} / \texttt{bash\_only} / \texttt{code\_only}) on
 synthetic computation tasks and SWE-bench Mini modification tasks,
-holding model, harness, and prompts fixed. We find that cost asymmetry
-flips sign between regimes:
-\texttt{code\_only} is
-\resratio{headline}{computation:code_only:median_cost_usd}{computation:tool_rich:median_cost_usd}[2]
-of the \texttt{tool\_rich} cost on computation tasks, but
-\texttt{tool\_rich} is
-\resratio{headline}{modification:tool_rich:total_cost_usd}{modification:code_only:total_cost_usd}[2]
-of the \texttt{code\_only} cost on modification tasks --- with pass
-rates statistically tied within each regime. The sign-flip challenges
-both the ``specialized tools win'' and ``less is more'' framings;
-optimal tool surface is regime-dependent, not universal.
+holding model, harness, and prompts fixed, with two agents (Claude
+Code, OpenAI Codex CLI) so the comparison spans both regime and
+agent-design axes. Across the four resulting (regime, agent) cells,
+restricting the agent to a single \texttt{execute\_code} MCP tool is
+cheaper than --- or statistically tied with --- its cheapest tool-rich
+rival in three cells (significantly on Artifact/Claude and
+SWE-bench/Codex; directionally on Artifact/Codex), with pass rates
+statistically tied within each cell. The lone exception is
+SWE-bench/Claude, where \texttt{code\_only} is directionally costlier
+($+\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$, NS);
+a conditional-cost analysis localizes that gap to
+failure-cost on doomed-run trajectories, not a per-edit tax on
+successful runs. Two implications: the cheapest tool surface is
+\emph{jointly} determined by task regime and agent design rather than
+by either axis alone, and the headline cost signal lives in cache-adjusted
+cost --- not pass rate, which is invariant across surfaces at the model
+sizes we evaluate.

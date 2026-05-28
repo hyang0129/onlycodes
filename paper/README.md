@@ -11,6 +11,7 @@ Adapted from the hallulens paper build system (see [`hyang0129/hallulens/paper/`
 
 ```bash
 cd paper/
+make deps         # first-time only: pip install pandas, numpy, scipy, matplotlib
 make paper        # renders figures, builds values.tex, lints, compiles PDF
 make figures      # render figures_src/*.py only
 make values       # build generated/values.tex from data/ + sidecar CSVs
@@ -19,7 +20,16 @@ make clean        # remove generated/ and LaTeX byproducts
 ```
 
 LaTeX (`latexmk`) is required for `make paper`. All other targets need only
-Python 3.11+ + pandas + matplotlib.
+Python 3.11+ and the packages pinned in [requirements.txt](requirements.txt)
+(pandas, numpy, scipy, matplotlib).
+
+If your system Python lacks these packages, `make figures` / `values` / `paper`
+will fail fast with a pointer to `make deps`. To use a non-system Python
+(e.g. a project venv), pass `PYTHON=` on the make command line, for example:
+
+```bash
+make PYTHON=/workspaces/.venvs/tts_server/bin/python paper
+```
 
 ---
 
@@ -149,6 +159,6 @@ Current whitelist entries (non-exhaustive): model names (`Claude Sonnet 4.6`, `C
 
 ## CLAUDE.md guardrail
 
-When using an LLM agent (Claude Code etc.) to draft or edit the paper, the agent is restricted to files inside `paper/` (per the top-level [CLAUDE.md](../CLAUDE.md)). Stale framing from `docs/ROADMAP.md` or the README's "Code Mode" pitch is **not allowed** to leak into the draft. The regime-dependent sign-flip framing in this paper supersedes the "code mode wins" narrative; do not reintroduce the old framing from external docs.
+When using an LLM agent (Claude Code etc.) to draft or edit the paper, the agent is restricted to files inside `paper/` (per the top-level [CLAUDE.md](../CLAUDE.md)). Stale framing from `docs/ROADMAP.md` or the README's "Code Mode" pitch is **not allowed** to leak into the draft. The paper's current framing (as of 2026-05-28) is the **four-cell cost structure** across (regime, agent) pairs — `code_only` is cheaper or tied in 3 of 4 cells, with the lone exception (SWE-bench/Claude +14%) NS at p=0.12; see [05_results.md](05_results.md) §5.1 framing-change note. Do not reintroduce: (a) the "code mode wins" narrative from `docs/ROADMAP.md`, or (b) the earlier "regime-dependent sign-flip" framing this paper itself used pre-2026-05-28 (retired because it dramatised a non-significant directional point estimate).
 
 `paper/references.bib` is never edited by an agent — citations are proposed in outline files for human review first.

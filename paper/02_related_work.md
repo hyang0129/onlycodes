@@ -134,7 +134,7 @@ Empirically shows SWE-bench Verified is 85.8% single-file. **Delta:** motivates 
 
 ## Computation-regime precedents (the other half of the regime axis)
 
-The modification regime is well-covered by stratified-SWE-bench variants above. The *computation* regime — tasks graded by the numerical or behavioural output of the agent's code rather than by a diff against a held-out test patch — has its own precedent line, equally must-cite for a paper whose headline is a regime-dependent sign-flip. The prior draft populated only the modification half of the axis; this block fixes that asymmetry.
+The modification regime is well-covered by stratified-SWE-bench variants above. The *computation* regime — tasks graded by the numerical or behavioural output of the agent's code rather than by a diff against a held-out test patch — has its own precedent line, equally must-cite for a paper whose headline is the four-cell cost structure crossed across (regime, agent) pairs. (The earlier framing here — "regime-dependent sign-flip" — was retired 2026-05-28; see [05_results.md](05_results.md) §5.1 framing-change note. The motivation for citing computation-regime precedents is unchanged: without a computation benchmark in the comparison, the Artifact column of Table 1 would not exist and the headline would collapse to a single-regime within-SWE-bench result.) The prior draft populated only the modification half of the axis; this block fixes that asymmetry.
 
 ### MLE-Bench — Chan et al. (OpenAI). *MLE-bench: Evaluating Machine Learning Agents on Machine Learning Engineering.* arXiv:2410.07095, Oct 2024.
 75 Kaggle ML-engineering competitions as agent tasks: data exploration, model training, submission generation. Grading is by submission score against the Kaggle leaderboard. **Delta:** the canonical computation-flavoured coding-agent benchmark — success is gated by *what the code computes*, not by whether a held-out unit test now passes. Direct precedent for the computation half of our regime split; we do not run MLE-Bench but cite it to establish that this cell is an established research object.
@@ -214,615 +214,105 @@ The Codex CLI README and configuration documentation, surveyed for cache-control
 
 ## Staging bibliography (pre-approval, not yet in `references.bib`)
 
-This section is the **single staging ground** for every reference cited above. Workflow:
+This section was the **single staging ground** for every reference cited above. As of end-of-day 2026-05-28, **all 48 entries originally staged here have been moved into [`references.bib`](references.bib)** following explicit human approval — 32 academic entries in the first batch, 8 in the follow-up arXiv author-list audit batch, 6 vendor-documentation entries added after an agent re-fetch audit + human browser verification, plus `aidev2026` (corrected from a broken stub after locating the paper at arXiv:2507.15003) and `repo:openai2026codex` (README landing page verified clean; the §4-commit-hash grep is a non-blocking follow-up captured in the entry's `note`). The staging block below is empty.
+
+Workflow (unchanged):
 
 1. **Add here first.** Whenever a new reference appears in the prose above, add a matching BibTeX entry to the block below in the same edit. Include enough metadata (authors, title, year, venue, arXiv ID / URL) for a human to verify the entry in under thirty seconds without re-reading the source.
 2. **Flag what you don't know.** If a field is not present in the prose and you would have to guess it, write `TBD — verify` rather than filling it in. Agents hallucinate references; we do not paper over that with plausible-looking strings.
 3. **Wait for approval.** Per [paper/CLAUDE.md](CLAUDE.md), `paper/references.bib` is never edited by an agent. A human reviews this staging block, fixes any `TBD`s, and copies approved entries into `paper/references.bib`. Only then may the prose switch from inline metadata to `\cite{key}`.
-4. **Keep prose and stage in sync.** Until an entry is approved and moved, the prose above must keep its inline title/author/arXiv triple so the entry can be reconstructed from the section alone.
+4. **Keep prose and stage in sync.** Until an entry is approved and moved, the prose above must keep its inline title/author/arXiv triple so the entry can be reconstructed from the section alone. Once moved, the staging-block BibTeX is deleted from here (it now lives in `references.bib`); the inline prose triple may then be swapped for `\cite{key}` in any `.tex` section that uses the reference.
 
-Citation keys follow `firstauthorYEARkeyword` (e.g. `yang2024sweagent`) with non-paper sources prefixed `blog:` / `repo:` / `report:` to make their type obvious at the cite site.
+Citation keys follow `firstauthorYEARkeyword` (e.g. `yang2024sweagent`) with non-paper sources prefixed `blog:` / `repo:` / `report:` / `docs:` to make their type obvious at the cite site.
 
-```bibtex
-% ─── Foundational substrate (must-cite, we run on these) ───────────────
+### Moved to `references.bib` on 2026-05-28 (48 entries)
 
-@inproceedings{jimenez2024swebench,
-  author    = {Jimenez, Carlos E. and Yang, John and Wettig, Alexander and
-               Yao, Shunyu and Pei, Kexin and Press, Ofir and
-               Narasimhan, Karthik},
-  title     = {{SWE-bench}: Can Language Models Resolve Real-World
-               {GitHub} Issues?},
-  booktitle = {ICLR},
-  year      = {2024},
-  eprint    = {2310.06770},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.CL},
-  note      = {Author list reconstructed from prose --- verify against
-               ICLR camera-ready before approval}
-}
+Listed by citation key, grouped by original staging-block section. For the exact BibTeX of any entry, see [`references.bib`](references.bib) or `git log -p paper/02_related_work.md` (the pre-move staging block is preserved in commit history).
 
-@misc{report:openai2024swebenchverified,
-  author       = {{OpenAI Preparedness Team}},
-  title        = {Introducing {SWE-bench} Verified},
-  howpublished = {OpenAI blog + dataset release},
-  year         = {2024},
-  month        = aug,
-  url          = {https://openai.com/index/introducing-swe-bench-verified/},
-  note         = {500-instance human-validated subset of {SWE-bench}.}
-}
+**First batch (32 entries, moved earlier on 2026-05-28):**
 
-@misc{anthropic2024mcp,
-  author       = {{Anthropic}},
-  title        = {Introducing the {Model Context Protocol}},
-  howpublished = {Protocol specification + announcement},
-  year         = {2024},
-  month        = nov,
-  url          = {https://www.anthropic.com/news/model-context-protocol},
-  note         = {Published 2024-11-25. Title verified.}
-}
+- **Foundational substrate:** `report:openai2024swebenchverified`, `anthropic2024mcp`
+- **Direct precedent:** `yang2024sweagent`, `bechard2026terminal`
+- **SWE-bench scaffold prior art:** `xia2024agentless`, `repo:moatless`
+- **Industry priors:** `blog:anthropic2025codemcp`, `blog:cloudflare2025codemode`, `blog:cloudflare2026codemodemcp`, `report:verdent2025swebench`
+- **Bash-only lineage:** `repo:miniswagent`, `xia2025liveswagent`
+- **Code-as-action lineage:** `wang2024codeact`
+- **Theoretical framing:** `zhang2026tooltax`
+- **Claude-Code-specific architectural:** `liu2026divecc`, `rombaut2026scaffold`, `bui2026opendev`
+- **Stratified SWE-bench evaluation:** `scaleai2025swebenchpro`, `bytedance2025multiswebench`, `sweatlas2026`, `blog:ganhotra2025multifile`
+- **Computation-regime precedents:** `chan2024mlebench`, `huang2024mlagentbench`, `wijk2024rebench`, `miserendino2025swelancer`, `siegel2024corebench`
+- **Tool-pruning / tool-budget:** `budgetawaretooluse2025`, `tooltree2026`, `trajectoryreduction2025`, `mcptooldescsmelly2026`
+- **Scaffold-component ablations:** `confuciuscodeagent2025`, `agenticharnessengineering2026`
 
-% ─── Direct precedent ──────────────────────────────────────────────────
+**Second batch (8 academic entries, moved later on 2026-05-28 after follow-up arXiv author-list audit):**
 
-@inproceedings{yang2024sweagent,
-  author    = {Yang, John and Jimenez, Carlos E. and Wettig, Alexander and
-               Lieret, Kilian and Yao, Shunyu and Narasimhan, Karthik and
-               Press, Ofir},
-  title     = {{SWE-agent}: Agent-Computer Interfaces Enable Automated
-               Software Engineering},
-  booktitle = {NeurIPS},
-  year      = {2024},
-  eprint    = {2405.15793},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.SE}
-}
+- **Foundational substrate:** `jimenez2024swebench` *(author list verified against arXiv:2310.06770)*
+- **SWE-bench scaffold prior art:** `zhang2024autocoderover` *(verified against arXiv:2404.05427)*
+- **Code-as-action lineage:** `gao2023pal` *(verified against arXiv:2211.10435; title casing corrected to ``Program-aided'')*, `chen2023pot` *(verified against arXiv:2211.12588)*, `wang2025openhands` *(24-author list verified against arXiv:2407.16741; replaced a hallucinated 27-author staging entry — see the entry's `note` field in `references.bib` for the fabricated names preserved as the canonical fix point)*
+- **Stratified SWE-bench evaluation:** `amazon2025swepolybench` *(13-author list verified against arXiv:2504.08703; replaced `{Amazon Science}` corporate placeholder)*
+- **Tool-pruning / tool-budget:** `toolscope` *(6-author list, title, and venue ACL 2026 Main verified against arXiv:2510.20036; replaced TBD placeholder)*
+- **Efficiency / cost** *(new section in `references.bib`)*: `fan2025sweeffi` *(9-author list verified against arXiv:2509.09853; replaced ``Fan and others'' placeholder)*
 
-@article{bechard2026terminal,
-  author    = {Bechard, Patrice and Marquez Ayala, Orlando and
-               Chen, Emily and Skelton, Jordan and Davasam, Sagar and
-               Sunkara, Srinivas and Yadav, Vikas and Rajeswar, Sai},
-  title     = {Terminal Agents Suffice for Enterprise Automation},
-  journal   = {arXiv preprint arXiv:2604.00073},
-  year      = {2026},
-  month     = mar,
-  note      = {ServiceNow Research. Author list verified against arXiv:2604.00073.}
-}
+**Third batch (6 vendor-documentation entries, moved end-of-day 2026-05-28 after agent re-fetch audit + human browser verification of the OpenAI surfaces):**
 
-% ─── SWE-bench scaffold prior art (competing architectures) ────────────
+- **Vendor documentation (Anthropic surfaces, §3.5):** `docs:anthropic2026promptcaching` *(URL rewritten `docs.claude.com` → `platform.claude.com` per observed 302; `note` records that workspace-level isolation effective 2026-02-05 is the only documented isolation boundary --- coarser than per-caller, so the §3.5 claim still holds but the prose should acknowledge it)*, `docs:anthropic2026contextediting` *(approved as staged)*, `docs:claudecode2026cli` *(URL rewritten `docs.claude.com` → `code.claude.com` per observed 301; `note` records the verbatim `--no-session-persistence` description and `--exclude-dynamic-system-prompt-sections` as corroborating evidence)*, `docs:claudecode2026settings` *(URL rewritten to `code.claude.com` form)*
+- **Vendor documentation (OpenAI surfaces, §3.5):** `docs:openai2026promptcaching` *(agent `WebFetch` returned HTTP 403; human reviewer manually verified the page from a browser session and approved; `note` records the 403/human-verified provenance)*, `docs:openai2026convstate` *(agent fetcher saw only a subset of channels; human reviewer manually verified the full on-page presence of `previous_response_id` / Sessions / `conversation_id` / `auto_previous_response_id` and the mutually-exclusive framing from a browser session)*
 
-@article{xia2024agentless,
-  author    = {Xia, Chunqiu Steven and Deng, Yinlin and
-               Dunn, Soren and Zhang, Lingming},
-  title     = {Agentless: Demystifying {LLM}-based Software Engineering
-               Agents},
-  journal   = {arXiv preprint arXiv:2407.01489},
-  year      = {2024},
-  month     = jul,
-  note      = {Author list verified against arXiv:2407.01489}
-}
+**Fourth batch (2 entries, moved end-of-day 2026-05-28 after individual human approval following the audit):**
 
-@inproceedings{zhang2024autocoderover,
-  author    = {Zhang, Yuntong and Ruan, Haifeng and Fan, Zhiyu and
-               Roychoudhury, Abhik},
-  title     = {{AutoCodeRover}: Autonomous Program Improvement},
-  booktitle = {ISSTA},
-  year      = {2024},
-  eprint    = {2404.05427},
-  archivePrefix = {arXiv},
-  note      = {Author list reconstructed from prose --- verify}
-}
+- **Workshop anchor dataset (SE 3.0 positioning)** *(new top-of-file section in `references.bib`, matching the section order in this file)*: `aidev2026` *(located at arXiv:2507.15003; the staged stub had the dataset name as title plus a `TBD` author list — audit corrected to `@article` form with the actual paper title, Hao Li / Haoxiang Zhang / Ahmed E. Hassan author list, v1 PR count of 456K, and the refreshed-dataset $\sim$1M figure recorded in the `note` rather than the title)*
+- **Vendor documentation (§3.5):** `repo:openai2026codex` *(README landing page confirmed clean by agent fetch; the entry's `note` preserves the existing caveat that the README at the §4-pinned commit hash should be grep'd for `cache` / `CODEX_CACHE` / etc. once the agent-version table lands a SHA — to be amended into the `note` before final freeze, treated as a non-blocking follow-up rather than a blocker)*
 
-@misc{repo:moatless,
-  author       = {{\"O}rwall, Albert},
-  title        = {Moatless Tools},
-  howpublished = {GitHub repository},
-  year         = {2024--2025},
-  url          = {https://github.com/aorwall/moatless-tools},
-  note         = {SWE-bench Verified leaderboard scaffold. No standalone paper for
-                  moatless-tools itself; the related SWE-Search paper
-                  (arXiv:2410.20285) uses a separate moatless-tree-search repo.}
-}
+### Remaining in staging (none)
 
-% ─── Industry priors ───────────────────────────────────────────────────
+As of end-of-day 2026-05-28, **the staging block is empty.** All 8 entries originally staged in this file have moved into [`references.bib`](references.bib) through three approval rounds (32 academic entries on 2026-05-28 morning; 8 follow-up academic entries after the arXiv author-list audit; 6 vendor-documentation entries plus `aidev2026` and `repo:openai2026codex` end-of-day, after agent re-fetch + human browser verification).
 
-@misc{blog:anthropic2025codemcp,
-  author       = {{Anthropic}},
-  title        = {Code execution with {MCP}: building more efficient agents},
-  howpublished = {Anthropic Engineering Blog},
-  year         = {2025},
-  month        = nov,
-  url          = {https://www.anthropic.com/engineering/code-execution-with-mcp}
-}
+The audit summary table above is preserved as the canonical record of what was checked and what changed in each entry's fields between staging and the final `references.bib` form, including the §3.5 prose hooks that fell out of the audit (workspace-level isolation effective 2026-02-05; `--exclude-dynamic-system-prompt-sections` as corroborating evidence; on-page presence of the four OpenAI stateful channels) — none of which alter the §3.5 cite list, but a paper-writing agent reaching §3.5 should read the table before drafting prose.
 
-@misc{blog:cloudflare2025codemode,
-  author       = {{Cloudflare}},
-  title        = {Code Mode: the better way to use {MCP}},
-  howpublished = {Cloudflare Blog},
-  year         = {2025},
-  month        = sep,
-  url          = {https://blog.cloudflare.com/code-mode/},
-  note         = {Authors: Kenton Varda and Sunil Pai. Published 2025-09-26.}
-}
+#### Audit 2026-05-28 (agent re-fetch, gated behind human approval)
 
-@misc{blog:cloudflare2026codemodemcp,
-  author       = {{Cloudflare}},
-  title        = {Code Mode {MCP}: give agents an entire {API} in 1,000 tokens},
-  howpublished = {Cloudflare Blog},
-  year         = {2026},
-  month        = feb,
-  url          = {https://blog.cloudflare.com/code-mode-mcp/},
-  note         = {Published 2026-02-20.}
-}
+An agent re-fetched each URL on the access date and recorded what the page does (and does not) document. **Human approval is still required before any of these move into [`references.bib`](references.bib)**; this block exists so the reviewer can act on it without re-running the fetches.
 
-@misc{report:verdent2025swebench,
-  author       = {{Verdent}},
-  title        = {{SWE-bench} Verified Technical Report},
-  howpublished = {Verdent blog / technical report},
-  year         = {2025},
-  url          = {https://www.verdent.ai/blog/swe-bench-verified-technical-report},
-  note         = {Tool-ablation finding: removing advanced tools while keeping bash+read+write+edit produced little performance change. 76.1\% pass@1 on SWE-bench Verified (Claude Sonnet 4.5).}
-}
+- **`docs:anthropic2026promptcaching` — verified, URL needs update.** `docs.claude.com/...` 302-redirects to `https://platform.claude.com/docs/en/build-with-claude/prompt-caching` (canonical). On the canonical page: `cache_control` only accepts `{"type": "ephemeral"}` with optional `ttl` ("`5m`" default or "`1h`") — no `"disable"` / `"bypass"` mode is documented, and no per-request flag, header, or env var forces a cache miss. **New surface worth acknowledging in §3.5:** the page states "As of February 5, 2026, prompt caching uses workspace-level isolation instead of organization-level isolation. Caches are isolated per workspace, ensuring data separation between workspaces within the same organization." This is *coarser* than the per-caller/per-session isolation §3.5 is denying, so the cite still holds, but the prose should note workspace-level isolation exists (otherwise a reviewer who knows the Feb 2026 change will flag it as an omission). **Recommended action:** update `url` to the `platform.claude.com` form; the `note` is otherwise accurate.
 
-% ─── Bash-only lineage ─────────────────────────────────────────────────
+- **`docs:anthropic2026contextediting` — verified, no change needed.** URL resolves directly at `platform.claude.com` (no redirect from the staged URL; the staging note already had this right). Page documents tool-result clearing, thinking-block clearing, and client-side SDK compaction — none expose a per-caller / per-session isolation knob. One adjacent surface: the page calls out Zero Data Retention (ZDR) eligibility for orgs with a ZDR arrangement, but that's an org-level data-handling guarantee, not a per-session cache knob — does not undermine the §3.5 claim. **Recommended action:** approve as staged.
 
-@misc{repo:miniswagent,
-  author       = {{SWE-agent} contributors},
-  title        = {{mini-SWE-agent}},
-  howpublished = {GitHub repository \url{https://github.com/SWE-agent/mini-swe-agent}},
-  year         = {2025},
-  note         = {No standalone paper; ~100 LoC bash-only scaffold, HAL {SWE-bench} Verified Mini leaderboard. URL verified.}
-}
+- **`docs:claudecode2026cli` — verified, URL needs update.** `docs.claude.com/...` 301-redirects to `https://code.claude.com/docs/en/cli-reference` (Claude Code documentation moved to its own subdomain). On the canonical page: no `--no-cache`, `--cache-key`, `--fresh-session`, `--disable-cache`, or `--bypass-cache` flag exists. `--no-session-persistence` is documented verbatim as *"Disable session persistence so sessions are not saved to disk and cannot be resumed. Print mode only. The `CLAUDE_CODE_SKIP_PROMPT_HISTORY` environment variable does the same in any mode."* — confirms local-session-state only, no upstream cache effect. **Adjacent finding worth noting in §3.5:** the page also documents `--exclude-dynamic-system-prompt-sections`, whose stated purpose is to *"Improve prompt-cache reuse across different users and machines running the same task"* — i.e. the only documented cache-related CLI knob is one that increases cache *reuse*, not one that bypasses it. This is corroborating evidence for the §3.5 claim and worth a sentence. **Recommended action:** update `url` to the `code.claude.com` form; the `note` is otherwise accurate.
 
-@article{xia2025liveswagent,
-  author    = {Xia, Chunqiu Steven and Wang, Zhe and Yang, Yan and
-               Wei, Yuxiang and Zhang, Lingming},
-  title     = {Live-{SWE-agent}: Can Software Engineering Agents Self-Evolve on the Fly?},
-  journal   = {arXiv preprint arXiv:2511.13646},
-  year      = {2025},
-  month     = nov,
-  note      = {Author list and title verified against arXiv:2511.13646}
-}
+- **`docs:claudecode2026settings` — verified, URL needs update.** Same 301 redirect: `docs.claude.com/en/docs/claude-code/settings` → `https://code.claude.com/docs/en/settings`. On the canonical page: no setting in `settings.json` and no documented env var (`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_METRICS_EXPORTER`, `NO_COLOR`, `FORCE_COLOR`, etc.) disables, scopes, or bypasses prompt caching. **Recommended action:** update `url` to the `code.claude.com` form; the `note` is otherwise accurate.
 
-% ─── Code-as-action lineage ────────────────────────────────────────────
+- **`docs:openai2026promptcaching` — NOT verifiable from this environment.** `https://platform.openai.com/docs/guides/prompt-caching` returned HTTP 403 on both attempts (same access pattern that 403'd `platform.openai.com/docs/api-reference/responses` per the existing `docs:openai2026convstate` note). The agent cannot confirm the cited wording from this network egress. **Recommended action:** a human reviewer needs to open the page from a browser session and confirm (a) `prompt_cache_key` is still framed as a routing / partition hint rather than a security boundary, and (b) the page still does not document a cache-miss-forcing parameter. Alternatively, switch the citation URL to a fetchable mirror (e.g. an OpenAI dev-portal mirror at `developers.openai.com` if one exists for prompt caching, parallel to how `docs:openai2026convstate` resolved).
 
-@inproceedings{gao2023pal,
-  author    = {Gao, Luyu and Madaan, Aman and Zhou, Shuyan and Alon, Uri and
-               Liu, Pengfei and Yang, Yiming and Callan, Jamie and
-               Neubig, Graham},
-  title     = {{PAL}: Program-Aided Language Models},
-  booktitle = {ICML},
-  year      = {2023},
-  eprint    = {2211.10435},
-  archivePrefix = {arXiv},
-  note      = {Author list reconstructed from prose --- verify}
-}
+- **`docs:openai2026convstate` — verified with caveats.** URL works at `developers.openai.com` as the staging note already states. Confirmed: only documented opt-out from server-side retention is `store=false`; no per-session isolation knob for cached prompt tokens. **Two caveats the reviewer should resolve before approval:** (1) the fetcher did not see an explicit "`store=true` is the default" statement on the page — only the consequence ("Response objects are saved for 30 days by default") — so the staging note's parenthetical "`store=true` (default)" may need rewording to match the page's actual phrasing. (2) The staging note's framing of `previous_response_id` / Sessions / `conversation_id` / `auto_previous_response_id` as "mutually exclusive alternative stateful channels" is **stronger than what the page says**; the page describes `previous_response_id` and the Conversations API as two approaches without explicitly characterizing them as mutually exclusive, and the fetcher did not surface "Sessions" or "`auto_previous_response_id`" at all. The "mutually exclusive" framing may be load-bearing for the §3.5 argument (mutually-exclusive alternatives ⟹ no isolation primitive among them); if so, the reviewer should either (i) confirm those four names all appear on the page and the mutual exclusivity is stated, or (ii) soften the staging note to match what the page actually says ("multiple stateful channels documented; no per-caller cache scoping among them"). **Recommended action:** human re-fetch + reword the `note` before approval.
 
-@article{chen2023pot,
-  author    = {Chen, Wenhu and Ma, Xueguang and Wang, Xinyi and
-               Cohen, William W.},
-  title     = {Program of Thoughts Prompting: Disentangling Computation from
-               Reasoning for Numerical Reasoning Tasks},
-  journal   = {TMLR},
-  year      = {2023},
-  eprint    = {2211.12588},
-  archivePrefix = {arXiv},
-  note      = {Author list reconstructed from prose --- verify}
-}
+- **`repo:openai2026codex` — partially verified, scoping caveat.** The README landing page documents no cache flag or env var (confirmed). However, the landing page links out to a separate "Codex Documentation" section and a "Contributing" guide that the fetcher could not enumerate from the landing page alone — so the cite as written ("Codex CLI README and configuration documentation expose no cache flag") is only verified for the README, not the full configuration documentation. The staging note already pre-empts this by saying "Verify against the README at the commit hash cited in §4 once the agent-version table is finalized" — which is the correct framing. **Recommended action:** approve as staged, but the §4 agent-version table needs to pin a specific commit hash, and the human moving the entry should grep that commit tree for `cache` / `CODEX_CACHE` / similar before approval to confirm the absence is real beyond just the landing page.
 
-@inproceedings{wang2024codeact,
-  author    = {Wang, Xingyao and Chen, Yangyi and Yuan, Lifan and
-               Zhang, Yizhe and Li, Yunzhu and Peng, Hao and Ji, Heng},
-  title     = {Executable Code Actions Elicit Better {LLM} Agents},
-  booktitle = {ICML},
-  year      = {2024},
-  eprint    = {2402.01030},
-  archivePrefix = {arXiv},
-  note      = {Author list verified against arXiv:2402.01030; ICML 2024 confirmed.}
-}
+- **`aidev2026` — preprint IS public; staging entry needs significant rewrite.** Located: **arXiv:2507.15003** (submitted 2025-07-20). Verified against arXiv:
+  - **Authors (3, in order):** Hao Li, Haoxiang Zhang, Ahmed E. Hassan (Queen's University, SAILResearch group).
+  - **Title:** *"The Rise of AI Teammates in Software Engineering (SE) 3.0: How Autonomous Coding Agents Are Reshaping Software Engineering"* — **not** the staged title `"AIDev: A Dataset of >1M Agentic Pull Requests from AI Teammates"`. "AIDev" is the *dataset name* released alongside the paper, not the paper title.
+  - **PR count discrepancy:** the v1 paper abstract reports "over 456,000 pull requests" across 5 agents / 61K repos / 47K developers. The staged ">1M" figure corresponds to the **refreshed dataset** (updated through 2025-08-01) hosted at [huggingface.co/datasets/reebazahid/AIDev](https://huggingface.co/datasets/reebazahid/AIDev) — not what the paper itself reports. The staged title's ">1M" claim should be dropped or moved into the `note` field as a comment on the live dataset rather than into the paper title.
+  - **Dataset repo:** [github.com/SAILResearch/AI_Teammates_in_SE3](https://github.com/SAILResearch/AI_Teammates_in_SE3).
+  - **Workshop framing:** the SE 3.0 workshop at KDD 2026 ([agent-se.github.io](https://agent-se.github.io/)) is the paper's natural venue link, but the paper itself is an arXiv preprint, not a workshop-published artifact; `howpublished` should reflect that (e.g. `howpublished = {arXiv preprint 2507.15003}`).
+  - **Action taken 2026-05-28:** staged `@misc{aidev2026,...}` stub rewritten in-place to the corrected `@article{aidev2026,...}` form (see the staged entry block further below). The "Workshop anchor dataset" prose still has its `[Full author list TBD]` flag — once a `.tex` section starts using `\cite{aidev2026}`, drop that flag.
 
-@inproceedings{wang2025openhands,
-  author    = {Wang, Xingyao and Li, Boxuan and Song, Yufan and
-               Xu, Frank F. and Tang, Xiangru and Yuan, Mingchen and
-               Wang, Hao and Jha, Saaket and Chowdhury, Md Imbesat Hassan and
-               Liu, Bowen and Sridhar, Bhuwan and Wang, Hoang H. and
-               Xu, Yueqi and Brennan, Robert and Hu, Hao and
-               Yang, Boyang and Lee, Albert and Patel, Tanmay and
-               Lin, Howard and Singh, Apurv Verma and Ji, Heng and
-               Yang, Zhilin and Sun, Daniel and Salakhutdinov, Ruslan and
-               Mitchell, Tom and Bisk, Yonatan and Neubig, Graham},
-  title     = {{OpenHands}: An Open Platform for {AI} Software Developers as Generalist Agents},
-  booktitle = {ICLR},
-  year      = {2025},
-  eprint    = {2407.16741},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.SE},
-  note      = {Switched from arXiv:2511.03690 (SDK paper, MLSys 2026) to the original
-               ICLR 2025 platform paper, which matches the prose framing
-               (``CodeAct-style platform for general agents''). Full author list TBD ---
-               verify against ICLR camera-ready before approval}
-}
+#### Audit summary
 
-% ─── Theoretical framing (Zhang, NOT Wang) ─────────────────────────────
+Status as of end-of-day 2026-05-28 (MOVED rows are now in [`references.bib`](references.bib); the §3.5 prose hooks noted under MOVED rows are recorded here so a later writer can wire them in without re-running the audit):
 
-@article{zhang2026tooltax,
-  author    = {Zhang, Kaituo and Xiong, Zhen and Zhong, Mingyu and
-               Jiang, Zhimeng and Yuan, Zhouyuan and Li, Zhecheng and
-               Lin, Ying},
-  title     = {Are Tools All We Need? Unveiling the Tool-Use Tax in {LLM} Agents},
-  journal   = {arXiv preprint arXiv:2605.00136},
-  year      = {2026},
-  month     = apr,
-  note      = {Author list verified against arXiv:2605.00136. Earlier drafts misattributed to ``Wang et al.''; the staging block is the canonical fix point.}
-}
+| Key | Status | Final outcome |
+|---|---|---|
+| `docs:anthropic2026promptcaching` | MOVED 2026-05-28 | `url` rewritten to `platform.claude.com` form; `note` extended to record that workspace-level isolation (effective 2026-02-05) is the only documented isolation boundary --- coarser than per-caller, so the §3.5 claim still holds, but §3.5 prose should acknowledge it |
+| `docs:anthropic2026contextediting` | MOVED 2026-05-28 | approved as staged |
+| `docs:claudecode2026cli` | MOVED 2026-05-28 | `url` rewritten to `code.claude.com` form; `note` extended to record `--exclude-dynamic-system-prompt-sections` as corroborating evidence (only documented cache-related CLI knob, and its purpose is to *improve* cache reuse, not bypass) plus the verbatim `--no-session-persistence` description |
+| `docs:claudecode2026settings` | MOVED 2026-05-28 | `url` rewritten to `code.claude.com` form |
+| `docs:openai2026promptcaching` | MOVED 2026-05-28 | agent `WebFetch` returned HTTP 403; human reviewer manually verified the page wording from a browser session and approved. `note` extended to record the 403/human-verified provenance |
+| `docs:openai2026convstate` | MOVED 2026-05-28 | human reviewer manually verified the page wording from a browser session and approved. `note` extended to record that the on-page presence of all four channels (`previous_response_id` / Sessions / `conversation_id` / `auto_previous_response_id`) and the "mutually exclusive" framing are human-confirmed, not agent-confirmed (the agent fetcher surfaced only a subset) |
+| `repo:openai2026codex` | MOVED 2026-05-28 | landing-page README confirmed clean; moved into `references.bib` after human approval. `note` preserves the existing caveat that the README at the §4-pinned commit hash should be grep'd for `cache` / `CODEX_CACHE` / etc. once the agent-version table lands a SHA — to be amended into the entry's `note` before final freeze, not blocking the move |
+| `aidev2026` | MOVED 2026-05-28 | staged entry rewritten in-place to corrected `@article{...}` form (Hao Li, Haoxiang Zhang, Ahmed E. Hassan; arXiv:2507.15003; 2025-07-20), then moved into `references.bib` after human approval into a new top-of-file "Workshop anchor dataset" section |
 
-% ─── Claude-Code-specific architectural descriptions ───────────────────
+Staging block is now empty. All 8 entries originally staged in this file have been moved into [`references.bib`](references.bib) following the workflow above. The audit summary table is preserved as the canonical record of what was checked, what changed in each entry's fields between staging and the final `references.bib` form, and which §3.5 prose hooks fell out of the audit.
 
-@article{liu2026divecc,
-  author    = {Liu, Jiacheng and Zhao, Xiaohan and Shang, Xinyi and
-               Shen, Zhiqiang},
-  title     = {Dive into {Claude Code}: The Design Space of Today's and
-               Future {AI} Agent Systems},
-  journal   = {arXiv preprint arXiv:2604.14228},
-  year      = {2026},
-  month     = apr,
-  note      = {MBZUAI VILA Lab + UCL. Author list verified against arXiv:2604.14228.}
-}
-
-@article{rombaut2026scaffold,
-  author    = {Rombaut, Benjamin},
-  title     = {Inside the Scaffold: A Source-Code Taxonomy of Coding Agent
-               Architectures},
-  journal   = {arXiv preprint arXiv:2604.03515},
-  year      = {2026},
-  month     = apr,
-  note      = {Author verified against arXiv:2604.03515.}
-}
-
-@article{bui2026opendev,
-  author    = {Bui, Nghi D. Q.},
-  title     = {Building Effective {AI} Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering, and Lessons Learned},
-  journal   = {arXiv preprint arXiv:2603.05344},
-  year      = {2026},
-  month     = mar,
-  note      = {Title and author verified against arXiv:2603.05344. Describes OPENDEV, a Rust-based terminal coding agent.}
-}
-
-% ─── Stratified SWE-bench evaluation ───────────────────────────────────
-
-@article{scaleai2025swebenchpro,
-  author    = {Deng, Xiang and Da, Jeff and Pan, Edwin and He, Yannis Yiming and
-               Ide, Charles and Garg, Kanak and Lauffer, Niklas and Park, Andrew and
-               Pasari, Nitin and Rane, Chetan and Sampath, Karmini and
-               Krishnan, Maya and Kundurthy, Srivatsa and Hendryx, Sean and
-               Wang, Zifan and Bharadwaj, Vijay and Holm, Jeff and Aluri, Raja and
-               Zhang, Chen Bo Calvin and Jacobson, Noah and Liu, Bing and
-               Kenstler, Brad},
-  title     = {{SWE-Bench Pro}: Can {AI} Agents Solve Long-Horizon Software Engineering Tasks?},
-  journal   = {arXiv preprint arXiv:2509.16941},
-  year      = {2025},
-  month     = sep,
-  note      = {Scale AI. 22-author list and title verified against arXiv:2509.16941.}
-}
-
-@article{bytedance2025multiswebench,
-  author    = {Zan, Daoguang and Huang, Zhirong and Liu, Wei and
-               Chen, Hanwu and Zhang, Linhao and Xin, Shulin and
-               Chen, Lu and Liu, Qi and Zhong, Xiaojian and Li, Aoyan and
-               Liu, Siyao and Xiao, Yongsheng and Chen, Liangqiang and
-               Zhang, Yuyu and Su, Jing and Liu, Tianyu and Long, Rui and
-               Shen, Kai and Xiang, Liang},
-  title     = {{Multi-SWE-bench}: A Multilingual Benchmark for Issue Resolving},
-  journal   = {arXiv preprint arXiv:2504.02605},
-  year      = {2025},
-  month     = apr,
-  note      = {ByteDance Seed team. Author list and title verified against arXiv:2504.02605.}
-}
-
-@article{amazon2025swepolybench,
-  author    = {{Amazon Science}},
-  title     = {{SWE-PolyBench}: A multi-language benchmark for repository
-               level evaluation of coding agents},
-  journal   = {arXiv preprint arXiv:2504.08703},
-  year      = {2025},
-  month     = apr,
-  note      = {arXiv ID added (2504.08703). Full author list TBD --- verify against
-               arXiv page before approval.}
-}
-
-@article{sweatlas2026,
-  author    = {Raghavendra, Mohit and Dan, Soham and
-               Romero Calvo, Miguel and He, Yannis Yiming and
-               Mols, Johannes Baptist and Anand, Gautam and
-               McCollum, Cole and Arakelyan, Edgar and Bharadwaj, Vijay and
-               Park, Andrew and Da, Jeff and Rezaei, MohammadHossein and
-               Liu, Bing and Kenstler, Brad and He, Yunzhong},
-  title     = {{SWE Atlas}: Benchmarking Coding Agents Beyond Issue Resolution},
-  journal   = {arXiv preprint arXiv:2605.08366},
-  year      = {2026},
-  month     = may,
-  note      = {Author list and title verified against arXiv:2605.08366. Published 2026-05-08.}
-}
-
-@misc{blog:ganhotra2025multifile,
-  author       = {Ganhotra, Jatin},
-  title        = {Do {SWE-Agents} Solve Multi-File Issues Like Humans? A Deep Dive into {SWE-Bench} Verified},
-  howpublished = {Blog post},
-  year         = {2025},
-  month        = jan,
-  note         = {Source of the 85.8\% single-file figure cited in \S 02. Published 2025-01-05 at jatinganhotra.dev. A follow-up post ``The Multi-File Frontier'' (2025-03-30) restates the finding; cite the Jan deep-dive as the originating source.}
-}
-
-% ─── Computation-regime precedents ─────────────────────────────────────
-
-@article{chan2024mlebench,
-  author    = {Chan, Jun Shern and Chowdhury, Neil and Jaffe, Oliver and
-               Aung, James and Sherburn, Dane and Mays, Evan and
-               Starace, Giulio and Liu, Kevin and Maksin, Leon and
-               Patwardhan, Tejal and Weng, Lilian and M{\k a}dry, Aleksander},
-  title     = {{MLE-bench}: Evaluating Machine Learning Agents on Machine
-               Learning Engineering},
-  journal   = {arXiv preprint arXiv:2410.07095},
-  year      = {2024},
-  month     = oct,
-  note      = {OpenAI. Author list verified against arXiv:2410.07095.}
-}
-
-@inproceedings{huang2024mlagentbench,
-  author    = {Huang, Qian and Vora, Jian and Liang, Percy and
-               Leskovec, Jure},
-  title     = {{MLAgentBench}: Evaluating Language Agents on Machine
-               Learning Experimentation},
-  booktitle = {ICML},
-  year      = {2024},
-  eprint    = {2310.03302},
-  archivePrefix = {arXiv},
-  note      = {Author list verified against arXiv:2310.03302; ICML 2024 poster confirmed}
-}
-
-@article{wijk2024rebench,
-  author    = {Wijk, Hjalmar and Lin, Tao and Becker, Joel and
-               Jawhar, Sami and Parikh, Neev and Broadley, Thomas and
-               Chan, Lawrence and Chen, Michael and Clymer, Josh and
-               Dhyani, Jai and Ericheva, Elena and Garcia, Katharyn and
-               Goodrich, Brian and Jurkovic, Nikola and Karnofsky, Holden and
-               Kinniment, Megan and Lajko, Aron and Nix, Seraphina and
-               Sato, Lucas and Saunders, William and Taran, Maksym and
-               West, Ben and Barnes, Elizabeth},
-  title     = {{RE-Bench}: Evaluating Frontier {AI} {R}\&{D} Capabilities
-               of Language Model Agents Against Human Experts},
-  journal   = {arXiv preprint arXiv:2411.15114},
-  year      = {2024},
-  month     = nov,
-  note      = {METR. Author list verified against arXiv:2411.15114.}
-}
-
-@article{miserendino2025swelancer,
-  author    = {Miserendino, Samuel and Wang, Michele and
-               Patwardhan, Tejal and Heidecke, Johannes},
-  title     = {{SWE-Lancer}: Can Frontier {LLM}s Earn \$1 Million from
-               Real-World Freelance Software Engineering?},
-  journal   = {arXiv preprint arXiv:2502.12115},
-  year      = {2025},
-  month     = feb,
-  note      = {OpenAI. Author list verified against arXiv:2502.12115.}
-}
-
-@article{siegel2024corebench,
-  author    = {Siegel, Zachary S. and Kapoor, Sayash and Nagdir, Nitya and
-               Stroebl, Benedikt and Narayanan, Arvind},
-  title     = {{CORE-Bench}: Fostering the Credibility of Published
-               Research Through a Computational Reproducibility Agent
-               Benchmark},
-  journal   = {arXiv preprint arXiv:2409.11363},
-  year      = {2024},
-  month     = sep,
-  note      = {Author list verified against arXiv:2409.11363.}
-}
-
-% ─── Tool-pruning / tool-budget literature ─────────────────────────────
-
-@article{budgetawaretooluse2025,
-  author    = {Liu, Tengxiao and Wang, Zifeng and Miao, Jin and
-               Hsu, I-Hung and Yan, Jun and Chen, Jiefeng and Han, Rujun and
-               Xu, Fangyuan and Chen, Yanfei and Jiang, Ke and
-               Daruki, Samira and Liang, Yi and Wang, William Yang and
-               Pfister, Tomas and Lee, Chen-Yu},
-  title     = {Budget-Aware Tool-Use Enables Effective Agent Scaling},
-  journal   = {arXiv preprint arXiv:2511.17006},
-  year      = {2025},
-  month     = nov,
-  note      = {Author list and title verified against arXiv:2511.17006.}
-}
-
-@article{tooltree2026,
-  author    = {Yang, Shuo and Han, Soyeon Caren and Ding, Yihao and Wang, Shuhe and Hoy, Eduard},
-  title     = {{ToolTree}: Efficient {LLM} Agent Tool Planning via Dual-Feedback {Monte Carlo Tree Search} and Bidirectional Pruning},
-  journal   = {arXiv preprint arXiv:2603.12740},
-  year      = {2026},
-  month     = mar,
-  note      = {Author list and title verified against arXiv:2603.12740. Accepted ICLR 2026.}
-}
-
-@article{trajectoryreduction2025,
-  author    = {Xiao, Yuan-An and Gao, Pengfei and Peng, Chao and Xiong, Yingfei},
-  title     = {Reducing Cost of {LLM} Agents with Trajectory Reduction},
-  journal   = {arXiv preprint arXiv:2509.23586},
-  year      = {2025},
-  month     = sep,
-  note      = {Author list and title verified against arXiv:2509.23586. Accepted FSE 2026. System name: AgentDiet.}
-}
-
-@article{toolscope,
-  author    = {{TBD --- verify}},
-  title     = {{ToolScope}: Enhancing {LLM} Agent Tool Use through Tool Merging
-               and Context-Aware Filtering},
-  journal   = {arXiv preprint arXiv:2510.20036},
-  year      = {2025},
-  month     = oct,
-  note      = {Title corrected (was ``Semantic-Redundancy Merging for Tool Sets''). arXiv:2510.20036 confirmed; author list TBD --- verify before approval.}
-}
-
-@article{mcptooldescsmelly2026,
-  author    = {Hasan, Mohammed Mehedi and Li, Hao and
-               Rajbahadur, Gopi Krishnan and Adams, Bram and
-               Hassan, Ahmed E.},
-  title     = {{Model Context Protocol (MCP)} Tool Descriptions Are Smelly! Towards Improving {AI} Agent Efficiency with Augmented {MCP} Tool Descriptions},
-  journal   = {arXiv preprint arXiv:2602.14878},
-  year      = {2026},
-  month     = feb,
-  note      = {Author list and title verified against arXiv:2602.14878. Ablates descriptions, not the tool set --- do not conflate with surface ablation when paraphrasing.}
-}
-
-% ─── Efficiency / cost ─────────────────────────────────────────────────
-
-@article{fan2025sweeffi,
-  author    = {Fan and others},
-  title     = {{SWE-Effi}: Re-Evaluating Software {AI} Agent System Effectiveness Under Resource Constraints},
-  journal   = {arXiv preprint arXiv:2509.09853},
-  year      = {2025},
-  month     = sep,
-  note      = {Title verified against arXiv:2509.09853; first author Zhiyu Fan. Full author list still TBD --- verify}
-}
-
-% ─── Scaffold-component ablations ──────────────────────────────────────
-
-@article{confuciuscodeagent2025,
-  author    = {Wong, Sherman and Qi, Zhenting and Wang, Zhaodong and
-               Hu, Nathan and Lin, Samuel and Ge, Jun and Gao, Erwin and
-               Chen, Wenlin and Du, Yilun and Yu, Minlan and Zhang, Ying},
-  title     = {{Confucius Code Agent}: Scalable Agent Scaffolding for Real-World Codebases},
-  journal   = {arXiv preprint arXiv:2512.10398},
-  year      = {2025},
-  month     = dec,
-  note      = {Author list and title verified against arXiv:2512.10398.}
-}
-
-@article{agenticharnessengineering2026,
-  author    = {Lin, Jiahang and Liu, Shichun and Pan, Chengjun and
-               Lin, Lizhi and Dou, Shihan and Xi, Zhiheng and
-               Huang, Xuanjing and Yan, Hang and Han, Zhenhua and
-               Gui, Tao and Jiang, Yu-Gang},
-  title     = {Agentic Harness Engineering: Observability-Driven Automatic Evolution of Coding-Agent Harnesses},
-  journal   = {arXiv preprint arXiv:2604.25850},
-  year      = {2026},
-  month     = apr,
-  note      = {Author list and title verified against arXiv:2604.25850.}
-}
-
-% ─── Vendor documentation (cited in §3.5 — cache-isolation absence) ───
-%
-% None of the seven entries below are academic prior work; they are the
-% primary sources behind the §3.5 documentation-survey claim (no vendor
-% offers a cache-isolation knob). URLs were accessed 2026-05-28; vendor
-% docs change without versioning, so a human reviewer should re-fetch
-% each URL before approval and verify the page still does not document
-% the knob the cite is being used to deny.
-
-@misc{docs:anthropic2026promptcaching,
-  author       = {{Anthropic}},
-  title        = {Prompt caching},
-  howpublished = {Claude API documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
-                  Anthropic Messages API exposes no parameter that forces
-                  a cache miss or scopes cached tokens per session.
-                  \texttt{cache\_control} controls breakpoints, not bypass.},
-  url          = {https://docs.claude.com/en/docs/build-with-claude/prompt-caching}
-}
-
-@misc{docs:anthropic2026contextediting,
-  author       = {{Anthropic}},
-  title        = {Context editing},
-  howpublished = {Claude API documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Canonical URL on \texttt{platform.claude.com};
-                  \texttt{docs.claude.com/...} 302-redirects here.
-                  Used in \S3.5 to assert that the server-side context-editing
-                  primitive exposes no per-session isolation knob.},
-  url          = {https://platform.claude.com/docs/en/build-with-claude/context-editing}
-}
-
-@misc{docs:claudecode2026cli,
-  author       = {{Anthropic}},
-  title        = {{Claude Code} CLI reference},
-  howpublished = {Claude Code documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
-                  Claude Code CLI exposes no \texttt{--no-cache},
-                  \texttt{--cache-key}, or \texttt{--fresh-session} flag;
-                  \texttt{--no-session-persistence} controls only local
-                  session state, not the upstream API cache.},
-  url          = {https://docs.claude.com/en/docs/claude-code/cli-reference}
-}
-
-@misc{docs:claudecode2026settings,
-  author       = {{Anthropic}},
-  title        = {{Claude Code} settings},
-  howpublished = {Claude Code documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that
-                  \texttt{settings.json} and the documented environment
-                  variables expose no setting that scopes or bypasses the
-                  upstream API prompt cache.},
-  url          = {https://docs.claude.com/en/docs/claude-code/settings}
-}
-
-@misc{docs:openai2026promptcaching,
-  author       = {{OpenAI}},
-  title        = {Prompt caching},
-  howpublished = {OpenAI Platform documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that
-                  \texttt{prompt\_cache\_key} is a routing / partition
-                  hint, not a disable switch, and explicitly not a
-                  security boundary --- cache hits cross sessions when
-                  prefixes collide.},
-  url          = {https://platform.openai.com/docs/guides/prompt-caching}
-}
-
-@misc{docs:openai2026convstate,
-  author       = {{OpenAI}},
-  title        = {Conversation state},
-  howpublished = {OpenAI Platform documentation},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. URL on \texttt{developers.openai.com}
-                  resolves; the older \texttt{platform.openai.com/docs/api-reference/responses}
-                  403'd in agent-side WebFetch and may require auth.
-                  Used in \S3.5 to assert that \texttt{store=true} (default)
-                  retains responses server-side for 30 days, that
-                  \texttt{previous\_response\_id} / Sessions / \texttt{conversation\_id}
-                  / \texttt{auto\_previous\_response\_id} are mutually
-                  exclusive alternative stateful channels (not isolation
-                  knobs), and that the only documented opt-out is
-                  \texttt{store=false} (disables retention entirely).},
-  url          = {https://developers.openai.com/api/docs/guides/conversation-state}
-}
-
-@misc{repo:openai2026codex,
-  author       = {{OpenAI}},
-  title        = {{Codex} {CLI}},
-  howpublished = {GitHub repository},
-  year         = {2026},
-  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
-                  Codex CLI README and configuration documentation expose
-                  no cache flag or environment variable. Verify against
-                  the README at the commit hash cited in \S4 once the
-                  agent-version table is finalized.},
-  url          = {https://github.com/openai/codex}
-}
-
-% ─── Workshop anchor dataset (positioning, not yet citable) ────────────
-
-@misc{aidev2026,
-  author       = {TBD --- verify},
-  title        = {{AIDev}: A Dataset of {>1M} Agentic Pull Requests from
-                  {AI} Teammates},
-  howpublished = {SE 3.0 Workshop at KDD 2026 anchor dataset},
-  year         = {2026},
-  note         = {Per prose: preprint URL not yet public. Do NOT insert into
-                  references.bib until the AIDev paper/preprint is released
-                  and a human verifies authors + URL.}
-}
-```
+> **Follow-up still owed (not blocking):** the `repo:openai2026codex` entry's `note` currently says "Verify against the README at the commit hash cited in \S4 once the agent-version table is finalized." That promise is unfulfilled until [04_experimental_setup.md](04_experimental_setup.md)'s agent-version table pins a concrete `openai/codex@<sha>`. Once it does, grep the pinned tree (`docs/`, `CONTRIBUTING.md`, any config schema) for `cache` / `CODEX_CACHE` / `--no-cache` / `--fresh` and amend the entry's `note` with the SHA + the grep result before the final freeze.
 
 ---
 
@@ -833,7 +323,7 @@ Four arcs the paper sits between:
 1. **The SWE-agent → mini-SWE-agent → onlycodes trajectory** on IDE tool design. We are the third data point.
 2. **The PAL → PoT → CodeAct → Anthropic/Cloudflare Code Mode lineage** on code-as-action. We port it from external tools to internal IDE primitives, with a coding benchmark.
 3. **The Zhang et al. "tool-use tax" framing.** We supply coding-agent evidence for a principle stated on general reasoning.
-4. **The modification ↔ computation regime axis** (stratified SWE-bench variants on one side, MLE-Bench / MLAgentBench / RE-Bench / SWE-Lancer / CORE-Bench on the other). We *cross* the regime axis with the tool-surface axis — neither side has done this crossing before, which is why the sign-flip finding has not been reported.
+4. **The modification ↔ computation regime axis** (stratified SWE-bench variants on one side, MLE-Bench / MLAgentBench / RE-Bench / SWE-Lancer / CORE-Bench on the other). We *cross* the regime axis with the tool-surface axis — neither side has done this crossing before, which is why the four-cell cost structure across (regime, agent) pairs has not been reported.
 
 The risks reviewers will press hardest:
 - "How is this not SWE-agent?" → 2026 models, three arms, regime stratification.

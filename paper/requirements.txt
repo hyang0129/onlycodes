@@ -1,0 +1,15 @@
+# paper/ build dependencies.
+# Install: python3 -m pip install -r requirements.txt
+# (or: make deps — runs the same command via the Makefile)
+#
+# Required by:
+#   build_numbers.py        — pandas, numpy
+#   lint.py                 — stdlib only
+#   figures_src/*.py        — matplotlib, pandas, numpy
+#   data/scripts/*.py       — pandas, numpy, scipy (paired_contrasts.py uses scipy.stats)
+#
+# Lower bounds are conservative; tested 2026-05-28 on the versions in comments.
+pandas>=2.0          # tested 2.3.3
+numpy>=1.24          # tested 2.4.3
+scipy>=1.10          # tested 1.16.3
+matplotlib>=3.7      # tested 3.10.8

@@ -1,7 +1,7 @@
 # 06 — Discussion
 # THIS IS A MORE DETAILED OUTLINE NOT THE ACTUAL PAPER DRAFT
 
-**Role of this file.** Per-section outline. Compiled prose lives in `sections/06_discussion.tex`; this file plans the structure and pinned content. The discussion has one job: take the §5 sign-flip pattern, explain *why* it lands the way it does, and hand the reader something actionable. It is **not** a re-statement of §5 results in prose; it is the mechanism layer that the headline numbers leave unexplained.
+**Role of this file.** Per-section outline. Compiled prose lives in `sections/06_discussion.tex`; this file plans the structure and pinned content. The discussion has one job: take the §5 four-cell cost structure (and especially the asymmetric SWE-bench/Claude cell where `code_only` is the only one not winning), explain *why* it lands the way it does, and hand the reader something actionable. It is **not** a re-statement of §5 results in prose; it is the mechanism layer that the headline numbers leave unexplained.
 
 **Page target:** 0.5 page (ceiling 0.75), per [outline.md:22](outline.md#L22) (budget table) and [outline.md:140](outline.md#L140) (section header). The 8-page workshop ceiling is binding; if §5 overruns, the first place §6 gives up budget is §6.4–§6.6, not the three mechanism questions.
 
@@ -31,14 +31,14 @@ The only cell in Table 1 where `code_only` spends more than its closest rival. C
 
 ### 6.2 Mechanism Q2 — Why `code_only` shifts the per-LLM-call input budget (~100 words / ~0.18 page)
 
-On SWE-bench Codex, LLM-call counts are flat across arms (~19 each), yet `code_only` uses ~25% fewer input tokens and ~34% fewer tool calls than `baseline`. The originally hypothesized "MCP output compression" framing is **falsified** — the median per-call output is actually *larger* under `execute_code` than under `exec_command` in every cell we measured. Two cleaner mechanisms drive the win:
+On SWE-bench Codex, LLM-call counts are flat across arms (~18 each), yet `code_only` uses ~25% fewer input tokens and ~25% fewer tool calls than `baseline`. The originally hypothesized "MCP output compression" framing is **falsified** — the median per-call output is actually *larger* under `execute_code` than under `exec_command` in every cell we measured. Two cleaner mechanisms drive the win:
 
-- **(H1) Tool-call batching.** `execute_code` averages `\result{mcp_output_size}{codex_swebench:onlycode:tools_per_llm}` tool calls per LLM step vs `\result{mcp_output_size}{codex_swebench:baseline:tools_per_llm}` for `baseline` — one Python script subsumes what `exec_command` requires several calls to do.
+- **(H1) Tool-call batching.** At nearly identical LLM-round counts (`\result{mcp_output_size}{codex_swebench:baseline:llm_calls_per_run}` for `baseline` vs `\result{mcp_output_size}{codex_swebench:onlycode:llm_calls_per_run}` for `onlycode`), `execute_code` issues `\result{mcp_output_size}{codex_swebench:onlycode:calls_per_run}` tool calls per run vs `\result{mcp_output_size}{codex_swebench:baseline:calls_per_run}` for `baseline` — one Python script subsumes what `exec_command` requires several calls to do. The per-turn metric `tools_per_llm` is not the right test: `baseline` registers higher there because it has *two* tools available (`exec_command` + `apply_patch`) and fires them in parallel within a turn, which is a different phenomenon than the within-script batching H1 names.
 - **(H2) Upper-tail suppression.** Median per-call output is unchanged (`\result{mcp_output_size}{codex_swebench:onlycode:median_chars}` vs `\result{mcp_output_size}{codex_swebench:baseline:median_chars}` chars), but p99 collapses from `\result{mcp_output_size}{codex_swebench:baseline:p99_chars}` (the `exec_command` `max_output_tokens` ceiling) to `\result{mcp_output_size}{codex_swebench:onlycode:p99_chars}` — the agent paginates output in Python rather than dumping verbatim stdout.
 
 The `bash_only` control reproduces neither signal, ruling out "restrict native tools" as the active ingredient.
 
-**Cross-cell scope.** H1 holds for Codex on both benchmarks; Claude empirically does not batch on either benchmark (~1 tool call per LLM response in all arms). H2 holds in 3 of 4 cells; the exception is Codex Artifact, where the rival surface already produces tight outputs and there is no tail to suppress.
+**Cross-cell scope.** H1 holds for Codex on both benchmarks; Claude empirically does not batch on either benchmark — on Claude SWE-bench `onlycode` issues *more* tool calls per run than `baseline` (`\result{mcp_output_size}{claude_swebench:onlycode:calls_per_run}` vs `\result{mcp_output_size}{claude_swebench:baseline:calls_per_run}`), and the Claude Artifact reduction tracks a parallel drop in LLM rounds rather than per-step batching. H2 holds in 3 of 4 cells; the exception is Codex Artifact, where the rival surface already produces tight outputs and there is no tail to suppress.
 
 **Triangulation with §6.1.** On Claude SWE-bench, H2 still holds at the per-call level (p99 drops from `\result{mcp_output_size}{claude_swebench:baseline:p99_chars}` to `\result{mcp_output_size}{claude_swebench:onlycode:p99_chars}`) but `onlycode` *loses* on input tokens because LLM-call count inflates by ~17%. The same cell §6.1 explains as edit-friction is the cell §6.2 sees as round-count inflation — two angles on one mechanism.
 
@@ -72,13 +72,13 @@ One paragraph. The artifact-suite contract (§3.6) — deterministic / offline /
 
 Honest accounting, compressed to ~3 sentences:
 
-1. **Works for:** quantifying tool-surface tax under cache-noise (cache-adjusted methodology, §3.5); isolating regime effects via the artifact-vs-SWE-bench split; surfacing agent-design coupling (the sign-flip across Claude × Codex).
+1. **Works for:** quantifying tool-surface tax under cache-noise (cache-adjusted methodology, §3.5); isolating regime effects via the artifact-vs-SWE-bench split; surfacing agent-design coupling (the significant same-regime divergence on SWE-bench — Codex *** vs Claude NS — between agents under an identical restriction).
 2. **Doesn't work for:** claiming model-capability differences (pass rates are tied; we only measure path differences). Per-task pathology analysis is out of paper scope (decided 2026-05-28; the `analyze/` pipeline remains as harness instrumentation but does not land in the paper — see [paper/CLAUDE.md] for the rationale).
 3. **One sentence on power:** per-cell SWE-bench breakdowns at n≈12-15 per repo are noisier than the headline n=100 — but per-repo breakdowns were **cut** from §5 in the 2026-05-28 restructure (former §5.5), so this caveat applies only to any per-repo claim made in compiled prose. Default: do not make per-repo claims.
 
 ### 6.6 Implications for agent design (~70 words / ~0.12 page)
 
-Workshop audience expects actionable claims. **One prescriptive paragraph** that falls out of Table 1 + the sign-flip in §5 + the §6.3 dual-mechanism decomposition:
+Workshop audience expects actionable claims. **One prescriptive paragraph** that falls out of Table 1 + §5's four-cell cost structure (`code_only` cheaper or tied in 3 of 4 cells; SWE-bench/Claude the lone NS exception) + the §6.3 dual-mechanism decomposition:
 
 - **If your tasks are computation-dominated:** drop the IDE surface; `code_only` wins on cost at parity capability (Artifact Claude cell).
 - **If your tasks are modification-dominated with a high workload solve-rate:** the surface choice is roughly cost-neutral on Claude (unanimous-pass-conditional `code_only` Δcost is `\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}` NS). The headline +14% penalty is a failure-cost effect on instances no surface can solve, not a per-edit tax on successful runs.

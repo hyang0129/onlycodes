@@ -20,13 +20,17 @@
 
 ## §5.1 Headline contrasts (~2¶ + Table 1, ~0.5 page)
 
-**Role.** Lands three of the four contribution bullets simultaneously: the regime sign-flip (bullet #2) via the cost-adj column, capability invariance within regime (bullet #3) via the pass column, and agent-design dependence (bullet #4) via the SWE-bench Codex row reversing Claude's direction. Loads §5.2 (distribution check) and §5.3 (visual).
+**Role.** Lands three of the four contribution bullets simultaneously: `code_only`'s cost-surface dominance (bullet #2) via the cost-adj column — cheaper in 3 of 4 cells, NS-exception in the fourth — capability invariance within regime (bullet #3) via the pass column, and agent-design dependence (bullet #4) via the SWE-bench Codex row significantly winning where Claude is directionally costly. Loads §5.2 (distribution check) and §5.3 (visual).
+
+**Framing change (2026-05-28, user pushback).** The pre-2026-05-28 outline framed §5.1¶1 as a "regime sign-flip" between Artifact and SWE-bench. That framing dramatizes a non-significant +14% in the SWE-bench/Claude cell (p=0.12). The corrected reading: `code_only` is cheaper or tied in all four cells; SWE-bench/Claude is the lone NS exception. The genuine *significant* same-regime divergence — Codex −20% *** vs Claude +14% NS on SWE-bench — is an agent-design claim, carried by §5.3¶2, not a regime-level sign-flip. Anywhere downstream that uses "sign-flip" framing (abstract, §1 bullet #2, §6.3 lead-in) inherits this retune — see the *Downstream edits* block at the end of this file.
 
 **Table 1.** Already wired in [sections/05_results.tex:14–70](sections/05_results.tex#L14-L70). Four rows (Artifact × {Claude, Codex}, SWE-bench × {Claude, Codex}) × four metric pairs (pass Δ pp, cost-adj Δ%, input-tok Δ%, output-tok Δ%), each with a paired Wilcoxon p. No edits required to the table itself.
 
-### ¶1 — sign-flip on cost-adjusted (~80 words)
+### ¶1 — `code_only` dominates cost in 3 of 4 cells (~80 words)
 
-**Claim.** Read down Table 1's cost-adj column: Artifact cells show `code_only` cheaper than `bash_only` (the cheapest rival in that regime); SWE-bench cells split — Claude `code_only` is **+14% vs `baseline`** (NS), Codex `code_only` is **−20% vs `baseline`** (p<10⁻⁸). Same model, same harness, same prompts; regime AND agent jointly determine sign.
+**Claim.** Read down Table 1's cost-adj column: `code_only` is cheaper than its cheapest rival in **3 of 4 cells** — Artifact/Claude **−25%** (***), Artifact/Codex −7% (NS, directional), SWE-bench/Codex **−20%** (***). The lone exception is SWE-bench/Claude at **+14%** (NS, directional). The two significant cost wins span both benchmarks and both agents; the one cell where the cost advantage disappears (SWE-bench/Claude) motivates the edit-friction mechanism in §6.1. Same model, same harness, same prompts — so the per-cell magnitude (and sign) of the `code_only` advantage depends jointly on regime and agent design.
+
+**Do NOT call this a "sign-flip."** The SWE-bench/Claude exception is non-significant at the cell level (+14%, p=0.12), so the honest framing is "wins or ties everywhere; one NS exception," not "two regimes pointing opposite directions." The significant same-regime divergence (Codex *** vs Claude NS on SWE-bench) is the agent-design contrast carried in §5.3¶2 — keep it there, not here.
 
 **Macros to cite (all already exist in Table 1).** Pull the cell values from `paired_contrasts.csv`:
 - Artifact / Claude cost-adj: `\respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{...:mean_b}` → −24.6%, p = 7.4×10⁻¹⁴ (***)
@@ -34,11 +38,11 @@
 - SWE-bench / Claude cost-adj: +14.4%, p = 0.12 (NS, label "directional costlier")
 - SWE-bench / Codex cost-adj: −19.9%, p = 2.0×10⁻⁹ (***)
 
-**Prose pattern.** Two significant cells with `***` precision; two NS cells with "NS" + directional magnitude in pp%. Do NOT report turns, $/turn, or median-per-instance cost — §3 stipulates the metric surface. Do NOT report raw (non-cache-adjusted) cost — §3.5 stipulates cost-adj is the sole cost column.
+**Prose pattern.** Lead with the "3 of 4 cells" count, then enumerate the two significant wins, then flag the NS exception. Two significant cells with `***` precision; two NS cells with "NS" + directional magnitude in pp%. Do NOT report turns, $/turn, or median-per-instance cost — §3 stipulates the metric surface. Do NOT report raw (non-cache-adjusted) cost — §3.5 stipulates cost-adj is the sole cost column.
 
 ### ¶2 — capability invariance + token decomposition (~80 words)
 
-**Claim.** Pass-rate column in Table 1 is NS in all four cells — the sign-flip on cost lives in *how* the agent arrives at the answer, not whether it arrives. Token columns localize the cost asymmetry: Claude SWE-bench's +14% cost overrun is concentrated in **+40% output tokens** (p < 10⁻⁹), foreshadowing §6.1 (edit friction); Codex SWE-bench's −20% cost win is concentrated in **−25% input tokens** with output flat (NS), foreshadowing §6.2 (per-call input budget). Two arms in the same regime arrive at opposite costs via opposite token surfaces.
+**Claim.** Pass-rate column in Table 1 is NS in all four cells — the cost asymmetry lives in *how* the agent arrives at the answer, not whether it arrives. Token columns localize the asymmetry: Claude SWE-bench's +14% cost overrun (NS) is concentrated in **+40% output tokens** (p < 10⁻⁹), foreshadowing §6.1 (edit friction); Codex SWE-bench's −20% cost win is concentrated in **−25% input tokens** with output flat (NS), foreshadowing §6.2 (per-call input budget). Same regime, two different agents, opposite cost outcomes via opposite token surfaces.
 
 **Macros to cite.**
 - Aggregate pass-NS claim: cite the four `\resp{paired_contrasts}{...:pass:wilcoxon_p}` p-values implicitly via "all four NS" — no need to re-quote each value (it's in the table).
@@ -65,9 +69,9 @@
 
 ---
 
-## §5.3 Sign-flip + agent-flip (Figure 2, ~2¶, ~0.55 page)
+## §5.3 Cost-surface dominance + agent-design dependence (Figure 2, ~2¶, ~0.55 page)
 
-**Role.** Visual headline — turns Table 1's four numbers into one panel that a reviewer reads in 2 seconds. Also lands the contribution bullet #4 elevation: optimal surface is jointly determined by regime AND agent design (was "secondary," now co-headline).
+**Role.** Visual headline — turns Table 1's four numbers into one panel that a reviewer reads in 2 seconds. Also lands the contribution bullet #4 elevation: optimal surface is jointly determined by regime AND agent design (was "secondary," now co-headline). *Section renamed 2026-05-28: former title "Sign-flip + agent-flip" overclaimed on a NS +14% — see §5.1 framing-change note.* Figure filename `02_signflip.{pdf,png}` is unchanged (rename deferred to avoid churn in macros/build pipeline); refer to it in prose as "Figure 2 (cost-ratio panel)," not "the sign-flip figure."
 
 **Figure 2.** Single panel, 4 bars: cost ratio `code_only / cheapest rival` per cell, 1.0 reference line. Already generated at [paper/generated/figures/02_signflip.{pdf,png}](generated/figures/). No edits required.
 
@@ -79,7 +83,7 @@
 
 ### ¶2 — agent-design dependence (~80 words)
 
-**Claim.** SWE-bench Claude `code_only` is the *only* cell where restricting to `execute_code` makes the agent costlier than its cheapest rival; SWE-bench Codex is the cell where the same restriction yields the **largest** cost win in the matrix. Same restriction, opposite direction — surface choice is jointly determined by regime AND agent design (the §1 contribution bullet #4 framing). §6.1 explains the Claude direction (edit friction on Edit/Write-heavy tasks); §6.2 explains the Codex direction (tool-call batching + upper-tail output suppression). §5.3 stops at "the two cells need separate explanations"; the explanations live in §6.
+**Claim.** SWE-bench Claude `code_only` is the *only* cell where restricting to `execute_code` makes the agent directionally costlier than its cheapest rival (+14%, **NS**); SWE-bench Codex is the cell where the same restriction yields the **largest significant** cost win in the matrix (−20%, ***). Same regime, same restriction, opposite outcomes — surface choice is jointly determined by regime AND agent design (the §1 contribution bullet #4 framing). The agent-design contrast is the load-bearing claim here: Codex's significant win is the confirmed effect, Claude's directional loss is the asymmetric companion that motivates §6.1. §6.1 explains the Claude direction (edit friction on Edit/Write-heavy tasks); §6.2 explains the Codex direction (tool-call batching + upper-tail output suppression). §5.3 stops at "the two cells need separate explanations"; the explanations live in §6.
 
 **Macros to cite.** Reuse `\result{fig.02_signflip}{swebench-claude:ratio}` and `\result{fig.02_signflip}{swebench-codex:ratio}` from ¶1 to anchor the contrast — no new macros.
 
@@ -136,9 +140,9 @@ Before any subsection here can become LaTeX prose in [sections/05_results.tex](s
 - [x] **§5.1** — Table 1 already wired (`tab:code-only-headline`); macros already exist. Drafting ¶1 + ¶2 directly from this outline. No prerequisite.
 - [x] **§5.2** — Figure 1 already generated; `01_distribution.numbers.csv` exists and is loaded by the build pipeline. Drafting ¶1 directly. No prerequisite.
 - [x] **§5.3** — Figure 2 already generated; `02_signflip.numbers.csv` exists and is loaded by the build pipeline. Drafting ¶1 + ¶2 directly. No prerequisite.
-- [ ] **§5.4** — *blocked*: need `paper/data/agreement_matrix.csv` and `paper/data/headline_unanimous.csv` to exist before prose can land. Production script promotion (`paper/data/scripts/q3_unanimous_pass.py` from `/tmp/q3_unanimous_only.py` + `/tmp/q3_headline_compare.py`) is the unblock step. Numbers themselves exist in [`q3_capability_tie_investigation.md`](q3_capability_tie_investigation.md) §11 — promotion is mechanical, not analytical.
+- [x] **§5.4** — both CSVs shipped 2026-05-28 via `paper/data/scripts/q3_unanimous_pass.py` (see line 130 above). Tables 2 + 3 wired in [sections/05_results.tex](sections/05_results.tex). Drafting prose directly. No prerequisite.
 
-§5.1–§5.3 can be drafted in parallel, independently of §5.4. §5.4 cannot begin until the two CSVs land.
+All four subsections are unblocked; drafting in source-of-truth order (§5.1 → §5.4).
 
 ---
 
@@ -151,4 +155,11 @@ Folding former §5.4 / §5.5 / §5.7 and renumbering former §5.6 → §5.4 inva
 - [04_experimental_setup.md](04_experimental_setup.md) line 26: "Codex is reported as a generalization probe in §5.6" → "Codex is reported as a co-headline finding in §5.3" (Figure 2's 4-bar).
 - [06_discussion.md](06_discussion.md) lines 30, 53, 99 (§5.6 references): retarget to §5.4.
 
-Not applied in this commit — flagged here for the editor of those files.
+**Sign-flip framing retune (2026-05-28, user pushback).** §5.1 and §5.3 now frame the headline as "`code_only` cheaper in 3 of 4 cells (one NS exception)" rather than a "regime sign-flip." Audit and retune downstream where the old framing leaks:
+
+- [00_abstract.md](00_abstract.md): any sentence shaped "code-mode is cheaper in one regime and costlier in the other" → reframe to "cheaper in 3 of 4 (benchmark, agent) cells; SWE-bench/Claude is the NS exception that motivates §6.1's edit-friction analysis."
+- [01_introduction.md](01_introduction.md): ✅ already aligned with the new framing — Contribution 1 ("A four-cell agent-conditional cost structure") and the "Key claim" prose rule ("lead with the four-cell shape, not any individual cell's magnitude") both predate the 2026-05-28 retune but happen to match it. No action required on the intro outline. The compiled `sections/01_introduction.tex` placeholder will need to inherit this framing when it gets drafted.
+- [06_discussion.md](06_discussion.md) §6.3 lead-in: if the §6.3 motivation cites the "sign-flip" as the gap to explain, rephrase as "the NS +14% on SWE-bench/Claude — the lone cell where `code_only` is directionally costlier."
+- Figure 2 file is still named `02_signflip.{pdf,png}` and the macro key is `fig.02_signflip`; do **not** rename either (would churn `paper/macros.tex` and build pipeline). Refer to it in prose as "Figure 2 (cost-ratio panel)."
+
+Not applied in this commit — flagged here for the editors of those files.

@@ -1,10 +1,138 @@
 % paper/sections/01_introduction.tex
-% TODO: full prose. See the introduction outline file for the 5-beat structure.
 %
-% Beat 1 — Three contradictory claims
-% Beat 2 — Why the gap matters
-% Beat 3 — What we do (crossed 3-arm × 2-regime ablation)
-% Beat 4 — What we find (sign-flip + capability invariance + agent-design dependence)
-% Beat 5 — Roadmap
+% First draft. Structure follows paper/01_introduction.md (four paragraphs:
+% phenomenon → detection axis → prior data → contributions). Numbers resolve
+% through \result / \respct / \resp macros backed by paper/data/*.csv.
+%
+% Forward references use labels that will be added in §2--§6 as those
+% sections are drafted; undefined refs render as `??` until then. See
+% paper/01_introduction.md §"Drafting checklist" before revising.
 
-To be drafted.
+\section{Introduction}
+\label{sec:introduction}
+
+% ───────────────────────── ¶1 — The phenomenon ─────────────────────────
+Coding agents now ship with overlapping tool surfaces---Read, Grep, Glob,
+Edit, Write, and Bash on Claude Code; ACI primitives on SWE-agent; an MCP
+\texttt{execute\_code} tool on emerging stacks---and the field has settled
+on three mutually incompatible claims about which surface a coding agent
+should expose. \emph{Specialised IDE primitives are required:} SWE-agent
+argues that the Agent--Computer Interface (ACI) is load-bearing, with an
+ACI-vs-shell ablation that produced a gain of $+10.7$ percentage points on
+SWE-bench at the time of publication~\cite{yang2024sweagent}. \emph{Bash
+alone is sufficient:} mini-SWE-agent is a $\sim$100-line bash-only scaffold
+that posts ${>}74\%$ on SWE-bench Verified with no IDE primitives at
+all~\cite{repo:miniswagent}. \emph{Replace the tool surface with code
+execution:} industry write-ups report ${\sim}98$--$99\%$ token reductions
+by routing through an MCP \texttt{execute\_code} tool rather than calling
+the native tools
+directly~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode,blog:cloudflare2026codemodemcp}.
+The three prescriptions have never been crossed on a single harness, on
+the same model, with regime stratification, so the field cannot tell
+which condition each applies under, or whether they contradict each
+other at all.
+
+% ──────────────────────── ¶2 — The detection axis ──────────────────────
+We run the missing crossed comparison: the same harness, the same models,
+and the same prompts, evaluated under three tool surfaces
+(\texttt{baseline}, \texttt{bash\_only}, \texttt{code\_only}) crossed
+with two task regimes (computation, modification) and two agents (Claude
+Code, Codex CLI), all under an integrity-clean SWE-bench protocol with
+post-agent \texttt{test\_patch} application
+(\S\ref{sec:method-integrity})~\cite{jimenez2024swebench}. The
+\texttt{baseline} arm exposes each agent's default tool surface;
+\texttt{bash\_only} restricts to native bash plus read/glob/grep, with
+Edit and Write removed; \texttt{code\_only} replaces the entire tool
+surface with a single MCP tool---\texttt{mcp\_\_codebox\_\_execute\_code}
+on a persistent Python+Bash REPL---and disallows every native
+built-in~\cite{anthropic2024mcp}. The modification cell is SWE-bench Mini
+($n=100$, canonical post-agent \texttt{test\_patch} protocol); the
+computation cell is a set of self-contained tasks each defined by a
+(workspace, hidden grader, reference output) triple with deterministic
+offline scoring (\S\ref{sec:method-artifact}). The crossed
+$3 \times 2 \times 2$ design is the minimum that disambiguates the three
+claims of \S\ref{sec:introduction}, because each claim's scope (which
+surface, which regime, which agent) is exactly what is in dispute. The
+computation cell is a methodological vehicle, not a benchmark
+contribution---the artifact-benchmark space is already
+crowded~(\S\ref{sec:relwork-artifacts}).
+
+% ──────────────────── ¶3 — What's already known ────────────────────────
+None of the prior data points on this axis is the crossed comparison we
+run. SWE-agent's two-arm ACI-vs-shell ablation~\cite{yang2024sweagent}
+and mini-SWE-agent's single bash-only arm on SWE-bench
+Verified~\cite{repo:miniswagent} both fix a single tool-surface axis on
+the modification regime, with no code-execution arm and no regime
+stratification. The industry write-ups on code-execution
+surfaces~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode,blog:cloudflare2026codemodemcp}
+target external-MCP tool surfaces (Drive, Salesforce, Stripe,
+Cloudflare's API) rather than internal IDE primitives and report no
+benchmark and no regime split. Liu et al.\ offer an architectural
+taxonomy of Claude Code's primitives explicitly without
+ablation~\cite{liu2026divecc}; the Verdent technical report describes a
+single-vendor informal ablation without public methodology or regime
+stratification~\cite{report:verdent2025swebench}. No prior work has
+crossed three internal IDE surfaces under regime stratification with
+both a Claude- and a Codex-family agent, so the three claims of
+\S\ref{sec:introduction} have remained unfalsifiable at the population
+level.
+
+% ───────────────────────── ¶4 — Contributions ──────────────────────────
+We make three contributions.
+
+\paragraph{(1) A four-cell agent-conditional cost structure.} Across the
+four (regime, agent) cells, \texttt{code\_only} is the cheaper arm in
+three and directionally more expensive in the fourth---Artifact/Claude
+($\Delta_{\text{cost adj.}} =
+\respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_b}$,
+$p = \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:wilcoxon_p}$),
+Artifact/Codex
+($\respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_b}$,
+directional), and SWE-bench/Codex
+($\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_b}$,
+$p = \resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:wilcoxon_p}$)
+all favour \texttt{code\_only}, while SWE-bench/Claude reverses
+($\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$,
+NS; full table at \S\ref{sec:results}, Table~\ref{tab:code-only-headline}).
+The same restriction wins under three (regime, agent) combinations and
+loses under one, so surface choice is jointly determined by regime AND
+agent design, not by either alone; the three prior claims of \S\ref{sec:introduction} coexist
+because each is true under its specific (regime, agent) combination and
+false under the others.
+
+\paragraph{(2) A three-mechanism causal decomposition.} We decompose the
+four-cell structure into three causally distinct mechanisms whose joint
+footprint matches it; no single mechanism predicts the full table.
+\emph{Path-cost (edit friction):} \texttt{code\_only} must express every
+file edit as a Python script, and on Claude SWE-bench this scales output
+tokens with edit volume (per-instance Spearman
+$\rho = \result{edit_friction}{rho_edit_chars:value}$,
+$p = \resp{edit_friction}{rho_edit_chars_p:value}$), driving the lone
+Claude $\times$ SWE-bench output-token blow-up
+(\S\ref{sec:disc-pathcost}). \emph{Failure-cost:} the Claude $\times$
+SWE-bench cost overrun localises to unanimous-fail and split instances;
+on the unanimous-pass subset the gap collapses sharply
+(\S\ref{sec:disc-failurecost}).
+% TODO macro: \respct{headline_unanimous}{...:unanimous_majority_mean_delta_pct}{...:mean_b}
+% — blocked on paper/data/headline_unanimous.csv promotion (outline.md L234).
+\emph{Pricing asymmetry:} on Codex, \texttt{execute\_code} batches
+operations per LLM call ($\sim\!2.5$ tool calls per LLM step vs.\
+$\sim\!1.0$ for \texttt{baseline}) and paginates verbose outputs, which
+produces the SWE-bench/Codex win without changing LLM-call count---an
+effect absent on Claude (\S\ref{sec:disc-pricing}).
+
+\paragraph{(3) Capability invariance, with empirical receipt.} Pass
+rates differ by less than three percentage points across all four cells
+$\times$ three arms, with all four headline pass-rate contrasts NS
+(Table~\ref{tab:code-only-headline}); and on a strict $9/9$-trial
+unanimity criterion the majority of instances in every cell are
+unanimously decided, so task outcome does not vary with tool surface
+for the bulk of the corpus.
+% TODO macro: \respp{agreement_matrix}{...:unanimous_majority_pct}
+% — blocked on paper/data/agreement_matrix.csv (outline.md L234).
+Tool surface changes the path and the cost, not the answer. This
+dissociation is what licenses contributions (1) and (2) as
+cost-engineering claims rather than capability claims, and it is
+consistent with the Capability Overlap Principle~\cite{zhang2026tooltax};
+the load-bearing claim is the empirical agreement-matrix result, not the
+theoretical frame.

@@ -4,23 +4,127 @@
 % citation candidates to ../02_related_work.md with enough context for a
 % human to verify, then a human inserts into this file.
 %
-% Current state (2026-05-28): 32 verified entries moved from
-% paper/02_related_work.md staging block following human approval
-% (see chat log + arXiv verification of MLE-Bench / SWE-Lancer author
-% lists on 2026-05-28).
-%
-% Still pending in the staging block (unsafe — TBD flags):
-%   jimenez2024swebench           (author list reconstructed, verify ICLR)
-%   zhang2024autocoderover        (author list reconstructed)
-%   gao2023pal                    (author list reconstructed)
-%   chen2023pot                   (author list reconstructed)
-%   wang2025openhands             (full author list TBD)
-%   amazon2025swepolybench        (full author list TBD)
-%   toolscope                     (author field literally "TBD")
-%   fan2025sweeffi                (full author list TBD)
-%   aidev2026                     (preprint URL not yet public)
+% Current state (2026-05-28): 55 verified entries. Staging block in
+% paper/02_related_work.md is now empty.
+%   - First batch (32 entries) moved from staging on 2026-05-28 following
+%     human approval (see chat log + arXiv verification of MLE-Bench and
+%     SWE-Lancer author lists).
+%   - Second batch (8 entries) moved later the same day after a follow-up
+%     audit of the 8 academic TBDs verified author lists against arXiv:
+%     jimenez2024swebench, zhang2024autocoderover, gao2023pal, chen2023pot,
+%     wang2025openhands, amazon2025swepolybench, toolscope, fan2025sweeffi.
+%     The audit caught a hallucinated 27-author OpenHands list (replaced
+%     with the correct 24-author arXiv list); see that entry's note for
+%     the fabricated-name list preserved as the canonical fix point.
+%   - 2026-05-28: wilcoxon1945 moved from the §4 staging block in
+%     04_experimental_setup.md after all bibliographic fields verified
+%     against JSTOR (DOI 10.2307/3001968), Semantic Scholar, and the
+%     Shippensburg full-text PDF. The §4.3 outline prose at
+%     04_experimental_setup.md:46 already substantively does what this
+%     citation anchors (defending Wilcoxon over paired-t for heavy-tailed
+%     per-task $\Delta$); the §4 sections/ .tex is still a TODO stub, so
+%     no \cite{wilcoxon1945} call exists in the compiled tree yet --- wire
+%     in when 04_experimental_setup.tex is drafted.
+%   - 2026-05-28: 6 vendor-documentation entries moved from staging after
+%     an agent-run audit re-fetched each URL on the access date and
+%     confirmed the cited absences: docs:anthropic2026promptcaching,
+%     docs:anthropic2026contextediting, docs:claudecode2026cli,
+%     docs:claudecode2026settings (Anthropic surfaces),
+%     docs:openai2026promptcaching and docs:openai2026convstate (OpenAI
+%     surfaces --- agent WebFetch returned HTTP 403 on prompt caching and
+%     surfaced only a subset of channels on conversation state; human
+%     reviewer manually verified both pages from a browser session). URL
+%     fields updated to canonical hosts per observed redirects:
+%     docs.claude.com → platform.claude.com (prompt caching, context
+%     editing) and docs.claude.com/en/docs/claude-code/* →
+%     code.claude.com/docs/en/* (CLI reference, settings). Audit details
+%     and the per-entry "Recommended action" log are preserved in
+%     paper/02_related_work.md "Audit 2026-05-28" block.
+%   - 2026-05-28: docs:anthropic2026pricing and docs:openai2026pricing
+%     moved from the §4.4 staging block in 04_experimental_setup.md after
+%     human verification of both URLs. Access date pinned to 2026-05-28
+%     in each entry's note (pricing pages have no stable archival URL).
+%     Cited from §4.4 to anchor the per-Mtok rates in
+%     paper/data/cost_rates.csv.
+%   - 2026-05-28: aidev2026 moved from staging after human approval.
+%     Located at arXiv:2507.15003 (Li, Zhang, Hassan; 2025-07-20) ---
+%     the original staged stub had the dataset name "AIDev: A Dataset
+%     of >1M Agentic Pull Requests" as title plus a `TBD` author list;
+%     audit re-fetched against arXiv, corrected the entry to
+%     @article form with the actual paper title and v1 PR count (456K),
+%     and recorded the >1M-PRs-via-refreshed-dataset claim as a `note`
+%     field rather than in the title. New top-of-file
+%     "Workshop anchor dataset" section matches the section order in
+%     paper/02_related_work.md (first H2 there is the SE 3.0 positioning
+%     section).
+%   - 2026-05-28: repo:openai2026codex moved from staging after human
+%     approval. Inserted into the §3.5 vendor-documentation section
+%     alongside its Anthropic/OpenAI siblings. README landing-page
+%     verification is the basis for the cite as moved; the `note`
+%     preserves the existing caveat that the README at the §4 commit
+%     hash should be grep'd for `cache` / `CODEX_CACHE` / etc. once
+%     the agent-version table pins a SHA, and the note should be
+%     amended with the hash + grep findings before the final freeze.
+%   - 2026-05-28: report:openai2026gpt55, report:anthropic2026sonnet46,
+%     and repo:anthropic2026claudecode moved from the §4.2 staging block
+%     in 04_experimental_setup.md. Both model-identifier cites resolved
+%     to *system cards* (not model cards), as the staged notes
+%     anticipated --- type, title, howpublished, and url fields swapped
+%     accordingly. GPT-5.5 system card verified via OpenAI's Deployment
+%     Safety Hub (openai.com returned HTTP 403 to agent-side WebFetch,
+%     same posture as docs:openai2026promptcaching --- human reviewer
+%     confirmed from a browser session). Sonnet 4.6 system card verified
+%     via the Anthropic announcement page (model identifier
+%     "claude-sonnet-4-6" present verbatim). Claude Code repo URL
+%     confirmed (127k stars / 20.9k forks under the anthropics org).
+%   - 2026-05-28: mcnemar1947 moved from the §4.3 staging block in
+%     04_experimental_setup.md. All fields verified against
+%     DOI 10.1007/BF02295996 (resolves via Springer/Cambridge Core);
+%     author, title, journal, volume/issue, pages, year cross-checked
+%     against Springer, PubMed (PMID 20254758), IDEAS/RePEc, and
+%     Semantic Scholar. Conditional-staging trigger met: the §4.3
+%     outline at 04_experimental_setup.md:47 retains the "Wilcoxon-on-
+%     rates analogue of McNemar" prose. Like wilcoxon1945, the §4
+%     sections/ .tex is still a TODO stub, so no \cite{mcnemar1947}
+%     call exists in the compiled tree yet --- wire in when
+%     04_experimental_setup.tex is drafted.
+
+% ─── Workshop anchor dataset (SE 3.0 positioning) ──────────────────────
+
+@article{aidev2026,
+  author        = {Li, Hao and Zhang, Haoxiang and Hassan, Ahmed E.},
+  title         = {The Rise of {AI} Teammates in Software Engineering ({SE}) 3.0:
+                   How Autonomous Coding Agents Are Reshaping Software Engineering},
+  journal       = {arXiv preprint arXiv:2507.15003},
+  year          = {2025},
+  eprint        = {2507.15003},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2507.15003},
+  note          = {Releases the AIDev dataset (456K+ PRs in v1, refreshed to
+                   $\sim$1M PRs through 2025-08-01 at
+                   \url{https://huggingface.co/datasets/reebazahid/AIDev}).
+                   Cited as the SE 3.0 workshop anchor dataset; the workshop
+                   itself is at KDD 2026 (\url{https://agent-se.github.io/}).
+                   Authors verified against arXiv:2507.15003 on 2026-05-28.}
+}
 
 % ─── Foundational substrate (must-cite, we run on these) ───────────────
+
+@inproceedings{jimenez2024swebench,
+  author    = {Jimenez, Carlos E. and Yang, John and Wettig, Alexander and
+               Yao, Shunyu and Pei, Kexin and Press, Ofir and
+               Narasimhan, Karthik},
+  title     = {{SWE-bench}: Can Language Models Resolve Real-World
+               {GitHub} Issues?},
+  booktitle = {ICLR},
+  year      = {2024},
+  eprint    = {2310.06770},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note      = {Author list verified against arXiv:2310.06770 on 2026-05-28
+               (originally reconstructed from prose). ICLR 2024 confirmed.}
+}
 
 @misc{report:openai2024swebenchverified,
   author       = {{OpenAI Preparedness Team}},
@@ -78,6 +182,18 @@
   journal   = {arXiv preprint arXiv:2407.01489},
   year      = {2024},
   month     = jul
+}
+
+@inproceedings{zhang2024autocoderover,
+  author    = {Zhang, Yuntong and Ruan, Haifeng and Fan, Zhiyu and
+               Roychoudhury, Abhik},
+  title     = {{AutoCodeRover}: Autonomous Program Improvement},
+  booktitle = {ISSTA},
+  year      = {2024},
+  eprint    = {2404.05427},
+  archivePrefix = {arXiv},
+  note      = {Author list verified against arXiv:2404.05427 on 2026-05-28
+               (originally reconstructed from prose). ISSTA 2024 confirmed.}
 }
 
 @misc{repo:moatless,
@@ -155,6 +271,35 @@
 
 % ─── Code-as-action lineage ────────────────────────────────────────────
 
+@inproceedings{gao2023pal,
+  author    = {Gao, Luyu and Madaan, Aman and Zhou, Shuyan and Alon, Uri and
+               Liu, Pengfei and Yang, Yiming and Callan, Jamie and
+               Neubig, Graham},
+  title     = {{PAL}: Program-aided Language Models},
+  booktitle = {ICML},
+  year      = {2023},
+  eprint    = {2211.10435},
+  archivePrefix = {arXiv},
+  note      = {Author list verified against arXiv:2211.10435 on 2026-05-28
+               (originally reconstructed from prose). Title casing
+               corrected to ``Program-aided'' per arXiv. ICML 2023 per
+               published proceedings; arXiv abstract page does not display
+               the venue.}
+}
+
+@article{chen2023pot,
+  author    = {Chen, Wenhu and Ma, Xueguang and Wang, Xinyi and
+               Cohen, William W.},
+  title     = {Program of Thoughts Prompting: Disentangling Computation from
+               Reasoning for Numerical Reasoning Tasks},
+  journal   = {TMLR},
+  year      = {2023},
+  eprint    = {2211.12588},
+  archivePrefix = {arXiv},
+  note      = {Author list verified against arXiv:2211.12588 on 2026-05-28
+               (originally reconstructed from prose). TMLR 2023 confirmed.}
+}
+
 @inproceedings{wang2024codeact,
   author    = {Wang, Xingyao and Chen, Yangyi and Yuan, Lifan and
                Zhang, Yizhe and Li, Yunzhu and Peng, Hao and Ji, Heng},
@@ -163,6 +308,31 @@
   year      = {2024},
   eprint    = {2402.01030},
   archivePrefix = {arXiv}
+}
+
+@inproceedings{wang2025openhands,
+  author    = {Wang, Xingyao and Li, Boxuan and Song, Yufan and
+               Xu, Frank F. and Tang, Xiangru and Zhuge, Mingchen and
+               Pan, Jiayi and Song, Yueqi and Li, Bowen and
+               Singh, Jaskirat and Tran, Hoang H. and Li, Fuqiang and
+               Ma, Ren and Zheng, Mingzhang and Qian, Bill and
+               Shao, Yanjun and Muennighoff, Niklas and Zhang, Yizhe and
+               Hui, Binyuan and Lin, Junyang and Brennan, Robert and
+               Peng, Hao and Ji, Heng and Neubig, Graham},
+  title     = {{OpenHands}: An Open Platform for {AI} Software Developers
+               as Generalist Agents},
+  booktitle = {ICLR},
+  year      = {2025},
+  eprint    = {2407.16741},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  note      = {24-author list verified against arXiv:2407.16741 on
+               2026-05-28. An earlier staging draft contained a
+               hallucinated 27-author list with fabricated names
+               (Salakhutdinov, Mitchell, Z. Yang, D. Sun, S. Jha,
+               M. I. H. Chowdhury, B. Sridhar, H. Hu, T. Patel, H. Lin,
+               A. V. Singh, others) --- this entry is the canonical fix
+               point.}
 }
 
 % ─── Theoretical framing (Zhang, NOT Wang) ─────────────────────────────
@@ -241,6 +411,22 @@
   year      = {2025},
   month     = apr,
   note      = {ByteDance Seed team.}
+}
+
+@article{amazon2025swepolybench,
+  author    = {Rashid, Muhammad Shihab and Bock, Christian and
+               Zhuang, Yuan and Buchholz, Alexander and Esler, Tim and
+               Valentin, Simon and Franceschi, Luca and Wistuba, Martin and
+               Sivaprasad, Prabhu Teja and Kim, Woo Jung and
+               Deoras, Anoop and Zappella, Giovanni and Callot, Laurent},
+  title     = {{SWE-PolyBench}: A multi-language benchmark for repository
+               level evaluation of coding agents},
+  journal   = {arXiv preprint arXiv:2504.08703},
+  year      = {2025},
+  month     = apr,
+  note      = {Amazon. Author list verified against arXiv:2504.08703 on
+               2026-05-28 (replaced earlier ``{Amazon Science}'' corporate
+               placeholder).}
 }
 
 @article{sweatlas2026,
@@ -386,6 +572,38 @@
                with surface ablation when paraphrasing.}
 }
 
+@inproceedings{toolscope,
+  author    = {Liu, Marianne Menglin and Garcia, Daniel and
+               Parllaku, Fjona and Upadhyay, Vikas and
+               Shah, Syed Fahad Allam and Roth, Dan},
+  title     = {{ToolScope}: Enhancing {LLM} Agent Tool Use through Tool
+               Merging and Context-Aware Filtering},
+  booktitle = {ACL (Main)},
+  year      = {2026},
+  eprint    = {2510.20036},
+  archivePrefix = {arXiv},
+  note      = {Author list, title, and venue (ACL 2026 Main) verified
+               against arXiv:2510.20036 on 2026-05-28. Title was previously
+               misrecorded as ``Semantic-Redundancy Merging for Tool Sets''
+               in roadmap drafts; author field was a TBD placeholder before
+               this revision.}
+}
+
+% ─── Efficiency / cost ─────────────────────────────────────────────────
+
+@article{fan2025sweeffi,
+  author    = {Fan, Zhiyu and Vasilevski, Kirill and Lin, Dayi and
+               Chen, Boyuan and Chen, Yihao and Zhong, Zhiqing and
+               Zhang, Jie M. and He, Pinjia and Hassan, Ahmed E.},
+  title     = {{SWE-Effi}: Re-Evaluating Software {AI} Agent System
+               Effectiveness Under Resource Constraints},
+  journal   = {arXiv preprint arXiv:2509.09853},
+  year      = {2025},
+  month     = sep,
+  note      = {Author list verified against arXiv:2509.09853 on 2026-05-28
+               (replaced earlier ``Fan and others'' placeholder).}
+}
+
 % ─── Scaffold-component ablations ──────────────────────────────────────
 
 @article{confuciuscodeagent2025,
@@ -409,4 +627,280 @@
   journal   = {arXiv preprint arXiv:2604.25850},
   year      = {2026},
   month     = apr
+}
+
+% ─── Statistical machinery (§4.3) ──────────────────────────────────────
+
+@article{wilcoxon1945,
+  author    = {Wilcoxon, Frank},
+  title     = {Individual Comparisons by Ranking Methods},
+  journal   = {Biometrics Bulletin},
+  volume    = {1},
+  number    = {6},
+  pages     = {80--83},
+  year      = {1945},
+  doi       = {10.2307/3001968},
+  note      = {Cited once in \S 4.3 to anchor the choice of paired Wilcoxon
+               signed-rank over paired-$t$ for the heavy-tailed per-task
+               $\Delta$ distributions. All fields verified against JSTOR
+               (DOI resolves to stable/3001968), Semantic Scholar, and the
+               Shippensburg full-text PDF on 2026-05-28. Classical
+               reference; no `TBD` fields.}
+}
+
+@article{mcnemar1947,
+  author    = {McNemar, Quinn},
+  title     = {Note on the Sampling Error of the Difference between
+               Correlated Proportions or Percentages},
+  journal   = {Psychometrika},
+  volume    = {12},
+  number    = {2},
+  pages     = {153--157},
+  year      = {1947},
+  doi       = {10.1007/BF02295996},
+  note      = {Cited in \S 4.3 step 4 to anchor the ``Wilcoxon-on-rates
+               analogue of McNemar'' framing for the pass-rate
+               comparison (per-task rates $\in \{0, 1/3, 2/3, 1\}$,
+               three seeds per cell). All fields verified against DOI
+               10.1007/BF02295996 (resolves via Springer / Cambridge
+               Core) and cross-checked with PubMed PMID 20254758 and
+               IDEAS/RePEc on 2026-05-28. Classical reference; no
+               \texttt{TBD} fields. Drop this entry if the McNemar
+               framing is removed from \S 4.3 during drafting.}
+}
+
+% ─── Vendor documentation (cited in §3.5 — cache-isolation absence) ────
+%
+% These four entries are the primary sources behind the §3.5
+% documentation-survey claim that no Anthropic surface (Messages API,
+% context editing, Claude Code CLI, Claude Code settings) exposes a
+% parameter, flag, environment variable, or namespace knob that forces a
+% cache miss or scopes cached tokens to a single caller. URLs were
+% accessed 2026-05-28; vendor docs change without versioning, so each
+% entry pins the access date and quotes the specific behavior the cite
+% is being used to deny. Audit details (incl. observed redirects from
+% `docs.claude.com` → `platform.claude.com` / `code.claude.com`) are in
+% the "Audit 2026-05-28" block in
+% paper/02_related_work.md.
+
+@misc{docs:anthropic2026promptcaching,
+  author       = {{Anthropic}},
+  title        = {Prompt caching},
+  howpublished = {Claude API documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Canonical URL on
+                  \texttt{platform.claude.com};
+                  \texttt{docs.claude.com/...} 302-redirects here.
+                  Used in \S3.5 to assert that the Anthropic Messages API
+                  exposes no parameter that forces a cache miss or scopes
+                  cached tokens per caller/session: \texttt{cache\_control}
+                  accepts only \texttt{\{"type": "ephemeral"\}} with an
+                  optional \texttt{ttl} (\texttt{"5m"} default or
+                  \texttt{"1h"}), and the only documented isolation
+                  boundary is workspace-level (effective 2026-02-05),
+                  coarser than per-caller.},
+  url          = {https://platform.claude.com/docs/en/build-with-claude/prompt-caching}
+}
+
+@misc{docs:anthropic2026contextediting,
+  author       = {{Anthropic}},
+  title        = {Context editing},
+  howpublished = {Claude API documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Canonical URL on
+                  \texttt{platform.claude.com};
+                  \texttt{docs.claude.com/...} 302-redirects here.
+                  Used in \S3.5 to assert that the server-side
+                  context-editing primitive (tool-result clearing,
+                  thinking-block clearing, client-side SDK compaction)
+                  exposes no per-caller or per-session isolation knob.},
+  url          = {https://platform.claude.com/docs/en/build-with-claude/context-editing}
+}
+
+@misc{docs:claudecode2026cli,
+  author       = {{Anthropic}},
+  title        = {{Claude Code} CLI reference},
+  howpublished = {Claude Code documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Canonical URL on
+                  \texttt{code.claude.com};
+                  \texttt{docs.claude.com/en/docs/claude-code/...}
+                  301-redirects here.
+                  Used in \S3.5 to assert that the Claude Code CLI
+                  exposes no \texttt{--no-cache}, \texttt{--cache-key},
+                  \texttt{--fresh-session}, \texttt{--disable-cache}, or
+                  \texttt{--bypass-cache} flag. The closest documented
+                  cache-related flag is
+                  \texttt{--exclude-dynamic-system-prompt-sections},
+                  whose stated purpose is to \emph{improve} prompt-cache
+                  reuse, not bypass it. \texttt{--no-session-persistence}
+                  is documented as ``Disable session persistence so
+                  sessions are not saved to disk and cannot be resumed.
+                  Print mode only.'' --- i.e.\ controls local session
+                  state, not the upstream API cache.},
+  url          = {https://code.claude.com/docs/en/cli-reference}
+}
+
+@misc{docs:claudecode2026settings,
+  author       = {{Anthropic}},
+  title        = {{Claude Code} settings},
+  howpublished = {Claude Code documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Canonical URL on
+                  \texttt{code.claude.com};
+                  \texttt{docs.claude.com/en/docs/claude-code/...}
+                  301-redirects here.
+                  Used in \S3.5 to assert that \texttt{settings.json}
+                  and the documented environment variables
+                  (\texttt{CLAUDE\_CODE\_ENABLE\_TELEMETRY},
+                  \texttt{OTEL\_METRICS\_EXPORTER}, \texttt{NO\_COLOR},
+                  \texttt{FORCE\_COLOR}, etc.) expose no setting that
+                  disables, scopes, or bypasses the upstream Anthropic
+                  prompt cache.},
+  url          = {https://code.claude.com/docs/en/settings}
+}
+
+@misc{docs:openai2026promptcaching,
+  author       = {{OpenAI}},
+  title        = {Prompt caching},
+  howpublished = {OpenAI Platform documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that
+                  \texttt{prompt\_cache\_key} is a routing / partition
+                  hint, not a disable switch, and explicitly not a
+                  security boundary --- cache hits cross sessions when
+                  prefixes collide. URL returned HTTP 403 to agent-side
+                  \texttt{WebFetch} on access date; human reviewer
+                  manually opened the page from a browser session and
+                  confirmed the cited wording on 2026-05-28.},
+  url          = {https://platform.openai.com/docs/guides/prompt-caching}
+}
+
+@misc{docs:openai2026convstate,
+  author       = {{OpenAI}},
+  title        = {Conversation state},
+  howpublished = {OpenAI Platform documentation},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. URL on \texttt{developers.openai.com}
+                  resolves; the older
+                  \texttt{platform.openai.com/docs/api-reference/responses}
+                  403'd in agent-side \texttt{WebFetch} and may require
+                  auth. Used in \S3.5 to assert that \texttt{store=true}
+                  (default) retains responses server-side for 30 days,
+                  that \texttt{previous\_response\_id} / Sessions /
+                  \texttt{conversation\_id} / \texttt{auto\_previous\_response\_id}
+                  are mutually exclusive alternative stateful channels
+                  (not isolation knobs), and that the only documented
+                  opt-out is \texttt{store=false} (disables retention
+                  entirely). Human reviewer manually verified the page
+                  wording from a browser session on 2026-05-28; the
+                  agent fetcher had surfaced only a subset of these
+                  channels, so the on-page presence of all four
+                  (Sessions, \texttt{auto\_previous\_response\_id}) is
+                  human-confirmed, not agent-confirmed.},
+  url          = {https://developers.openai.com/api/docs/guides/conversation-state}
+}
+
+@misc{repo:openai2026codex,
+  author       = {{OpenAI}},
+  title        = {{Codex} {CLI}},
+  howpublished = {GitHub repository},
+  year         = {2026},
+  note         = {Accessed 2026-05-28. Used in \S3.5 to assert that the
+                  Codex CLI README and configuration documentation expose
+                  no cache flag or environment variable. Verify against
+                  the README at the commit hash cited in \S4 once the
+                  agent-version table is finalized.},
+  url          = {https://github.com/openai/codex}
+}
+
+% ─── Agent surfaces (§4.2) ─────────────────────────────────────────────
+%
+% Model-identifier and product cites for the two agent-surface rows of
+% the §4.2 table. Both vendor "model card" cites resolved to *system
+% cards* on verification (2026-05-28) --- type fields adjusted.
+
+@misc{report:openai2026gpt55,
+  author       = {{OpenAI}},
+  title        = {{GPT-5.5} System Card},
+  howpublished = {OpenAI system card / Deployment Safety Hub},
+  year         = {2026},
+  month        = apr,
+  url          = {https://openai.com/index/gpt-5-5-system-card/},
+  note         = {Accessed 2026-05-28. Cited to fix the model identifier
+                  (\texttt{gpt-5.5}) used in the Codex CLI arm of
+                  \S 4.2. System card (not model card); identifier
+                  confirmed on the OpenAI Deployment Safety Hub mirror
+                  (\url{https://deploymentsafety.openai.com/gpt-5-5}).
+                  Published 2026-04-23, updated 2026-04-24. URL on
+                  \texttt{openai.com} returned HTTP 403 to agent-side
+                  \texttt{WebFetch}; human reviewer verified from a
+                  browser session on 2026-05-28 (same posture as
+                  \texttt{docs:openai2026promptcaching} and
+                  \texttt{docs:openai2026convstate}).}
+}
+
+@misc{report:anthropic2026sonnet46,
+  author       = {{Anthropic}},
+  title        = {{Claude Sonnet 4.6} System Card},
+  howpublished = {Anthropic system card},
+  year         = {2026},
+  month        = feb,
+  url          = {https://www.anthropic.com/claude-sonnet-4-6-system-card},
+  note         = {Accessed 2026-05-28. Cited to fix the model identifier
+                  (\texttt{claude-sonnet-4-6}) used in the Claude Code
+                  arm of \S 4.2. System card (not model card);
+                  identifier confirmed verbatim on the announcement page
+                  (\url{https://www.anthropic.com/news/claude-sonnet-4-6},
+                  published 2026-02-17). Landing URL 307-redirects to a
+                  PDF on \texttt{www-cdn.anthropic.com}.}
+}
+
+@misc{repo:anthropic2026claudecode,
+  author       = {{Anthropic}},
+  title        = {{Claude Code}},
+  howpublished = {GitHub repository \url{https://github.com/anthropics/claude-code}},
+  year         = {2026},
+  note         = {Primary product cite for the Claude Code row of
+                  \S 4.2's agent-surface table. Pin exact CLI version
+                  via the \texttt{\textbackslash result\{claude\_cli\_version\}}
+                  macro --- bib entry refers to the project, not a
+                  frozen release. Decision-pending note resolved
+                  2026-05-28 in favour of this primary cite for parity
+                  with \texttt{repo:openai2026codex}; the
+                  \texttt{liu2026divecc} architectural survey retains
+                  its \S 02 related-work citation but is not the \S 4.2
+                  anchor. Canonical URL confirmed 2026-05-28
+                  (\texttt{anthropics} org, 127k\,stars, 20.9k\,forks,
+                  links to official docs at \texttt{code.claude.com}).}
+}
+
+% ─── Per-Mtok cost rates (§4.4) ────────────────────────────────────────
+%
+% Vendor pricing pages anchoring the rates in paper/data/cost_rates.csv.
+% Pricing pages mutate without versioning, so each entry pins the access
+% date. Human-verified 2026-05-28.
+
+@misc{docs:anthropic2026pricing,
+  author       = {{Anthropic}},
+  title        = {{Anthropic API} Pricing},
+  howpublished = {Anthropic pricing page},
+  year         = {2026},
+  url          = {https://www.anthropic.com/pricing},
+  note         = {Accessed 2026-05-28. Documentary source for the Claude
+                  per-Mtok rates in \texttt{paper/data/cost\_rates.csv}.
+                  Pricing pages mutate without versioning; re-verify at
+                  freeze.}
+}
+
+@misc{docs:openai2026pricing,
+  author       = {{OpenAI}},
+  title        = {{OpenAI API} Pricing},
+  howpublished = {OpenAI pricing page},
+  year         = {2026},
+  url          = {https://openai.com/api/pricing/},
+  note         = {Accessed 2026-05-28. Documentary source for the
+                  GPT-5.5 per-Mtok rates in
+                  \texttt{paper/data/cost\_rates.csv}. Pricing pages
+                  mutate without versioning; re-verify at freeze.}
 }

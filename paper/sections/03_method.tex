@@ -1,10 +1,286 @@
 % paper/sections/03_method.tex
-% TODO: full prose. See the method outline file.
 %
-% Subsections:
-%   Three-arm tool surface (tool_rich / bash_only / code_only)
-%   Harness design (subprocess isolation, overlay refresh, git-history strip)
-%   Evaluation integrity (post-Issue #287 protocol, disclosed leak fix)
-%   Capability Overlap framing (Zhang et al. applied to IDE primitives)
+% First draft. Structure follows paper/03_method.md (six subsections:
+% three-arm tool surface, harness design, evaluation integrity, capability
+% overlap framing, cache + cost methodology, artifact-suite contract).
+%
+% Drafting rules:
+%   * No bare digits in prose — paper/lint.py enforces this; numbers come
+%     through \result / \respct / \resp macros or live in §4/§5.
+%   * Arm names are consolidated paper convention (baseline / bash_only /
+%     code_only) per the 2026-05-27 decision in paper/outline.md L257.
+%     Legacy harness names (tool_rich / onlycode) are confined to §4.2.
+%   * §3.3 omits the planned audit paragraph: no CSV produces
+%     \result{audit_total} / \result{audit_propagated} and §5's
+%     restructured outline has no audit subsection to forward into.
+%   * Labels match those already referenced in sections/01_introduction.tex
+%     (sec:method-integrity, sec:method-artifact).
 
-To be drafted.
+% ─────────────────────── 3.1 Three-arm tool surface ────────────────────
+\subsection{Three-arm tool surface}
+\label{sec:method-arms}
+
+Each arm is defined by what tools are exposed to the agent at process
+launch; the same Claude Code or Codex CLI binary runs all three. The
+\texttt{baseline} arm passes no restriction flag and exposes the agent's
+default surface --- Read, Grep, Glob, Edit, Write, Bash, and the
+agent-built-in subagents on Claude Code; the analogous file
+primitives, shell tool, and structured \texttt{apply\_patch} on Codex.
+The \texttt{bash\_only} arm restricts to bash plus read-only browsing
+primitives, disallowing every file-editing built-in
+(\texttt{Edit}/\texttt{Write}/\texttt{MultiEdit}/\texttt{NotebookEdit}
+on Claude; \texttt{shell\_tool} with structured patching disabled on
+Codex). The \texttt{code\_only} arm replaces the entire surface with a
+single MCP tool, \texttt{mcp\_\_codebox\_\_execute\_code}, served by
+our exec-server stack as a persistent Python+Bash REPL keyed by
+working directory across calls; all native built-ins are explicitly
+disallowed.
+
+Two implementation asymmetries are worth surfacing. First, Codex
+exposes no feature flag for disabling its structured
+\texttt{apply\_patch} tool, so on Codex the \texttt{bash\_only} and
+\texttt{code\_only} arms enforce restriction with a prompt-prefix
+directive rather than a hard flag; this is soft enforcement and model
+compliance is not guaranteed. We measure and report the resulting
+leakage in §\ref{sec:results} and find it empirically
+negligible. Second, \texttt{code\_only} depends on REPL state
+persisting between \texttt{execute\_code} invocations: without a
+persistent kernel, the round-trip savings of ``one script per task''
+collapse, so the exec-server pins
+the persistent-kernel environment flag for the runs that feed §\ref{sec:results}.
+
+The \texttt{bash\_only} arm matches the tool surface of
+mini-SWE-agent~\cite{repo:miniswagent} but does not reuse its loop,
+prompt template, or scaffold; we apply the bash-only restriction to
+the same Claude Code and Codex binaries the other two arms use, so the
+contrast isolates the tool surface variable rather than comparing
+scaffold implementations.
+
+% ──────────────────────── 3.2 Harness design ───────────────────────────
+\subsection{Harness design}
+\label{sec:method-harness}
+
+\paragraph{Per-instance setup (SWE-bench).} Each SWE-bench instance is
+cloned at its \texttt{base\_commit} and a per-instance Python virtual
+environment is built against it. The repository and the virtual
+environment are each given their own pristine fuse-overlayfs lower
+directory, so a per-arm upper directory captures every write and is
+discarded between arms --- no re-clone, no
+\texttt{pip~install~-e~.} between arms. The
+virtual-environment overlay is mounted back at its original creation
+path because console-script shebangs bake that absolute path at
+install time. Artifact tasks are self-contained and skip this step.
+
+\paragraph{Git-history strip.} Before the agent runs, the worktree is
+collapsed to a single orphan commit at its current tree; all refs,
+packed refs, reflogs, and alternates are deleted, and
+\texttt{git~gc~--prune=now} repacks the resulting object set. The
+agent cannot recover the upstream reference fix via \texttt{git~log},
+\texttt{git~show}, or the reflog. Fixed author and committer dates
+make the orphan SHA deterministic for a given tree, so repeated runs
+strip to the same state.
+
+\paragraph{Overlay refresh between arms.} \texttt{git~reset} cannot
+un-create files an earlier arm added (fuse-overlayfs copy-up plus
+EEXIST semantics), so the harness unmounts, deletes the upper and
+work directories, recreates them, remounts, and re-strips history
+between arms. The agent's view of the merged mount path is stable;
+the underlying state is fresh.
+
+\paragraph{Per-arm subprocess isolation.} Each agent invocation
+creates a fresh temporary configuration directory containing only the
+credentials and minimal config needed for the run, and points the
+binary at it via \texttt{CLAUDE\_CONFIG\_DIR} or
+\texttt{CODEX\_HOME}. No session-persistence files, no cross-run
+state. Claude is invoked with
+\texttt{--dangerously-skip-permissions\,--no-session-persistence};
+Codex with \texttt{--dangerously-bypass-approvals-and-sandbox}.
+
+\paragraph{Wall-time cap.} Each invocation runs in a fresh process
+group; on timeout the harness sends \texttt{SIGKILL} to the entire
+group (so subagents and spawned shells die with the parent) and the
+run is recorded \texttt{FAIL} with a synthetic \texttt{wall\_timeout}
+JSONL record. The numerical wall budget is pinned in
+§\ref{sec:setup}.
+
+% ────────────────── 3.3 Evaluation integrity (SWE-bench) ───────────────
+\subsection{Evaluation integrity}
+\label{sec:method-integrity}
+\label{sec:m-integrity}
+
+The canonical SWE-bench protocol applies the gold \texttt{test\_patch}
+only after the agent terminates: at run time the agent observes the
+repository at \texttt{base\_commit}, and the tests used for grading
+are not present in the worktree~\cite{jimenez2024swebench}. Our
+harness implements deferred application explicitly. The
+\texttt{test\_patch} is applied only after the agent's process exits,
+and a \texttt{pytest~--collect-only} gate then runs against the
+patched tree to confirm that the held-out tests are collectible. A
+zero-item collection scores \texttt{FAIL} rather than letting the test
+runner silently report success against a non-existent suite.
+
+Because our agents --- unlike the bash-only patch-submission scaffold
+used in the original SWE-bench evaluation --- can write arbitrary
+files anywhere in the worktree, the canonical ``apply the patch''
+step is preceded by two cleanup operations. Every file that the
+\texttt{test\_patch} targets is restored from \texttt{HEAD} to discard
+any agent edits to it, and every path the patch lists as a new file
+is removed from the worktree so an agent-created file cannot collide
+with a held-out test and block the apply. \texttt{git~apply} is then
+invoked against the resulting tree. If the apply still fails ---
+almost always because an agent-created file could not safely be
+removed in the second step --- the instance is recorded
+\texttt{FAIL} with reason \emph{post-agent~git~apply~failed:~agent
+edits conflicted with the held-out test patch}, rather than scored
+against a tree we cannot trust. This is strictly more conservative
+than the canonical protocol, which assumes a clean apply.
+
+% ──────────────────── 3.4 Capability Overlap framing ───────────────────
+\subsection{The Capability Overlap framing}
+\label{sec:method-capability}
+
+We adopt the tool-use tax framing of
+Zhang~et~al.~\cite{zhang2026tooltax}: a tool delivers net benefit iff
+the task-specific capability gain it provides exceeds the per-call
+cost of carrying its definition in the prompt. The original framework
+targets general math and question-answering tool use; we apply it to
+the coding-agent IDE surface. Most Claude Code IDE primitives are
+bash-subsets in \emph{capability} (Read, Grep, Glob, and Write reduce
+to \texttt{cat}, \texttt{grep}, \texttt{find}, and shell-heredoc
+respectively); \texttt{Edit} is the one primitive with non-overlapping
+capability --- atomic byte-precise replacement with linting --- which
+is awkward to express in bash. The per-call tax (system-message
+bytes spent defining each tool) is task-invariant; the \emph{gain}
+term depends on the regime, on which primitives the agent actually
+uses, and on the agent's call pattern.
+
+§\ref{sec:results} reads the four-cell cost structure as the
+empirical landing of this inequality across (regime, agent) pairs;
+§\ref{sec:discussion} decomposes the structure into the three
+mechanisms (edit-friction path-cost, failure-cost on doomed
+trajectories, and pricing-asymmetry batching/pagination) that the
+framework alone does not pin down.
+
+% ──────────────── 3.5 Cache isolation and cost reporting ───────────────
+\subsection{Cache isolation and cost reporting}
+\label{sec:m-cost}
+\label{sec:method-cost}
+
+Across the four surfaces this paper touches --- the Anthropic
+Messages API, the Claude Code CLI, the OpenAI Responses API, and the
+OpenAI Codex CLI --- no documented parameter, flag, environment
+variable, or namespace knob forces a server-side cache miss or scopes
+cached tokens to a single caller. The only documented mechanism is
+implicit: change the cached content so the cache key changes.
+Anthropic's \texttt{cache\_control} controls breakpoints, not
+bypass~\cite{docs:anthropic2026promptcaching}; the context-editing
+primitive exposes lifecycle and scope but no per-session isolation
+knob~\cite{docs:anthropic2026contextediting}; the Claude Code CLI's
+\texttt{--no-session-persistence} flag controls local session state,
+not the upstream
+cache~\cite{docs:claudecode2026cli,docs:claudecode2026settings}.
+OpenAI's \texttt{prompt\_cache\_key} is a routing and partition hint,
+not a disable
+switch~\cite{docs:openai2026promptcaching}, and the Responses API's
+stored-state primitives (\texttt{store=true} retention,
+\texttt{previous\_response\_id}, the Sessions API) are alternative
+stateful channels rather than isolation knobs layered on top of the
+cache~\cite{docs:openai2026convstate}; the Codex CLI exposes no cache
+flag or environment variable~\cite{repo:openai2026codex}. We
+therefore cannot guarantee per-task cache isolation in the reported
+numbers and instead address the resulting non-stationarity in the
+cost-reporting methodology.
+
+Cost in §\ref{sec:results} is reported as a single
+\emph{cache-adjusted} column, derived from the underlying
+token-billed formula
+$\text{cost} = \text{input\_tokens} \cdot r_{\text{in}}
++ \text{output\_tokens} \cdot r_{\text{out}}$
+(every token billed at non-cached rates; the per-model
+rates~$r_{\text{in}}, r_{\text{out}}$ are pinned in
+§\ref{sec:setup}) plus a per-arm median-floor adjustment.
+For each arm, let $M_{\text{arm}}$ be the median across that arm's
+instances of first-turn \texttt{cache\_read\_input\_tokens} ---
+empirically the floor representing ``system prompt plus tool
+definitions are warm in cache.'' Any instance whose first-turn
+\texttt{cache\_read} falls below $M_{\text{arm}}$ is bumped up to
+$M_{\text{arm}}$ for accounting; instances already at or above the
+floor and all multi-turn cache reads are unchanged. The adjustment
+normalises the system-prompt warm/cold lottery without claiming we
+achieved isolation.
+
+The adjustment deliberately stops at the arm-median, which
+corresponds to the size of the shared system prompt plus tool
+definitions; we do not claim it controls for cache sharing
+\emph{beyond} that prefix. Such post-prompt cross-task sharing is,
+however, vanishingly unlikely. Both providers' prompt caches key on
+a prefix hash invalidated by any byte difference in the cached span,
+and past the system prompt the conversation diverges per task: the
+first user message is the task statement (a fresh string per
+instance), the model's response is task-conditional, and every
+subsequent tool-call payload carries task-specific arguments. For a
+cache hit to extend further, two instances would need byte-identical
+task statements, model responses, and tool-call payloads in
+identical order. Empirically, per-instance first-turn
+\texttt{cache\_read} clusters tightly around each arm's system-prompt
+token count, with no bimodal tail consistent with cross-task content
+reuse. We deliberately do not report raw API-billed cost: it is
+sensitive to run order and ambient cache state we cannot control, so
+reporting it would mislead readers about effects we cannot
+disentangle from confounds.
+
+% ──────────────────── 3.6 The artifact-suite contract ──────────────────
+\subsection{The artifact-suite contract}
+\label{sec:method-artifact}
+\label{sec:m-artifact}
+
+The artifact suite is a new benchmark; this subsection is the
+methodology layer that defends it the way §\ref{sec:method-integrity}
+defends our SWE-bench protocol. Per-category counts and what each
+category probes are reported in §\ref{sec:setup}; this section
+specifies the contract, not the inventory.
+
+\paragraph{Task contract.} Every artifact instance is a four-part
+bundle on disk: a \texttt{task.yaml} (problem statement, execution
+budget fields, and pointers to the other three parts), a
+\texttt{workspace/} directory of public files copied into the agent's
+scratch dir at materialise time, a \texttt{grader/hidden.py} exposing
+a single \texttt{grade(scratch\_dir) $\rightarrow$ GradeResult} entry
+point, and a \texttt{grader/reference\_output.*} reference artifact
+used to verify the grader itself. Instance IDs follow the convention
+\texttt{<category>\_\_<slug>}. The execution-budget fields
+(\texttt{max\_code\_runs}, \texttt{max\_wall\_seconds}) are declared
+in \texttt{task.yaml} for schema completeness but enforcement is off
+in the corpus that feeds §\ref{sec:results}; the only wall-clock cap
+is the harness-level budget from §\ref{sec:method-harness}.
+
+\paragraph{Grader contract.} Each task's \texttt{grade(scratch\_dir)}
+returns a score in $[0, 1]$ together with a pass flag. Three rules
+constrain what \texttt{grade()} may do: it must be
+\emph{deterministic} (re-grading the same scratch directory returns
+the same score); \emph{offline} (no network calls, no API keys, no
+clock-dependent oracles); and \emph{seeded-random only} (any
+stochasticity is gated by a fixed seed declared in the grader).
+\texttt{grade()} may not write to the scratch directory, which would
+contaminate later re-grading. A reference-output round-trip ---
+running the grader against \texttt{workspace/} merged with
+\texttt{reference\_output/} and asserting that the score equals one
+--- is the grader's own self-test and is executed by CI on every
+push.
+
+\paragraph{Subprocess isolation.} Graders run in a fresh subprocess
+launched per task, with results serialised as JSON on stdout. A
+grader-side exception cannot kill the harness, and stdout pollution
+from grader code is forbidden by the same contract. This is the
+artifact-side analogue of the
+\texttt{pytest~--collect-only} pre-flight gate in
+§\ref{sec:method-integrity}.
+
+\paragraph{No-leak invariant.} Before the agent runs, the
+materialiser copies \texttt{workspace/} into the scratch dir and
+scans the resulting tree for any path matching
+\texttt{grader/hidden.py} or \texttt{reference\_output.*}. A match
+raises and the run is aborted \emph{before} the agent starts; no run
+can complete with the answer key in its working directory. The check
+is pre-flight by design --- catching a leak post-hoc would already
+have biased the grade.

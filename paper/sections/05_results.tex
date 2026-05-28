@@ -1,15 +1,54 @@
 % paper/sections/05_results.tex
-% Prose stubs are TODO. This file currently holds the float blocks for §5:
+% Float blocks + prose for §5. Floats:
 %   Table 1 (tab:code-only-headline)           — §5.1
 %   Figure 1 (fig:cost-distribution)            — §5.2
 %   Figure 2 (fig:cost-structure)               — §5.3
 %   Table 2 (tab:agreement-matrix)              — §5.4
 %   Table 3 (tab:headline-unanimous)            — §5.4
-%
-% Floats land here; section headings + prose are drafted around them once
-% §5.1-§5.4 numbers are stable. Macros (\result, \resp, \respp, \respct)
-% are defined in paper/macros.tex; data lives in paper/data/*.csv and the
-% figure sidecars at paper/generated/figures/*.numbers.csv.
+% Prose drafted 2026-05-28 from 05_results.md against frozen numbers in
+% paired_contrasts.csv, 01_distribution.numbers.csv, 02_signflip.numbers.csv,
+% agreement_matrix.csv, headline_unanimous.csv. Macros (\result, \resp,
+% \respp, \respct) are defined in paper/macros.tex.
+
+% ---------------------------------------------------------------------------
+% §5.1 — Headline contrasts
+% ---------------------------------------------------------------------------
+\subsection{Code-only dominates cost in three of four cells}
+\label{sec:results-headline}
+
+Reading down the cost-adjusted column of Table~\ref{tab:code-only-headline},
+\texttt{code\_only} is cheaper than its cheapest tool-rich rival in three
+of the four (regime, agent) cells. The two significant wins are
+Artifact/Claude (\respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_b},
+$p=$\,\resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:wilcoxon_p})
+and SWE-bench/Codex
+(\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_b},
+$p=$\,\resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:wilcoxon_p});
+the third is a directional Artifact/Codex win
+(\respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_b}, NS).
+The lone exception is SWE-bench/Claude at
+\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}
+(NS, $p=$\,\resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:wilcoxon_p}).
+The two significant wins span both benchmarks and both agents; the single
+cell where the advantage disappears motivates the edit-friction analysis
+in \S\ref{sec:discussion-edit-friction}. Same model, same harness, same
+prompts --- the per-cell magnitude and sign of the \texttt{code\_only}
+advantage depend jointly on regime and agent design.
+
+The pass column is statistically tied in every cell: the cost asymmetry
+lives in \emph{how} the agent arrives at the answer, not whether it
+arrives. The token columns localize the SWE-bench surfaces to opposite
+axes. SWE-bench/Claude's directionally costlier outcome is concentrated
+in output tokens
+(\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_b},
+$p=$\,\resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:wilcoxon_p}),
+foreshadowing the edit-friction mechanism
+(\S\ref{sec:discussion-edit-friction}). SWE-bench/Codex's significant
+cost win is concentrated in input tokens
+(\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_b},
+$p=$\,\resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:wilcoxon_p})
+with output statistically flat, foreshadowing the per-call input-budget
+mechanism (\S\ref{sec:discussion-codex-batching}).
 
 \begin{table*}[t]
 \centering
@@ -70,6 +109,40 @@ SWE-bench & Codex
 \end{table*}
 
 % ---------------------------------------------------------------------------
+% §5.2 — Per-cell Δcost distribution (defends Table 1 means against outliers)
+% ---------------------------------------------------------------------------
+\subsection{Per-cell cost-difference distributions}
+\label{sec:results-distribution}
+
+Figure~\ref{fig:cost-distribution} sorts per-instance $\Delta_{\text{cost
+adj.}}$ (code-only minus the cheapest rival, averaged across three seeds)
+within each cell; negative values favor code-only. Artifact/Claude is a
+uniform shift:
+\result{fig.01_distribution}{artifact-claude:n_win}[0] of
+\result{fig.01_distribution}{artifact-claude:n}[0] instances win, median
+$\$\result{fig.01_distribution}{artifact-claude:median_delta}[3]$ per
+instance. SWE-bench/Codex shows the same shape:
+\result{fig.01_distribution}{swebench-codex:n_win}[0] of
+\result{fig.01_distribution}{swebench-codex:n}[0] win, median
+$\$\result{fig.01_distribution}{swebench-codex:median_delta}[3]$. The
+two NS cells differ in structure. Artifact/Codex is symmetric near
+parity ---
+\result{fig.01_distribution}{artifact-codex:n_win}[0] of
+\result{fig.01_distribution}{artifact-codex:n}[0] win, IQR
+$\$\result{fig.01_distribution}{artifact-codex:p25_delta}[3]$ to
+$\$\result{fig.01_distribution}{artifact-codex:p75_delta}[3]$ ---
+consistent with the Table~\ref{tab:code-only-headline} NS row.
+SWE-bench/Claude inverts: only
+\result{fig.01_distribution}{swebench-claude:n_win}[0] of
+\result{fig.01_distribution}{swebench-claude:n}[0] favor code-only,
+and the loss concentrates in a right tail
+($p_{75}=\$\result{fig.01_distribution}{swebench-claude:p75_delta}[3]$,
+$\max=\$\result{fig.01_distribution}{swebench-claude:max_delta}[2]$).
+The directionally costlier mean for that cell is task-structural, not
+outlier-driven; the shape of panels (c) and (d) anticipates the two
+mechanism questions in \S\ref{sec:discussion}.
+
+% ---------------------------------------------------------------------------
 % Figure 1 — §5.2 — per-cell Δcost_adj distribution (2×2 small multiples)
 % ---------------------------------------------------------------------------
 \begin{figure}[t]
@@ -80,6 +153,39 @@ SWE-bench & Codex
 \end{figure}
 
 % ---------------------------------------------------------------------------
+% §5.3 — Cost-surface dominance + agent-design dependence (Figure 2)
+% ---------------------------------------------------------------------------
+\subsection{Cost surface depends jointly on regime and agent design}
+\label{sec:results-structure}
+
+Figure~\ref{fig:cost-structure} reduces the four cost-adjusted contrasts
+to one panel. Left to right, the per-cell ratios
+$(\text{code-only}\,/\,\text{cheapest rival})$ are
+\result{fig.02_signflip}{artifact-claude:ratio}
+(Artifact/Claude, $^{***}$),
+\result{fig.02_signflip}{artifact-codex:ratio}
+(Artifact/Codex, ns),
+\result{fig.02_signflip}{swebench-claude:ratio}
+(SWE-bench/Claude, ns), and
+\result{fig.02_signflip}{swebench-codex:ratio}
+(SWE-bench/Codex, $^{***}$); exact $p$-values are in
+Table~\ref{tab:code-only-headline}. The unity-parity line is crossed by
+the SWE-bench/Claude bar alone.
+
+The SWE-bench/Claude cell is the only one where restricting the agent
+to a single \texttt{execute\_code} tool makes it directionally costlier
+than its cheapest rival, while SWE-bench/Codex is the cell where the same
+restriction yields the matrix's largest significant cost win. Same
+regime, same restriction, opposite outcomes: surface choice is jointly
+determined by regime \emph{and} agent design. Codex's significant cost
+win is the confirmed effect; Claude's directional loss is the
+asymmetric companion that the discussion unpacks separately. The
+Claude direction (edit friction on \texttt{Edit}/\texttt{Write}-heavy
+tasks) is analyzed in \S\ref{sec:discussion-edit-friction}; the Codex
+direction (tool-call batching and upper-tail output suppression) in
+\S\ref{sec:discussion-codex-batching}.
+
+% ---------------------------------------------------------------------------
 % Figure 2 — §5.3 — four-cell cost structure (renamed from "sign-flip" framing)
 % ---------------------------------------------------------------------------
 \begin{figure}[t]
@@ -88,6 +194,32 @@ SWE-bench & Codex
 \caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Significance from paired Wilcoxon: $^{***}\,p{<}10^{-3}$, ns $= p{\geq}0.05$. Per-cell magnitudes in Table~\ref{tab:code-only-headline}.}
 \label{fig:cost-structure}
 \end{figure}
+
+% ---------------------------------------------------------------------------
+% §5.4 — Agreement matrix + conditional cost (failure-cost decomposition)
+% ---------------------------------------------------------------------------
+\subsection{Agreement matrix and conditional cost}
+\label{sec:results-agreement}
+
+Three seeds across three arms give nine outcomes per instance. The
+agreement matrix (Table~\ref{tab:agreement-matrix}) reports how often
+arms agree per instance, under two definitions. \emph{Strict} (every
+arm passes on every seed, or every arm fails on every seed) ranges from
+\result{agreement_matrix}{swebench:claude:unanimous_strict_pct}[1]\% on
+SWE-bench/Claude to
+\result{agreement_matrix}{artifact:codex:unanimous_strict_pct}[1]\% on
+Artifact/Codex. \emph{Majority} (per-arm pass-rate ${\geq}\,2/3$,
+unanimously across arms) ranges from
+\result{agreement_matrix}{swebench:claude:unanimous_majority_pct}[1]\% to
+\result{agreement_matrix}{artifact:claude:unanimous_majority_pct}[1]\%.
+The strict-to-majority gap on SWE-bench cells (${\approx}13$\,pp) matches
+the seed leave-one-out reclassification rate, so majority counts the
+structurally split instances while strict mixes structural and
+seed-noise splits. Split structure is mostly graded difficulty rather
+than arm-specific easy subsets: only
+\result{agreement_matrix}{swebench:claude:strictly_arm_specific_split_n}[0]
+of \result{agreement_matrix}{swebench:claude:split_majority_n}[0]
+Claude SWE-bench splits has a single arm carrying all passes.
 
 % ---------------------------------------------------------------------------
 % Table 2 — §5.4 — agreement matrix (unanimous vs split, MAJORITY + STRICT)
@@ -123,6 +255,33 @@ SWE-bench & Codex  & 100
 \bottomrule
 \end{tabular}
 \end{table}
+
+Restricting the cost contrast to the unanimous-pass subset
+(Table~\ref{tab:headline-unanimous}) localizes where the full-set
+gap comes from. In three of four cells the gap is preserved: Artifact/Claude
+holds at
+\result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+(vs.\
+\result{headline_unanimous}{artifact:claude:code_only-vs-bash_only:cost_adj:full_mean_delta_pct}[1]\%
+on the full set), Artifact/Codex at
+\result{headline_unanimous}{artifact:codex:code_only-vs-bash_only:cost_adj:unanimous_majority_mean_delta_pct}[1]\%,
+and SWE-bench/Codex at
+\result{headline_unanimous}{swebench:codex:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+(still significant). SWE-bench/Claude collapses: the full-set
+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}[1]\%
+gap (NS) drops to
+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}[1]\%
+(NS) on the subset where every arm passes. The full-set gap is therefore
+a failure-cost effect concentrated on doomed-run trajectories, not a
+per-edit tax on successful runs; the mechanism is analyzed in
+\S\ref{sec:discussion-failure-cost}. The cache-floor median is
+recomputed on the subset per \S\ref{sec:m-cost}; it matches the full-set
+floor in
+\result{agreement_matrix}{_all:_all:cache_floor_unchanged_majority}[0]
+of
+\result{agreement_matrix}{_all:_all:cache_floor_total_groups}[0]
+(benchmark, seed, agent, arm) groups, with both exceptions on rival
+arms (not the contrast arm) for a single SWE-bench/Claude seed.
 
 % ---------------------------------------------------------------------------
 % Table 3 — §5.4 — conditional cost (full set vs unanimous-pass subset)

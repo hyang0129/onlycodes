@@ -1,13 +1,17 @@
 # paper/Makefile
 #
 # Targets:
+#   make deps     — install Python dependencies from requirements.txt
 #   make figures  — render all figures_src/*.py scripts → generated/figures/
 #   make values   — build_numbers.py: CSVs + sidecars → generated/values.tex
 #   make lint     — digit-not-in-citation check on prose .tex files
 #   make paper    — figures + values + lint + latexmk -pdf main.tex
 #   make clean    — remove generated/ and latexmk byproducts
 #
-# Run 'make paper' to build everything from scratch.
+# First-time setup:
+#   make deps     (installs pandas, numpy, scipy, matplotlib)
+#   make paper
+#
 # LaTeX is required for 'make paper'; all other targets work without it.
 
 PYTHON   ?= python3
@@ -18,12 +22,29 @@ FIGURE_SCRIPTS := $(wildcard figures_src/*.py)
 # Sentinel file: figures are up to date when this exists
 FIGURES_STAMP  := generated/.figures_stamp
 
-.PHONY: figures values lint paper clean
+.PHONY: deps check-deps figures values lint paper clean
+
+# ---------------------------------------------------------------------------
+# deps: install Python dependencies declared in requirements.txt
+# ---------------------------------------------------------------------------
+deps:
+	$(PYTHON) -m pip install -r requirements.txt
+
+# ---------------------------------------------------------------------------
+# check-deps: fail fast with a helpful pointer if pandas/matplotlib missing
+# (friendlier than a downstream ImportError in figures/values)
+# ---------------------------------------------------------------------------
+check-deps:
+	@$(PYTHON) -c "import pandas, numpy, matplotlib" 2>/dev/null || { \
+	    echo "ERROR: missing Python deps (pandas / numpy / matplotlib)." 1>&2; \
+	    echo "       Run: make deps    (or: $(PYTHON) -m pip install -r requirements.txt)" 1>&2; \
+	    exit 1; \
+	}
 
 # ---------------------------------------------------------------------------
 # figures: run every figures_src/*.py → generated/figures/*.pdf + *.numbers.csv
 # ---------------------------------------------------------------------------
-figures: $(FIGURES_STAMP)
+figures: check-deps $(FIGURES_STAMP)
 
 $(FIGURES_STAMP): $(FIGURE_SCRIPTS) $(wildcard data/*.csv)
 	@mkdir -p generated/figures

@@ -90,8 +90,13 @@ WHITELIST: list[str] = [
     "Codex CLI",
     "gpt-5.5",
     "GPT-5.5",
+    "GPT-5",
     "GPT-4-Turbo",
     "GPT-4",
+    "Gemini 2.5",
+    "Gemini~2.5",
+    "Gemini 2.0",
+    "Gemini~2.0",
     "Llama-3.1",
     "Llama-3",
     "Qwen3",
@@ -113,6 +118,13 @@ WHITELIST: list[str] = [
     # Issue / commit references in prose
     "Issue \\#",
     "issue \\#",
+    "Issue~\\#",
+    "issue~\\#",
+    "\\#287",
+    "\\#226",
+    "\\#288",
+    "\\#238",
+    "\\#253",
     "Issue #226",
     "Issue #287",
     "Issue #288",
@@ -159,6 +171,22 @@ WHITELIST: list[str] = [
     "v1",
     "v2",
     "v3",
+    # LaTeX table syntax — \multicolumn{N}{...}, \cmidrule(lr){A-B}
+    "\\multicolumn{",
+    "\\cmidrule",
+    # Standing experimental constants (paired with \result{} macros elsewhere)
+    "3 seeds",
+    "Strict $9/9$",
+    "9/9",
+    "seed 1",
+    "seed 2",
+    "seed 3",
+    "seed~1",
+    "seed~2",
+    "seed~3",
+    # Table cell sample sizes used as static text in §5.4 (matches WHITELIST "n=93" etc.)
+    "& 93",
+    "& 100",
 ]
 
 

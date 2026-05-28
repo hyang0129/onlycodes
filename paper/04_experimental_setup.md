@@ -23,7 +23,7 @@ Two tables, one paragraph apiece. No methodology — that lives in §3.3 (SWE-be
 - Claude Code — `claude-sonnet-4-6`, CLI version `\result{claude_cli_version}`, invoked with `--dangerously-skip-permissions --no-session-persistence`.
 - Codex CLI — `gpt-5.5`, CLI version `\result{codex_cli_version}`, invoked with `--dangerously-bypass-approvals-and-sandbox`.
 
-Codex is reported as a **co-headline finding** in §5.3 (Figure 2's four-bar sign-flip exposes the agent-design dependence), not as a footnote-level generalization probe. Stated here so the reader knows what to expect in §5.
+Codex is reported as a **co-headline finding** in §5.3 (Figure 2's four-bar cost-ratio panel exposes the agent-design dependence — the *significant* same-regime divergence is Codex *** vs Claude NS on SWE-bench), not as a footnote-level generalization probe. Stated here so the reader knows what to expect in §5.
 
 **Arm names — consolidated paper convention.** Per the 2026-05-27 consolidation decision at [outline.md:221](outline.md#L221), the paper uses three names throughout:
 - **`baseline`** — default tool surface, no restriction.
@@ -84,13 +84,14 @@ Single staging ground for citations that originate in §4. Same workflow as the 
 
 **Already staged in [02_related_work.md](02_related_work.md#L186) — reuse keys, do not duplicate:**
 
-| §4 location | Use key |
-|---|---|
-| §4.1 SWE-bench Mini (the substrate) | `jimenez2024swebench` |
-| §4.1 verified-mini ("a subset of SWE-bench Verified") | `report:openai2024swebenchverified` |
-| §4.2 Claude Code (architectural walkthrough as product anchor — see note below) | `liu2026divecc` |
+| §4 location | Use key | Status |
+|---|---|---|
+| §4.1 SWE-bench Mini (the substrate) | `jimenez2024swebench` | **Blocked** — still in 02 staging with `author list reconstructed, verify ICLR` TBD; §4 insertion gated on that being cleared. |
+| §4.1 verified-mini ("a subset of SWE-bench Verified") | `report:openai2024swebenchverified` | ✓ in `references.bib`. |
+| §4.2 Codex CLI repository | `repo:openai2026codex` | In 02 staging (vendor-docs block); gated on access-date re-fetch. **Reuse this key — do not stage a duplicate `repo:openai-codex` in §4.** |
+| §4.3 Wilcoxon signed-rank (line 46) | `wilcoxon1945` | ✓ in `references.bib` (moved 2026-05-28). `\cite{wilcoxon1945}` not yet wired — `sections/04_experimental_setup.tex` is still a TODO stub; insert when §4.3 prose is drafted. |
 
-> **Decision pending — Claude Code product cite.** `liu2026divecc` is an *architectural survey* of Claude Code, not the product release itself. If §4.2 wants a primary product cite (release notes, official docs) rather than a third-party description, stage a separate entry below (`repo:anthropic-claude-code` / `blog:anthropic-claude-code`). Otherwise reuse `liu2026divecc` and accept it as the canonical reference for what "Claude Code" denotes in this paper.
+> **Claude Code product cite — resolved 2026-05-28.** §4.2 uses the primary product cite `repo:anthropic2026claudecode` (staged below, previously the commented placeholder), **not** the `liu2026divecc` architectural survey. Rationale: parity with `repo:openai2026codex` (both rows of §4.2's agent-surface table point at vendor-published source repos, not third-party descriptions), and the `\result{claude_cli_version}` macro wants a vendor-anchored reproducibility target. `liu2026divecc` retains its §02 related-work cite as architectural taxonomy — it just is not the §4.2 anchor.
 
 ### Staging block — new entries originating in §4
 
@@ -98,120 +99,34 @@ These are the candidates a human reviewer should fix any `TBD` fields on, then c
 
 ```bibtex
 % ─── Agent surfaces (§4.2) ─────────────────────────────────────────────
-
-@misc{repo:openai-codex,
-  author       = {{OpenAI}},
-  title        = {Codex {CLI}},
-  howpublished = {GitHub repository \url{https://github.com/openai/codex}},
-  year         = {2025--2026},
-  note         = {The CLI binary cited in \S 4.2. Pin exact version via
-                  \result{codex_cli_version} macro --- bib entry refers to
-                  the project, not a frozen release. URL TBD-verify against
-                  the canonical openai/codex repo at submission time.}
-}
-
-@misc{report:openai-gpt55,
-  author       = {{OpenAI}},
-  title        = {{GPT-5.5} Model Card},
-  howpublished = {OpenAI model card / release announcement},
-  year         = {2026},
-  url          = {TBD --- verify against the official OpenAI model-card URL},
-  note         = {Cited only to fix the model identifier (`gpt-5.5`) used in
-                  the Codex CLI arm. If OpenAI publishes a system card or
-                  technical report instead of a model card, swap the type
-                  field accordingly. URL and exact title TBD --- verify.}
-}
-
-@misc{report:anthropic-sonnet46,
-  author       = {{Anthropic}},
-  title        = {{Claude Sonnet 4.6} Model Card},
-  howpublished = {Anthropic model card / release announcement},
-  year         = {2026},
-  url          = {TBD --- verify against the official Anthropic model-card URL},
-  note         = {Cited only to fix the model identifier (`claude-sonnet-4-6`)
-                  used in the Claude Code arm. URL and exact title TBD ---
-                  verify.}
-}
-
-% Optional: only stage if §4.2 wants a primary product cite rather than
-% reusing liu2026divecc. Leave commented out by default; uncomment after
-% the "Decision pending" note above is resolved.
 %
-% @misc{repo:anthropic-claude-code,
-%   author       = {{Anthropic}},
-%   title        = {{Claude Code}},
-%   howpublished = {GitHub repository \url{https://github.com/anthropics/claude-code}},
-%   year         = {2025--2026},
-%   note         = {Primary product cite. Pin exact CLI version via
-%                   \result{claude_cli_version} macro. Use this OR
-%                   liu2026divecc, not both, for the §4.2 "what Claude Code is"
-%                   reference.}
-% }
+% NOTE: `report:openai2026gpt55`, `report:anthropic2026sonnet46`, and
+% `repo:anthropic2026claudecode` moved to `references.bib` on 2026-05-28
+% after human verification. Both vendor "model card" cites resolved to
+% *system cards* on verification --- type, title, howpublished, and url
+% fields swapped accordingly. The Codex CLI repo cite is still NOT
+% staged here --- reuse `repo:openai2026codex` from 02_related_work.md's
+% staging block (same URL, vendor, artifact).
 
 % ─── Statistical machinery (§4.3) ──────────────────────────────────────
-
-@article{wilcoxon1945,
-  author    = {Wilcoxon, Frank},
-  title     = {Individual Comparisons by Ranking Methods},
-  journal   = {Biometrics Bulletin},
-  volume    = {1},
-  number    = {6},
-  pages     = {80--83},
-  year      = {1945},
-  doi       = {10.2307/3001968},
-  note      = {Cited once in §4.3 to anchor the choice of paired Wilcoxon
-               signed-rank over paired-$t$ for the heavy-tailed per-task
-               $\Delta$ distributions. Classical reference; no `TBD` fields.}
-}
-
-@article{mcnemar1947,
-  author    = {McNemar, Quinn},
-  title     = {Note on the Sampling Error of the Difference between
-               Correlated Proportions or Percentages},
-  journal   = {Psychometrika},
-  volume    = {12},
-  number    = {2},
-  pages     = {153--157},
-  year      = {1947},
-  doi       = {10.1007/BF02295996},
-  note      = {OPTIONAL --- only stage if §4.3 keeps the prose
-               "a Wilcoxon-on-rates analogue of McNemar". If the McNemar
-               framing is dropped during drafting, drop this entry.
-               Classical reference; no `TBD` fields.}
-}
+%
+% NOTE: `wilcoxon1945` and `mcnemar1947` both moved to `references.bib`
+% on 2026-05-28. `wilcoxon1945` verified against
+% JSTOR/Semantic Scholar/Shippensburg PDF; `mcnemar1947` verified
+% against DOI 10.1007/BF02295996 (Springer/Cambridge Core),
+% cross-checked with PubMed and IDEAS/RePEc. Both are tied to §4.3
+% framing; drop `mcnemar1947` if the "Wilcoxon-on-rates analogue of
+% McNemar" prose is removed from §4.3 during drafting. See the bib
+% header for the full verification trail.
 
 % ─── Per-Mtok cost rates (§4.4) ────────────────────────────────────────
-
-@misc{report:anthropic-pricing,
-  author       = {{Anthropic}},
-  title        = {{Anthropic API} Pricing},
-  howpublished = {Anthropic pricing page},
-  year         = {2026},
-  url          = {https://www.anthropic.com/pricing},
-  note         = {Documentary source for the Claude per-Mtok rates in
-                  `paper/data/cost_rates.csv`. Pricing pages mutate; pin
-                  the access date in the entry note before submission.
-                  Access date TBD --- verify at freeze.}
-}
-
-@misc{report:openai-pricing,
-  author       = {{OpenAI}},
-  title        = {{OpenAI API} Pricing},
-  howpublished = {OpenAI pricing page},
-  year         = {2026},
-  url          = {https://openai.com/api/pricing/},
-  note         = {Documentary source for the GPT-5.5 per-Mtok rates in
-                  `paper/data/cost_rates.csv`. Pricing pages mutate; pin
-                  the access date in the entry note before submission.
-                  Access date TBD --- verify at freeze.}
-}
+%
+% NOTE: `docs:anthropic2026pricing` and `docs:openai2026pricing` moved
+% to `references.bib` on 2026-05-28 after human verification of both
+% URLs; access date pinned to 2026-05-28 in each entry's note. See the
+% bib header for the move log.
 ```
 
 ### `TBD` fields a human reviewer must resolve before insertion
 
-- `repo:openai-codex` — confirm canonical URL (`github.com/openai/codex`) at submission time.
-- `report:openai-gpt55` — model-card URL + exact title; decide if it's a model card vs. system card vs. blog announcement.
-- `report:anthropic-sonnet46` — model-card URL + exact title.
-- `repo:anthropic-claude-code` (commented) — only uncomment if the "Decision pending" note above resolves in favour of a primary product cite.
-- `mcnemar1947` — stage only if §4.3 keeps the McNemar analogue framing.
-- `report:anthropic-pricing` / `report:openai-pricing` — record the **access date** in the bib note at freeze time (pricing pages have no stable archival URL).
+- `repo:openai2026codex` — **owned by 02 staging block**, not §4. Access-date re-fetch is the gating action there; §4 just reuses the key.

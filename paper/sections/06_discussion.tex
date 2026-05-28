@@ -1,10 +1,188 @@
-% paper/sections/07_discussion.tex
-% TODO: full prose. See the discussion outline.
+% paper/sections/06_discussion.tex
+% Prose for §6. Outline: paper/06_discussion.md.
+% Six subsections; 0.5 pg target / 0.75 pg ceiling.
 %
-% Subsections:
-%   Why the sign-flip exists (per-turn tax vs turn-count efficiency)
-%   Where the method works / doesn't
-%   Implications for agent design (numbered prescriptions)
-%   Connection to prior trajectory (SWE-agent, mini-SWE-agent, Code Mode arc)
+%   §6.1 Path-cost: edit friction on Claude SWE-bench   (sec:disc-pathcost)
+%   §6.2 Pricing asymmetry: batching + pagination       (sec:disc-pricing)
+%   §6.3 Failure-cost + capability invariance           (sec:disc-failurecost)
+%   §6.4 Benchmark reuse beyond this paper              (sec:disc-reuse)
+%   §6.5 Where the method works / doesn't               (sec:disc-scope)
+%   §6.6 Implications for agent design                  (sec:disc-design)
+%
+% Numbers resolve through \result / \resp / \respct macros backed by CSVs
+% in paper/data/.
 
-To be drafted.
+% (Section heading and \label{sec:discussion} come from main.tex.)
+
+% ─────────────────────── §6.1 — path-cost / edit friction ──────────────
+\subsection{Path-cost: edit friction on Claude SWE-bench}
+\label{sec:disc-pathcost}
+\label{sec:discussion-edit-friction}
+The lone cell of Table~\ref{tab:code-only-headline} in which
+\texttt{code\_only} is directionally costlier than its rival is Claude
+$\times$ SWE-bench: cost runs $+14\%$ (NS) but output tokens are $+40\%$
+at $p{<}10^{-9}$---a volume signature, not a constant-overhead one. The
+working hypothesis is edit friction: under \texttt{code\_only}, every
+file modification must be expressed as a Python script rather than as a
+single native \texttt{Edit} or \texttt{Write} call. The per-instance
+Spearman correlation between $\Delta_{\text{edit chars}}$
+(\texttt{code\_only} $-$ \texttt{baseline}, computed from JSONL tool-use
+blocks) and $\Delta_{\text{output tokens}}$ is
+$\rho = \result{edit_friction}{rho_edit_chars:value}[2]$
+($p = \resp{edit_friction}{rho_edit_chars_p:value}$,
+$n = \result{edit_friction}{n_instances:value}[0]$); a median split confirms
+that the per-instance penalty scales with edit volume, with
+$\Delta_{\text{output tokens}} =
+\result{edit_friction}{lowpatch_delta_output_tokens:value}[0]$ on the
+low-patch half vs.\
+$\result{edit_friction}{highpatch_delta_output_tokens:value}[0]$ on the
+high-patch half (one-sided Mann--Whitney
+$p = \resp{edit_friction}{highpatch_mw_p:value}$). About
+$\result{edit_friction}{intercept_gap:value}[0]$ tokens of the aggregate gap
+is fixed-cost regime verbosity (OLS intercept at zero patch size); edit
+friction is the additional per-line tax, not the whole gap. The Codex
+placebo control is consistent: Codex's
+\texttt{code\_only}-vs-\texttt{baseline} $\Delta_{\text{output tokens}}$
+is
+$\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_b}$
+(NS), since Codex never disabled a native edit primitive that
+\texttt{code\_only} had to replace.
+
+% ─────────────────────── §6.2 — pricing asymmetry ──────────────────────
+\subsection{Pricing asymmetry: batching and pagination on Codex}
+\label{sec:disc-pricing}
+\label{sec:discussion-codex-batching}
+Why does Codex's \texttt{code\_only} save ${\sim}25\%$ on input tokens
+on SWE-bench while LLM-call counts stay essentially flat
+($\result{mcp_output_size}{codex_swebench:baseline:llm_calls_per_run}$
+for \texttt{baseline} vs.\
+$\result{mcp_output_size}{codex_swebench:onlycode:llm_calls_per_run}$
+for \texttt{code\_only})? Two mechanisms, neither reproduced by the
+\texttt{bash\_only} control, jointly drive the win. \emph{Tool-call
+batching:} \texttt{execute\_code} issues
+$\result{mcp_output_size}{codex_swebench:onlycode:calls_per_run}$ tool
+calls per run vs.\
+$\result{mcp_output_size}{codex_swebench:baseline:calls_per_run}$ for
+\texttt{baseline}, so a single Python script subsumes what
+\texttt{exec\_command} requires several calls to do. \emph{Upper-tail
+suppression:} median per-call output is essentially
+unchanged
+($\result{mcp_output_size}{codex_swebench:onlycode:median_chars}[0]$
+vs.\
+$\result{mcp_output_size}{codex_swebench:baseline:median_chars}[0]$
+chars), but the $p99$ collapses from the \texttt{exec\_command} ceiling
+of $\result{mcp_output_size}{codex_swebench:baseline:p99_chars}[0]$
+chars to
+$\result{mcp_output_size}{codex_swebench:onlycode:p99_chars}[0]$---the
+agent paginates verbose output in Python rather than dumping verbatim
+\texttt{stdout}. This refines the industry token-reduction
+claim~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode}: the
+gain materialises when the agent's API expresses per-call batching
+\emph{and} its native rival exposes a hard output ceiling, not from the
+\texttt{execute\_code} surface alone. Claude's API empirically does not
+batch on SWE-bench (\texttt{code\_only} issues
+$\result{mcp_output_size}{claude_swebench:onlycode:calls_per_run}$
+calls per run vs.\
+$\result{mcp_output_size}{claude_swebench:baseline:calls_per_run}$ for
+\texttt{baseline}), and the round-count inflation is the input-token
+mirror of the edit-friction effect in \S\ref{sec:disc-pathcost}---one
+mechanism viewed at two granularities.
+
+% ─────────────────────── §6.3 — failure-cost / capability ──────────────
+\subsection{Failure-cost and capability invariance}
+\label{sec:disc-failurecost}
+\label{sec:discussion-failure-cost}
+Pass rates differ by less than three percentage points across every cell
+while costs swing $20$--$40\%$ (Table~\ref{tab:code-only-headline}). The
+clean reading is that tool restriction is a harness-efficiency axis
+orthogonal to model capability: the model solves the task with any
+reasonable interface; the surface changes the path, not the answer.
+This is consistent with the Capability Overlap
+Principle~\cite{zhang2026tooltax} and with the informal pass-rate
+invariance observed under tool ablation
+in~\cite{report:verdent2025swebench}. The agreement matrix
+(Table~\ref{tab:agreement-matrix}) gives the empirical receipt:
+unanimous-outcome instances dominate every cell at
+${\geq}\result{agreement_matrix}{_all:_all:min_unanimous_majority_pct}[0]\%$
+under majority vote and
+${\geq}\result{agreement_matrix}{_all:_all:min_unanimous_strict_pct}[0]\%$
+on the strictest $9/9$-trials criterion. The Claude $\times$ SWE-bench
+cost gap decomposes cleanly against this anchor
+(Table~\ref{tab:headline-unanimous}): on the unanimous-pass subset
+$\Delta_{\text{cost adj.}}$ collapses from
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}[1]\%$
+to
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:unanimous_majority_mean_delta_pct}[1]\%$
+(NS), $\Delta_{\text{input tokens}}$ from
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:input_tokens:full_mean_delta_pct}[1]\%$
+to
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:input_tokens:unanimous_majority_mean_delta_pct}[1]\%$
+(NS), but $\Delta_{\text{output tokens}}$ stays at
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:output_tokens:unanimous_majority_mean_delta_pct}[1]\%$
+(highly significant). Two mechanisms cohabit the cell: the
+\S\ref{sec:disc-pathcost} edit-friction path-cost is the output-side
+tax that persists on successful runs; the remaining input-side
+blow-up is a failure-cost---extended doomed-run trajectories on
+instances no surface can solve. Conditioning on success separates them.
+The cache-floor median recomputed on the subset is byte-identical to the
+full-set median in
+$\result{agreement_matrix}{_all:_all:cache_floor_unchanged_majority}[0]$
+of $\result{agreement_matrix}{_all:_all:cache_floor_total_groups}[0]$
+(benchmark, seed, agent, arm) groups
+(\S\ref{sec:method-cost}), so the collapse is not a cost-adjustment
+artefact.
+
+% ─────────────────────── §6.4 — benchmark reuse ────────────────────────
+\subsection{Benchmark reuse beyond this paper}
+\label{sec:disc-reuse}
+The artifact-suite contract (\S\ref{sec:method-artifact}) generalises
+beyond this paper: a follow-up author adds a task by writing a
+\texttt{task.yaml}, a \texttt{workspace/}, a deterministic offline
+\texttt{grade(scratch\_dir)$\to$GradeResult} function obeying the four
+rules, and a \texttt{reference\_output.*}. The materialize-time no-leak
+invariant catches grader leakage at pre-flight; subprocess isolation
+contains grader exceptions. The contract is the load-bearing piece, not
+the specific category mix used here.
+
+% ─────────────────────── §6.5 — scope of the method ────────────────────
+\subsection{Where the method works, and where it does not}
+\label{sec:disc-scope}
+The harness quantifies tool-surface tax under cache noise
+(\S\ref{sec:method-cost}), isolates regime effects via the
+artifact-vs-SWE-bench split, and surfaces agent-design coupling---the
+significant same-regime divergence on SWE-bench between Codex (cost wins
+at $p{<}10^{-8}$) and Claude (NS) under an identical restriction is the
+single sharpest finding the setup produces. It does not support
+model-capability claims, because pass rates are statistically tied; the
+path-vs-answer dissociation in \S\ref{sec:disc-failurecost} is what
+makes the cost contrasts interpretable as cost-engineering claims rather
+than capability claims. Per-repo SWE-bench breakdowns at
+$n{\approx}12$--$15$ are noisier than the headline $n{=}100$; the paper
+does not make per-repo claims, and the remaining caveat to the headline
+contrast is the NS Claude $\times$ SWE-bench cell at $p{\approx}0.12$.
+
+% ─────────────────────── §6.6 — implications for design ────────────────
+\subsection{Implications for agent design}
+\label{sec:disc-design}
+The four-cell structure adjudicates between the prior prescriptions of
+\S\ref{sec:introduction} as follows. \emph{Computation-dominated
+workloads:} drop the IDE surface; \texttt{code\_only} wins on cost at
+parity capability (Artifact $\times$ Claude, Table~\ref{tab:code-only-headline}).
+\emph{Modification-dominated workloads with a high solve-rate:} the
+surface choice is roughly cost-neutral on Claude---the headline
+$+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:cost_adj:full_mean_delta_pct}[1]\%$
+penalty is a failure-cost effect on doomed runs, not a per-edit tax on
+successful ones (Table~\ref{tab:headline-unanimous}).
+\emph{Modification-dominated workloads with a low solve-rate:} keep
+\texttt{Edit} and \texttt{Write} at minimum---the edit-friction
+path-cost in \S\ref{sec:disc-pathcost} compounds with the failure-cost
+in \S\ref{sec:disc-failurecost} on instances no surface can solve.
+\emph{Tool surfaces that admit batching and pagination:} expect
+input-token savings of the kind Codex realises in
+\S\ref{sec:disc-pricing}, provided the workload does not push LLM-call
+count up in the process. These prescriptions cohere with neither
+extreme of the prior literature: the bash-only-suffices
+claim~\cite{repo:miniswagent} holds for computation but not for
+low-solve-rate modification on Claude, while the IDE-primitives-required
+claim~\cite{yang2024sweagent} holds on the modification cell where it
+was first measured but not in computation.
