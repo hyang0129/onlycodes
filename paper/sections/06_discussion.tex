@@ -3,7 +3,7 @@
 % Six subsections; 0.5 pg target / 0.75 pg ceiling.
 %
 %   §6.1 Path-cost: edit friction on Claude SWE-bench   (sec:disc-pathcost)
-%   §6.2 Pricing asymmetry: batching + pagination       (sec:disc-pricing)
+%   §6.2 Pricing asymmetry: batching + output-control   (sec:disc-pricing)
 %   §6.3 Failure-cost + capability invariance           (sec:disc-failurecost)
 %   §6.4 Benchmark reuse beyond this paper              (sec:disc-reuse)
 %   §6.5 Where the method works / doesn't               (sec:disc-scope)
@@ -49,7 +49,7 @@ $\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:mea
 \texttt{code\_only} had to replace.
 
 % ─────────────────────── §6.2 — pricing asymmetry ──────────────────────
-\subsection{Pricing asymmetry: batching and pagination on Codex}
+\subsection{Pricing asymmetry: batching and programmatic output control on Codex}
 \label{sec:disc-pricing}
 \label{sec:discussion-codex-batching}
 Why does Codex's \texttt{code\_only} save ${\sim}25\%$ on input tokens
@@ -74,8 +74,9 @@ chars), but the $p99$ collapses from the \texttt{exec\_command} ceiling
 of $\result{mcp_output_size}{codex_swebench:baseline:p99_chars}[0]$
 chars to
 $\result{mcp_output_size}{codex_swebench:onlycode:p99_chars}[0]$---the
-agent paginates verbose output in Python rather than dumping verbatim
-\texttt{stdout}. This refines the industry token-reduction
+agent constrains per-call output volume programmatically, by tightening
+query scope, slicing returned text, or staging output across multiple
+prints, rather than receiving whatever the native tool emits. This refines the industry token-reduction
 claim~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode}: the
 gain materialises when the agent's API expresses per-call batching
 \emph{and} its native rival exposes a hard output ceiling, not from the
@@ -177,7 +178,7 @@ successful ones (Table~\ref{tab:headline-unanimous}).
 \texttt{Edit} and \texttt{Write} at minimum---the edit-friction
 path-cost in \S\ref{sec:disc-pathcost} compounds with the failure-cost
 in \S\ref{sec:disc-failurecost} on instances no surface can solve.
-\emph{Tool surfaces that admit batching and pagination:} expect
+\emph{Tool surfaces that admit batching and programmatic output control:} expect
 input-token savings of the kind Codex realises in
 \S\ref{sec:disc-pricing}, provided the workload does not push LLM-call
 count up in the process. These prescriptions cohere with neither
