@@ -27,7 +27,7 @@ The only cell in Table 1 where `code_only` spends more than its closest rival. C
 
 **Investigation note:** [`paper/q1_edit_friction_investigation.md`](q1_edit_friction_investigation.md) — full v1→v3 evolution including opus-reviewer gap responses and the four pathway decomposition (A edit-friction, B difficulty-confound, C regime-verbosity, D debug-verbosity). See §10 of that file for the canonical three-sentence §6 frame.
 
-**Figure decision:** *no dedicated figure*. Figure 1 (§5.2) already shows Claude SWE-bench `code_only` right-tail losses, providing visual motivation. Reserved appendix figure (if reviewers push): 4-bar median-split chart of Δ_output_tokens for {Claude, Codex} × {low-patch, high-patch}.
+**Figure decision:** *no dedicated figure*. Figure 1 (§5.2) already shows Claude SWE-bench `code_only` right-tail losses, providing visual motivation. v1 ships without an appendix; if reviewers push, the backup is held in [figures_outline.md](figures_outline.md) §"Deferred" (Figure A1).
 
 ### 6.2 Mechanism Q2 — Why `code_only` shifts the per-LLM-call input budget (~100 words / ~0.18 page)
 
@@ -113,11 +113,13 @@ Hold drafting until §5.1 cells are frozen and the §6.2 `mcp_output_size.csv` +
 - **Codex `apply_patch` soft-disable** — empirically respected (4 leaks across 110 `code_only` logs in seed_1) but reviewers will ask. The disclosure already lives in §3.1; a one-line back-reference in §7 is enough.
 - **Seed-1-only caveat** if seeds 2/3 aren't folded into `edit_friction.csv` by freeze (the production script averages whatever's in `all_results.csv`, but the gold-patch sizes don't change).
 
-### Push to appendix
-- The full 15-cell Spearman correlation table (5 metrics × 3 patch-size proxies, BH-corrected). Only `num_turns × patch_files_touched` survives FDR 0.05; the headline ρ in §6.1 is a *different* test and not part of that table.
-- Per-arm within-arm slope fits (baseline ~7.5 tok/line OLS, code_only ~26.9 OLS; baseline ~127, code_only ~189 by Theil-Sen).
-- Leverage-drop sensitivity table — slope difference *increases* on outlier-dropped subsets, opposite of reviewer intuition.
-- The 4-bar median-split figure if a reviewer pushes back.
+### Dropped from v1 (no appendix this submission)
+v1 ships without an appendix (see outline.md decision log, 2026-05-28). The following Q1-adjacent material that earlier drafts staged as appendix content is **not** in the paper; if reviewers push, it lives in the investigation writeup pointed at below:
+- Full 15-cell Spearman correlation table (5 metrics × 3 patch-size proxies, BH-corrected). Including this adjacent to the headline ρ invites the "you tested 15 things, only 1 survives FDR" misread — the headline ρ is a *different* test and we don't want it visually adjacent to that table.
+- Per-arm within-arm slope fits (OLS + Theil-Sen). The OLS fits have R² < 0.01; printing them invites the reviewer cherry-pick the outline already warns against.
+- Leverage-drop sensitivity table — only load-bearing if we make the slope claim, which we explicitly don't.
+- Per-seed sensitivity for ρ — ρ is already averaged across seeds 1–3; per-seed breakdown adds no new direction.
+- 4-bar median-split figure — held in [figures_outline.md](figures_outline.md) §"Deferred" (Figure A1) as reviewer-pushback contingency.
 
 ### Killed — do not include
 - The "code_only's output-token slope is 3.6× baseline's" framing the investigation drafted first. OLS on R² < 0.01 is exactly what reviewers will pick apart, and the Theil-Sen/leverage results make the underlying point cleaner without the slope-ratio framing.

@@ -41,7 +41,7 @@ This subsection supersedes the earlier "mean ± stderr over seeds" line in outli
 
 **Unit of inference is the task, not the seed.** Seeds within a `(task, arm)` cell are replicates of the *same task*, not independent samples of the population of interest; treating them as the unit of inference inflates n and confuses noise sources. Procedure for every comparison in §5:
 
-1. **Collapse seeds within each `(task, arm)` cell to a per-task mean.** Seed-level values appear in the appendix only.
+1. **Collapse seeds within each `(task, arm)` cell to a per-task mean.** Seed-level values are derivable from the released CSVs but are not reported in the paper body.
 2. **For each ordered arm pair (A, B) within a benchmark**, compute the per-task vector of differences Δ_t = mean_A(t) − mean_B(t). Report **mean Δ, SE_Δ = SD(Δ)/√n_tasks, and a 95% CI** (normal approximation, n ≥ 93).
 3. **Pair the CI with a paired Wilcoxon signed-rank p-value** on the Δ vector for continuous metrics (cost, turns, token counts). Wilcoxon is preferred over the paired t-test because per-task distributions are heavy-tailed — a handful of pathological SWE-bench instances dominate parametric variance while the median direction is clear.
 4. **Pass rate** uses the same machinery on per-task pass rates ∈ {0, 1/3, 2/3, 1} — a Wilcoxon-on-rates analogue of McNemar that respects the 3-seeds-within-task structure.

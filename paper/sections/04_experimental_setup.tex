@@ -73,7 +73,9 @@ Table~\ref{tab:code-only-headline} in \S\ref{sec:results} reports.
 
 \paragraph{Seeds.} Each \texttt{(instance, arm)} cell is run with
 3 seeds, drawn as independent harness invocations on disjoint
-container snapshots. Per-seed raw records ship as a JSONL appendix.
+container snapshots. Per-seed raw records and the analysis scripts
+that produced every \verb|\result{}| macro in this paper are released with
+the harness; we do not reproduce them in this PDF.
 
 \paragraph{The unit of inference is the task, not the seed.} A
 seed-marginal SE would pool over instances of dramatically heterogeneous
@@ -108,8 +110,8 @@ respects the within-task seed structure. The marginal per-arm summary
 (the ``row'' in Table~\ref{tab:code-only-headline}) is the mean over
 tasks of the per-task mean, $\pm \mathrm{SD}_{\text{task}} /
 \sqrt{n_{\text{tasks}}}$---the SE that respects task as the unit of
-replication. Per-seed values appear in the appendix but are not the
-inferential unit. Implementation:
+replication. Per-seed values are derivable from the released data but
+are not the inferential unit. Implementation:
 \texttt{paper/data/scripts/paired\_contrasts.py}, fully reproducible
 from the released JSONL records.
 

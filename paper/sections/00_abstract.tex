@@ -1,18 +1,13 @@
 % paper/sections/00_abstract.tex
-% Placeholder abstract. Do not finalize until §5 numbers freeze.
-% See ../00_abstract.md for the working draft outline.
-%
-% FRAMING RETUNE 2026-05-28: "sign-flip between regimes" wording dropped.
-% The cell-level pattern in paired_contrasts.csv is "code_only is cheaper
-% or tied in 3 of 4 (regime, agent) cells, with the lone exception
-% (SWE-bench/Claude +14%) NS at p=0.12" — not a clean two-regime sign-flip.
-% The significant same-regime divergence is Codex *** vs Claude NS on
-% SWE-bench, which is an agent-design claim, not a regime claim. The
-% body below uses placeholder prose pending a full rewrite against the
-% paired_contrasts.csv macros — the prior resratio macros pointed at a
-% `headline` CSV (since deleted) that has been superseded by
-% `paired_contrasts.csv` (schema `benchmark:agent:contrast:metric`).
-% See ../05_results.md §5.1 framing-change note for the full rationale.
+% Body aligned to the post-2026-05-28 framing: "code_only is cheaper or
+% tied in 3 of 4 (regime, agent) cells, with the lone exception
+% (SWE-bench/Claude +14%) NS at p=0.12" — NOT "regime-dependent sign-flip"
+% (retired phrase). Significant same-regime divergence is Codex *** vs
+% Claude NS on SWE-bench, an agent-design claim. Macros resolve against
+% paired_contrasts.csv (schema benchmark:agent:contrast:metric).
+% Direction in ../00_abstract.md; framing rationale in ../05_results.md
+% §5.1 framing-change note. Title rename rationale in ../outline.md
+% "2026-05-28 — Paper title renamed" log entry.
 
 Modern coding agents expose multiple tool surfaces --- IDE primitives,
 bash, and MCP code-execution --- and the field has shipped three

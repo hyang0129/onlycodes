@@ -187,6 +187,9 @@ WHITELIST: list[str] = [
     # Table cell sample sizes used as static text in §5.4 (matches WHITELIST "n=93" etc.)
     "& 93",
     "& 100",
+    # SWE-bench instance IDs cited in §6.2 case-study figures (Figures 3 and 4)
+    "sphinx-doc\\_\\_sphinx-7757",
+    "django\\_\\_django-11848",
 ]
 
 

@@ -180,9 +180,9 @@ mechanism questions in [06_discussion.md](06_discussion.md).
 
 ---
 
-## Deferred (appendix only if pages allow)
+## Deferred (reviewer-pushback contingencies)
 
-Listed in priority order if any one of them gets a slot back.
+v1 ships with no appendix (outline.md decision log, 2026-05-28). The figures below are kept here as reviewer-pushback contingencies — if any one of them becomes load-bearing in rebuttal, promotion means making room in the main body (not slotting into back-matter). Listed in priority order.
 
 ### Figure A1 — Edit-friction scatter (`fig:edit-friction-scatter`)
 
@@ -314,8 +314,9 @@ Five of seven main-text floats are assembled as of 2026-05-28. Remaining gaps:
    - **(c) Demote Figure 3 to a `tcolorbox` listing inline in §6.2 prose**:
      not a float, costs no figure slot, but loses the centered visual.
      Use only if `figure*` combine also overflows.
-   - **(d) Demote Table 2 or Table 3 to appendix**: not recommended;
-     both are load-bearing for §6.3.
+   - **(d) Drop Table 2 or Table 3**: not recommended; both are
+     load-bearing for §6.3, and there is no appendix to demote them
+     to (outline.md 2026-05-28 decision).
 
 ---
 

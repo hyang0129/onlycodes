@@ -1,0 +1,8 @@
+# generator: paper/figures_src/04_h2_truncation.py
+# source_data: paper/data/h2_truncation_example.csv
+label,value,role
+baseline_chars,40165,char_count
+exec_command_cap,40154,char_count
+onlycode_chars,1514,char_count
+truncation_tokens,3918,token_count
+ratio_baseline_onlycode,26.5291,ratio

@@ -1,0 +1,122 @@
+% paper/figures_src/03_batching.tikz.tex
+%
+% Figure 3 — H1 tool-call batching case study (sphinx-doc__sphinx-7757,
+% Codex, seed 3, both arms PASS). Structural mockup of one LLM step.
+%
+% Top panel (baseline arm): one assistant turn followed by three parallel
+% exec_command tool calls — agent gathers context with three independent
+% lookups.
+%
+% Bottom panel (code-only arm): same assistant turn followed by a single
+% execute_code call bundling the same three lookups into one script.
+%
+% Intent-only labels (per Design decision §6 of figures_outline.md): cards
+% carry the *purpose* of each lookup, not the literal command. File names
+% appear as small grey subtitles for grounding only. No regex / Python
+% source.
+%
+% Wrapped inside a \begin{figure}...\end{figure} float in
+% sections/06_discussion.tex. main.tex must load \usepackage{tikz} +
+% \usetikzlibrary{positioning,fit,backgrounds,arrows.meta}.
+
+{% local scope for the inline-formatting commands
+\providecommand{\toolhdr}[1]{{\footnotesize\sffamily\bfseries\color{black!75}#1}}
+\providecommand{\intent}[1]{{\footnotesize #1}}
+\providecommand{\subtitle}[1]{{\scriptsize\ttfamily\color{black!55}#1}}
+
+\begin{tikzpicture}[
+  font=\small,
+  every node/.style={inner sep=2pt},
+  bubble/.style={
+    draw=black!50, line width=0.4pt,
+    rounded corners=2pt,
+    fill=black!4,
+    text width=0.78\columnwidth,
+    align=left,
+    inner sep=4pt,
+    font=\footnotesize\itshape,
+  },
+  toolcard/.style={
+    draw=black!70, line width=0.5pt,
+    rounded corners=3pt,
+    text width=0.62\columnwidth,
+    align=left,
+    inner sep=4pt,
+  },
+  bundlecard/.style={
+    draw=black!70, line width=0.7pt,
+    rounded corners=3pt,
+    text width=0.74\columnwidth,
+    align=left,
+    inner sep=5pt,
+    fill=black!2,
+  },
+  armtag/.style={font=\footnotesize\sffamily\bfseries, text=black!80},
+  arrow/.style={->, >=stealth, line width=0.4pt, draw=black!55},
+  node distance=3pt and 0pt,
+]
+
+% =========================================================================
+% TOP PANEL — baseline arm (3 parallel exec_command calls)
+% =========================================================================
+\node[armtag] (baseTag) at (0, 0)
+  {Baseline arm \,---\, 1 LLM step \, $\rightarrow$ \, 3 tool calls};
+
+\node[bubble, below=4pt of baseTag, anchor=north] (baseBubble)
+  {Assistant: I need to see the definition, an existing test, and how
+   it's called elsewhere.};
+
+\node[toolcard, below=6pt of baseBubble.south west, anchor=north west]
+  (b1) {%
+    \toolhdr{exec\_command}\\
+    \intent{read definition site}\\
+    \subtitle{sphinx/domains/python.py}%
+  };
+\node[toolcard, below=3pt of b1.south west, anchor=north west]
+  (b2) {%
+    \toolhdr{exec\_command}\\
+    \intent{read existing test}\\
+    \subtitle{tests/test\_util\_inspect.py}%
+  };
+\node[toolcard, below=3pt of b2.south west, anchor=north west]
+  (b3) {%
+    \toolhdr{exec\_command}\\
+    \intent{search call sites}\\
+    \subtitle{tests/}%
+  };
+
+% Faint left "bracket" to suggest the three are parallel
+\draw[arrow] (baseBubble.south) -- ++(0, -0.18);
+\draw[black!40, line width=0.4pt]
+  ([xshift=-6pt]b1.north west) -- ([xshift=-6pt]b3.south west);
+\draw[black!40, line width=0.4pt]
+  ([xshift=-6pt]b1.north west) -- ([xshift=-3pt]b1.north west);
+\draw[black!40, line width=0.4pt]
+  ([xshift=-6pt]b3.south west) -- ([xshift=-3pt]b3.south west);
+
+% Divider between panels
+\draw[black!25, line width=0.4pt, dashed]
+  ([yshift=-10pt]b3.south west) -- ++(\columnwidth, 0);
+
+% =========================================================================
+% BOTTOM PANEL — code-only arm (1 execute_code call bundling all three)
+% =========================================================================
+\node[armtag, below=14pt of b3.south west, anchor=north west] (coTag)
+  {Code-only arm \,---\, 1 LLM step \, $\rightarrow$ \, 1 tool call};
+
+\node[bubble, below=4pt of coTag.south west, anchor=north west] (coBubble)
+  {Assistant: I need to see the definition, an existing test, and how
+   it's called elsewhere.};
+
+\node[bundlecard, below=6pt of coBubble.south, anchor=north]
+  (co1) {%
+    \toolhdr{execute\_code} \, \subtitle{one script}\\[2pt]
+    \intent{$\bullet$\, read definition site} \hfill \subtitle{sphinx/domains/python.py}\\
+    \intent{$\bullet$\, read existing test} \hfill \subtitle{tests/test\_util\_inspect.py}\\
+    \intent{$\bullet$\, search call sites} \hfill \subtitle{tests/}%
+  };
+
+\draw[arrow] (coBubble.south) -- (co1.north);
+
+\end{tikzpicture}
+}% end local scope

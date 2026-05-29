@@ -52,6 +52,36 @@ $\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:mea
 \subsection{Pricing asymmetry: batching and programmatic output control on Codex}
 \label{sec:disc-pricing}
 \label{sec:discussion-codex-batching}
+
+\begin{figure}[t]
+\centering
+\input{figures_src/03_batching.tikz}
+\caption{Tool-call batching at one LLM step
+(Codex on \texttt{sphinx-doc\_\_sphinx-7757}; both arms PASS). On a
+context-gathering step, the baseline arm emits three parallel
+\texttt{exec\_command} calls; the code-only arm bundles the same three
+lookups into a single \texttt{execute\_code} script. The aggregate ratio
+of tool calls per LLM call is $1.35$ (baseline) vs.\ $0.89$ (code-only)
+on Codex SWE-bench.}
+\label{fig:batching-case}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{generated/figures/04_h2_truncation}
+\caption{Per-call output at one LLM step
+(Codex on \texttt{django\_\_django-11848}; both arms PASS). The baseline
+arm's broad keyword sweep matched unrelated fixture data and pinned the
+\texttt{exec\_command} output cap at
+$\result{fig.04_h2_truncation}{exec_command_cap}$~chars
+($+\result{fig.04_h2_truncation}{truncation_tokens}$~tokens elided);
+the code-only arm's narrower scope returned
+$\result{fig.04_h2_truncation}{onlycode_chars}$~chars cleanly. The
+aggregate $p99$ collapse in \S\ref{sec:disc-pricing} is the
+population-level analogue of this case.}
+\label{fig:truncation-case}
+\end{figure}
+
 Why does Codex's \texttt{code\_only} save ${\sim}25\%$ on input tokens
 on SWE-bench while LLM-call counts stay essentially flat
 ($\result{mcp_output_size}{codex_swebench:baseline:llm_calls_per_run}$
@@ -64,7 +94,9 @@ $\result{mcp_output_size}{codex_swebench:onlycode:calls_per_run}$ tool
 calls per run vs.\
 $\result{mcp_output_size}{codex_swebench:baseline:calls_per_run}$ for
 \texttt{baseline}, so a single Python script subsumes what
-\texttt{exec\_command} requires several calls to do. \emph{Upper-tail
+\texttt{exec\_command} requires several calls to do
+(Figure~\ref{fig:batching-case} shows one such step on a named
+instance). \emph{Upper-tail
 suppression:} median per-call output is essentially
 unchanged
 ($\result{mcp_output_size}{codex_swebench:onlycode:median_chars}[0]$
@@ -76,7 +108,9 @@ chars to
 $\result{mcp_output_size}{codex_swebench:onlycode:p99_chars}[0]$---the
 agent constrains per-call output volume programmatically, by tightening
 query scope, slicing returned text, or staging output across multiple
-prints, rather than receiving whatever the native tool emits. This refines the industry token-reduction
+prints, rather than receiving whatever the native tool emits
+(Figure~\ref{fig:truncation-case} catches the cap-pinning event on a
+named instance). This refines the industry token-reduction
 claim~\cite{blog:anthropic2025codemcp,blog:cloudflare2025codemode}: the
 gain materialises when the agent's API expresses per-call batching
 \emph{and} its native rival exposes a hard output ceiling, not from the

@@ -1,0 +1,16 @@
+# source_commit: 4df4c65ab8de4fb4b9a8967f056be2ff530696ef
+# generated: 2026-05-28T00:00:00Z
+# generator: paper/investigations/concrete_examples_h1_h2.md (hand-extracted from named rollout)
+# key_schema: metric
+# default_precision: 0
+# H2 case-study numbers for Figure 4. Source: one LLM step from
+#   django__django-11848_baseline_run1.jsonl.rollout.jsonl (Codex, seed 1)
+#   django__django-11848_onlycode_run1.jsonl.rollout.jsonl (Codex, seed 1)
+# Both arms PASS. The baseline step pinned the exec_command output cap with
+# a broad regex; the onlycode step used a tighter scoped grep and returned
+# cleanly. Full rollout excerpts in investigations/concrete_examples_h1_h2.md.
+metric,value
+baseline_chars,40165
+exec_command_cap,40154
+onlycode_chars,1514
+truncation_tokens,3918

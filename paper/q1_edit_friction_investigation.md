@@ -248,9 +248,9 @@ All three are individually robust, orthogonal in methodology, and agree in direc
 ## 9. Open questions still deferred
 
 - **Q1-O1**: Separating Pathway A (per-edit verbosity) from Pathway D (debug-loop verbosity) cleanly. Requires per-call exit-code parsing from execute_code JSONL blocks. Not done in v3; flagged for §7 Limitations.
-- **Q1-O2**: Seed-1-only check for the JSONL-derived `edit_chars` reproducibility. v3 averages across seeds 1–3 by reading `all_results.csv` rows and corresponding log paths. If seed_1 alone gives ρ ≈ +0.36 and seed-averaged gives ρ ≈ +0.49, that's a consistent direction with more data → narrower CI. Worth a per-seed sensitivity table in the appendix if a reviewer pushes.
+- **Q1-O2**: Seed-1-only check for the JSONL-derived `edit_chars` reproducibility. v3 averages across seeds 1–3 by reading `all_results.csv` rows and corresponding log paths. If seed_1 alone gives ρ ≈ +0.36 and seed-averaged gives ρ ≈ +0.49, that's a consistent direction with more data → narrower CI. Not paper-side material (v1 ships with no appendix); the per-seed numbers are reproducible from the released CSVs if a reviewer pushes.
 - **Q1-O3**: The +0.49 headline uses an *unweighted* mean of seed-level edit_chars within (arm, instance). If one seed's run was anomalously long (e.g., hit wall budget), it dominates the mean. Median-of-seeds is the natural robustness check; not done.
-- **Q1-O4**: The figure-decision in §6.1 (no dedicated figure) assumes Figure 1 (§5.2) carries the visual. If §5.2 ships with a different framing, the appendix bar-chart (low-patch vs high-patch Δ for {Claude, Codex}) becomes load-bearing instead of reserve.
+- **Q1-O4**: The figure-decision in §6.1 (no dedicated figure) assumes Figure 1 (§5.2) carries the visual. If §5.2 ships with a different framing, the bar-chart backup held in [figures_outline.md](figures_outline.md) §"Deferred" (Figure A1) becomes load-bearing — but v1 ships without an appendix, so promotion would mean moving it into the main body, not slotting it into a back-matter section.
 
 ---
 
