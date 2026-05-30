@@ -29,20 +29,16 @@ conclusion partly stale: mini-SWE-agent, a ${\sim}\!100$-line
 bash-only scaffold, posts competitive numbers on SWE-bench Verified
 with no IDE primitives at all~\cite{repo:miniswagent}, and
 Live-SWE-agent shows a self-evolving scaffold seeded from it can climb
-higher~\cite{xia2025liveswagent}. Engineered surfaces continue to be
-explored on the other end --- AutoCodeRover layers AST-aware retrieval
-primitives over the SWE-agent design~\cite{zhang2024autocoderover},
-Moatless Tools tunes a semantic-search-and-edit surface for SWE-bench
-Verified~\cite{repo:moatless}, and Agentless removes the agent loop
-entirely in favour of a fixed localize--repair--validate
-pipeline~\cite{xia2024agentless}. None of these crosses three internal
-IDE surfaces under a single integrity-clean harness with regime
-stratification; each fixes a single axis. Descriptive surveys of
-Claude Code's primitive surface~\cite{liu2026divecc,rombaut2026scaffold,bui2026opendev}
-explicitly do not run such an ablation, and component-evolution work
-on coding-agent harnesses~\cite{confuciuscodeagent2025,agenticharnessengineering2026}
-ablates internal components on an evolved harness rather than swapping
-the entire surface. The vendor signal closest in spirit to ours is the
+higher~\cite{xia2025liveswagent}. Engineered surfaces continue to be explored on the other end, layering
+AST-aware retrieval, semantic search, or fixed localize--repair--validate
+pipelines on the SWE-agent line~\cite{zhang2024autocoderover,repo:moatless,xia2024agentless}.
+None of these crosses three internal IDE surfaces under a single
+integrity-clean harness with regime stratification; each fixes a single
+axis. Descriptive surveys of Claude Code's primitive
+surface~\cite{liu2026divecc,rombaut2026scaffold,bui2026opendev} and
+component-evolution work on coding-agent
+harnesses~\cite{confuciuscodeagent2025,agenticharnessengineering2026} do
+not swap the entire surface either. The vendor signal closest in spirit to ours is the
 Verdent technical report~\cite{report:verdent2025swebench}, which
 informally notes that removing advanced tools while keeping
 bash$+$read$+$write$+$edit produced little SWE-bench Verified change;

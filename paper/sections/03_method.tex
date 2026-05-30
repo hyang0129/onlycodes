@@ -43,8 +43,8 @@ exposes no feature flag for disabling its structured
 \texttt{code\_only} arms enforce restriction with a prompt-prefix
 directive rather than a hard flag; this is soft enforcement and model
 compliance is not guaranteed. We measure and report the resulting
-leakage in §\ref{sec:results} and find it empirically
-negligible. Second, \texttt{code\_only} depends on REPL state
+leakage in §\ref{sec:setup-surfaces} and find it empirically
+negligible (${<}1\%$ on both restricted arms). Second, \texttt{code\_only} depends on REPL state
 persisting between \texttt{execute\_code} invocations: without a
 persistent kernel, the round-trip savings of ``one script per task''
 collapse, so the exec-server pins
@@ -94,8 +94,10 @@ credentials and minimal config needed for the run, and points the
 binary at it via \texttt{CLAUDE\_CONFIG\_DIR} or
 \texttt{CODEX\_HOME}. No session-persistence files, no cross-run
 state. Claude is invoked with
-\texttt{--dangerously-skip-permissions\,--no-session-persistence};
-Codex with \texttt{--dangerously-bypass-approvals-and-sandbox}.
+\texttt{--dangerously-skip-permissions}
+\texttt{--no-session-persistence};
+Codex with
+\texttt{--dangerously-bypass-approvals\allowbreak-and-sandbox}.
 
 \paragraph{Wall-time cap.} Each invocation runs in a fresh process
 group; on timeout the harness sends \texttt{SIGKILL} to the entire
@@ -142,23 +144,17 @@ than the canonical protocol, which assumes a clean apply.
 
 We adopt the tool-use tax framing of
 Zhang~et~al.~\cite{zhang2026tooltax}: a tool delivers net benefit iff
-the task-specific capability gain it provides exceeds the per-call
-cost of carrying its definition in the prompt. The original framework
-targets general math and question-answering tool use; we apply it to
-the coding-agent IDE surface. Most Claude Code IDE primitives are
-bash-subsets in \emph{capability} (Read, Grep, Glob, and Write reduce
-to \texttt{cat}, \texttt{grep}, \texttt{find}, and shell-heredoc
-respectively); \texttt{Edit} is the one primitive with non-overlapping
-capability --- atomic byte-precise replacement with linting --- which
-is awkward to express in bash. The per-call tax (system-message
-bytes spent defining each tool) is task-invariant; the \emph{gain}
-term depends on the regime, on which primitives the agent actually
-uses, and on the agent's call pattern.
-
-§\ref{sec:results} reads the four-cell cost structure as the
-empirical landing of this inequality across (regime, agent) pairs;
-§\ref{sec:discussion} decomposes the structure into the three
-mechanisms (edit-friction path-cost, failure-cost on doomed
+its task-specific capability gain exceeds the per-call cost of
+carrying its definition in the prompt. Most Claude Code IDE primitives
+are bash-subsets in capability (Read, Grep, Glob, and Write reduce to
+\texttt{cat}, \texttt{grep}, \texttt{find}, and shell-heredoc);
+\texttt{Edit} alone has non-overlapping capability --- atomic
+byte-precise replacement with linting --- awkward to express in bash.
+The per-call tax is task-invariant; the gain term depends on regime, on
+which primitives the agent uses, and on its call pattern.
+§\ref{sec:results} reads the four-cell cost structure as the empirical
+landing of this inequality; §\ref{sec:discussion} decomposes it into
+three mechanisms (edit-friction path-cost, failure-cost on doomed
 trajectories, and pricing-asymmetry batching/output-control) that the
 framework alone does not pin down.
 
@@ -210,25 +206,16 @@ floor and all multi-turn cache reads are unchanged. The adjustment
 normalises the system-prompt warm/cold lottery without claiming we
 achieved isolation.
 
-The adjustment deliberately stops at the arm-median, which
-corresponds to the size of the shared system prompt plus tool
-definitions; we do not claim it controls for cache sharing
-\emph{beyond} that prefix. Such post-prompt cross-task sharing is,
-however, vanishingly unlikely. Both providers' prompt caches key on
-a prefix hash invalidated by any byte difference in the cached span,
-and past the system prompt the conversation diverges per task: the
-first user message is the task statement (a fresh string per
-instance), the model's response is task-conditional, and every
-subsequent tool-call payload carries task-specific arguments. For a
-cache hit to extend further, two instances would need byte-identical
-task statements, model responses, and tool-call payloads in
-identical order. Empirically, per-instance first-turn
+The adjustment stops at the shared system-prompt+tool-definition
+prefix; we do not claim control over post-prefix cache sharing. Such
+sharing is empirically negligible: prompt caches key on a prefix hash
+invalidated by any byte difference, and past the system prompt every
+turn diverges per task (fresh task statement, task-conditional
+response, task-specific tool-call payloads). Per-instance first-turn
 \texttt{cache\_read} clusters tightly around each arm's system-prompt
 token count, with no bimodal tail consistent with cross-task content
-reuse. We deliberately do not report raw API-billed cost: it is
-sensitive to run order and ambient cache state we cannot control, so
-reporting it would mislead readers about effects we cannot
-disentangle from confounds.
+reuse. We do not report raw API-billed cost: it is sensitive to run
+order and ambient cache state we cannot control.
 
 % ──────────────────── 3.6 The artifact-suite contract ──────────────────
 \subsection{The artifact-suite contract}

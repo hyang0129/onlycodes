@@ -24,26 +24,35 @@ and \S\ref{sec:m-artifact} (artifact-suite contract), and is not
 relitigated here.
 
 \paragraph{Artifact suite (computation regime).} A self-contained suite of
-$n{=}93$ tasks spanning nine categories: algorithmic, data engineering,
-data processing, data science, enumeration, iterative numerical, ML
-engineering, stateful reasoning, and verification-heavy. Each task is
-defined by a \texttt{(workspace, hidden grader, reference output)} triple
-under the contract of \S\ref{sec:m-artifact}; the category list describes
-benchmark scope, not a forward-reference to a per-category results table
-(per-category breakdowns are out of scope for the headline analysis).
-% TODO macro: per-category n-counts via \result{artifact_categories}{...}
-% — blocked on paper/data/artifact_categories.csv promotion.
+$n{=}\result{artifact_categories}{total:n}$ tasks across nine categories,
+three at $n{=}\result{artifact_categories}{data_engineering:n}$ (data
+engineering, data science, ML engineering) and six at
+$n{=}\result{artifact_categories}{algorithmic:n}$ (algorithmic, data
+processing, enumeration, iterative numerical, stateful reasoning,
+verification-heavy). Each task is a
+\texttt{(workspace, hidden grader, reference output)} triple under the
+contract of \S\ref{sec:m-artifact}; the reference-output round-trip
+self-test passes on all $\result{artifact_categories}{total:n}$ tasks in
+CI.
 
-\paragraph{SWE-bench Mini (modification regime).} A curated $n{=}100$
-subset of SWE-bench~\cite{jimenez2024swebench} split into two
-sub-corpora: \emph{verified-mini} (Django and Sphinx, drawn from
-SWE-bench Verified~\cite{report:openai2024swebenchverified}), and
-\emph{datasci-mini} (sklearn, matplotlib, xarray, sympy, seaborn, and
-astropy). The split spans the canonical modification regime as well as
-the data-science / scientific-Python tail underrepresented in SWE-bench
-Verified.
-% TODO macro: per-repo n-counts via \result{swebench_repos}{...}
-% — blocked on paper/data/swebench_repos.csv promotion.
+\paragraph{SWE-bench Mini (modification regime).} A curated
+$n{=}\result{swebench_repos}{total:total:n}$ subset of
+SWE-bench~\cite{jimenez2024swebench} in two sub-corpora.
+\emph{verified-mini}
+($n{=}\result{swebench_repos}{verified-mini:total:n}$): Django
+($\result{swebench_repos}{verified-mini:django:n}$), Sphinx
+($\result{swebench_repos}{verified-mini:sphinx:n}$), drawn from
+SWE-bench Verified~\cite{report:openai2024swebenchverified}.
+\emph{datasci-mini}
+($n{=}\result{swebench_repos}{datasci-mini:total:n}$): sklearn
+($\result{swebench_repos}{datasci-mini:scikit-learn:n}$), matplotlib
+($\result{swebench_repos}{datasci-mini:matplotlib:n}$), xarray
+($\result{swebench_repos}{datasci-mini:xarray:n}$), sympy
+($\result{swebench_repos}{datasci-mini:sympy:n}$), seaborn
+($\result{swebench_repos}{datasci-mini:seaborn:n}$), astropy
+($\result{swebench_repos}{datasci-mini:astropy:n}$). The split spans the
+canonical modification regime and the data-science / scientific-Python
+tail underrepresented in SWE-bench Verified.
 
 % ──────────────────────────── §4.2 Agents ──────────────────────────────
 \subsection{Agents}
@@ -64,6 +73,15 @@ agent-design contrast on SWE-bench
 $p=$\,\resp{fig.02_signflip}{swebench-claude:p} on the
 \texttt{code\_only} cost contrast) is one of the four cells that
 Table~\ref{tab:code-only-headline} in \S\ref{sec:results} reports.
+
+\paragraph{Codex apply\_patch leakage audit.} The
+\S\ref{sec:method-arms} soft-disable was audited on all $110$ Codex
+SWE-bench JSONLs (seed~1): \texttt{file\_change} events fire $7$ times
+on \texttt{bash\_only} and $4$ times on \texttt{code\_only} (both
+${<}1\%$, the $4$ concentrated in
+\texttt{scikit-learn\_\_scikit-learn-11596}) vs.\ $344$ on
+\texttt{baseline}. The cross-agent comparisons in \S\ref{sec:results}
+are not biased by leaked \texttt{apply\_patch} use.
 % TODO macro: \result{setup}{codex_cli_version} — blocked on
 % paper/data/setup_constants.csv promotion. Pin verbatim once landed.
 
@@ -79,16 +97,11 @@ the harness; we do not reproduce them in this PDF.
 
 \paragraph{The unit of inference is the task, not the seed.} A
 seed-marginal SE would pool over instances of dramatically heterogeneous
-difficulty (a knapsack instance and a Sympy bug at the same row), so the
-reported variance is dominated by between-task variance and tells the
-reader nothing about whether arm A beats arm B. Empirically, on the
-completed Claude SWE-bench runs the cross-instance standard deviation of
-the cache-adjusted cost is roughly an order of magnitude larger than the
-\emph{paired} per-task contrast standard error, and pairing flips
-several of the headline cells from NS to significant. Treating seeds as the unit of
-inference would inflate $n$, confuse between-task variance with
-within-task replication noise, and obscure the signal the paper is
-trying to detect.
+difficulty and confuse between-task variance with within-task
+replication noise. Empirically, on Claude SWE-bench the cross-instance
+SD of cache-adjusted cost is roughly an order of magnitude larger than
+the paired per-task contrast SE, and pairing flips several headline
+cells from NS to significant.
 
 \paragraph{Procedure.} For every comparison reported in
 \S\ref{sec:results}: (i) collapse the 3 seeds within each

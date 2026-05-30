@@ -8,20 +8,15 @@
 
 \begin{itemize}
 
-\item \textbf{Two agent surfaces.} The crossed
+\item \textbf{Two agent surfaces.} The
 $3\,{\times}\,2\,{\times}\,2$ design exercises Claude Code
 (\texttt{claude-sonnet-4-6}) and Codex CLI (\texttt{gpt-5.5}); GPT-5,
-Gemini~2.5, and open-weight scaffolds are out of scope. The
-three-mechanism account (\S\ref{sec:discussion}) predicts where each
-component should generalise, but the joint four-cell footprint is
-verified only on these two agents.
+Gemini~2.5, and open-weight scaffolds are out of scope, and the joint
+four-cell footprint is verified only on these two agents.
 
-\item \textbf{Sample size.} Per-cell $n$ is $93$ for Artifact and $100$
-for SWE-bench Mini, three seeds each. The SWE-bench/Claude cost gap of
-$\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$
-($p = \resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:wilcoxon_p}$)
-is directional rather than significant; SWE-bench-Verified-scale
-replication is reserved for follow-up work.
+\item \textbf{Sample size.} Per-cell $n$ is $93$ (Artifact) and $100$
+(SWE-bench Mini), three seeds each; the directional Claude/SWE-bench
+cost gap motivates SWE-bench-Verified-scale replication as follow-up.
 
 \item \textbf{Artifact-suite scope.} Tasks are single-language (Python)
 on Linux, skewed toward analytical and ML-flavoured computation; the
@@ -38,8 +33,7 @@ are not adjusted.
 
 \item \textbf{Single-shot, internal-surface scope.} Each
 $(\text{instance}, \text{arm}, \text{seed})$ triple is a single agent
-invocation; multi-shot prompting, self-consistency, scaffold evolution,
-and external MCP tool surfaces (Drive, Slack, vendor APIs;
-\S\ref{sec:related}) are out of scope.
+invocation; multi-shot prompting, scaffold evolution, and external MCP
+tool surfaces (\S\ref{sec:related}) are out of scope.
 
 \end{itemize}

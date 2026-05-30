@@ -1,13 +1,12 @@
 % paper/sections/06_discussion.tex
 % Prose for §6. Outline: paper/06_discussion.md.
-% Six subsections; 0.5 pg target / 0.75 pg ceiling.
+% Five subsections; 0.5 pg target / 0.75 pg ceiling.
 %
 %   §6.1 Path-cost: edit friction on Claude SWE-bench   (sec:disc-pathcost)
 %   §6.2 Pricing asymmetry: batching + output-control   (sec:disc-pricing)
 %   §6.3 Failure-cost + capability invariance           (sec:disc-failurecost)
-%   §6.4 Benchmark reuse beyond this paper              (sec:disc-reuse)
-%   §6.5 Where the method works / doesn't               (sec:disc-scope)
-%   §6.6 Implications for agent design                  (sec:disc-design)
+%   §6.4 Where the method works / doesn't               (sec:disc-scope)
+%   §6.5 Implications for agent design                  (sec:disc-design)
 %
 % Numbers resolve through \result / \resp / \respct macros backed by CSVs
 % in paper/data/.
@@ -40,13 +39,7 @@ high-patch half (one-sided Mann--Whitney
 $p = \resp{edit_friction}{highpatch_mw_p:value}$). About
 $\result{edit_friction}{intercept_gap:value}[0]$ tokens of the aggregate gap
 is fixed-cost regime verbosity (OLS intercept at zero patch size); edit
-friction is the additional per-line tax, not the whole gap. The Codex
-placebo control is consistent: Codex's
-\texttt{code\_only}-vs-\texttt{baseline} $\Delta_{\text{output tokens}}$
-is
-$\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:output_tokens:mean_b}$
-(NS), since Codex never disabled a native edit primitive that
-\texttt{code\_only} had to replace.
+friction is the additional per-line tax, not the whole gap.
 
 % ─────────────────────── §6.2 — pricing asymmetry ──────────────────────
 \subsection{Pricing asymmetry: batching and programmatic output control on Codex}
@@ -167,34 +160,22 @@ of $\result{agreement_matrix}{_all:_all:cache_floor_total_groups}[0]$
 (\S\ref{sec:method-cost}), so the collapse is not a cost-adjustment
 artefact.
 
-% ─────────────────────── §6.4 — benchmark reuse ────────────────────────
-\subsection{Benchmark reuse beyond this paper}
-\label{sec:disc-reuse}
-The artifact-suite contract (\S\ref{sec:method-artifact}) generalises
-beyond this paper: a follow-up author adds a task by writing a
-\texttt{task.yaml}, a \texttt{workspace/}, a deterministic offline
-\texttt{grade(scratch\_dir)$\to$GradeResult} function obeying the four
-rules, and a \texttt{reference\_output.*}. The materialize-time no-leak
-invariant catches grader leakage at pre-flight; subprocess isolation
-contains grader exceptions. The contract is the load-bearing piece, not
-the specific category mix used here.
-
-% ─────────────────────── §6.5 — scope of the method ────────────────────
+% ─────────────────────── §6.4 — scope of the method ───────────────────
 \subsection{Where the method works, and where it does not}
 \label{sec:disc-scope}
 The harness quantifies tool-surface tax under cache noise
 (\S\ref{sec:method-cost}), isolates regime effects via the
-artifact-vs-SWE-bench split, and surfaces agent-design coupling---the
-significant same-regime divergence on SWE-bench between Codex (cost wins
-at $p{<}10^{-8}$) and Claude (NS) under an identical restriction is the
-single sharpest finding the setup produces. It does not support
-model-capability claims, because pass rates are statistically tied; the
-path-vs-answer dissociation in \S\ref{sec:disc-failurecost} is what
-makes the cost contrasts interpretable as cost-engineering claims rather
-than capability claims. Per-repo SWE-bench breakdowns at
-$n{\approx}12$--$15$ are noisier than the headline $n{=}100$; the paper
-does not make per-repo claims, and the remaining caveat to the headline
-contrast is the NS Claude $\times$ SWE-bench cell at $p{\approx}0.12$.
+artifact-vs-SWE-bench split, and surfaces agent-design coupling: the
+same restriction (\texttt{code\_only}) produces a significant cost win
+for Codex on SWE-bench ($p{<}10^{-8}$) and a non-significant
+directionally-costlier result for Claude in the same cell --- the
+sharpest \emph{agent-design} contrast in the four-cell structure. It
+does not support model-capability claims, because pass rates are
+statistically tied; the path-vs-answer dissociation in
+\S\ref{sec:disc-failurecost} licenses the cost contrasts as
+cost-engineering rather than capability claims. We make no per-repo
+SWE-bench claims at $n{\approx}12$--$15$; the remaining headline
+caveat is the NS Claude $\times$ SWE-bench cell at $p{\approx}0.12$.
 
 % ─────────────────────── §6.6 — implications for design ────────────────
 \subsection{Implications for agent design}

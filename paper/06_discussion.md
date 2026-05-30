@@ -72,7 +72,7 @@ One paragraph. The artifact-suite contract (§3.6) — deterministic / offline /
 
 Honest accounting, compressed to ~3 sentences:
 
-1. **Works for:** quantifying tool-surface tax under cache-noise (cache-adjusted methodology, §3.5); isolating regime effects via the artifact-vs-SWE-bench split; surfacing agent-design coupling (the significant same-regime divergence on SWE-bench — Codex *** vs Claude NS — between agents under an identical restriction).
+1. **Works for:** quantifying tool-surface tax under cache-noise (cache-adjusted methodology, §3.5); isolating regime effects via the artifact-vs-SWE-bench split; surfacing agent-design coupling (the significant same-regime, same-restriction divergence on SWE-bench — Codex *** vs Claude NS — i.e., the *pattern of significance directions* under fixed regime, not a magnitude claim; the largest single-cell magnitude is Artifact/Claude at −24.6% *** and is regime-axis evidence rather than agent-design).
 2. **Doesn't work for:** claiming model-capability differences (pass rates are tied; we only measure path differences). Per-task pathology analysis is out of paper scope (decided 2026-05-28; the `analyze/` pipeline remains as harness instrumentation but does not land in the paper — see [paper/CLAUDE.md] for the rationale).
 3. **One sentence on power:** per-cell SWE-bench breakdowns at n≈12-15 per repo are noisier than the headline n=100 — but per-repo breakdowns were **cut** from §5 in the 2026-05-28 restructure (former §5.5), so this caveat applies only to any per-repo claim made in compiled prose. Default: do not make per-repo claims.
 

@@ -190,6 +190,8 @@ WHITELIST: list[str] = [
     # SWE-bench instance IDs cited in §6.2 case-study figures (Figures 3 and 4)
     "sphinx-doc\\_\\_sphinx-7757",
     "django\\_\\_django-11848",
+    # SWE-bench instance ID cited in §4.2 Codex apply_patch leakage audit
+    "scikit-learn\\_\\_scikit-learn-11596",
 ]
 
 

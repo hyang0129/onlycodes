@@ -1,0 +1,18 @@
+# source_commit: 415edd800a7b61e0f3420d709cb3e1b5fe6a36e4
+# generated: 2026-05-30T15:09:33Z
+# generator: paper/data/scripts/artifact_categories.py
+# key_schema: category
+# default_precision: 0
+# Per-category instance counts for the Artifact suite (§4.1).
+# `total` row is the grand n across all categories.
+category,n,precision
+algorithmic,8,0
+data_engineering,15,0
+data_processing,8,0
+data_science,15,0
+enumeration,8,0
+iterative_numerical,8,0
+ml_engineering,15,0
+stateful_reasoning,8,0
+verification_heavy,8,0
+total,93,0
