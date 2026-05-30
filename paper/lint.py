@@ -184,6 +184,8 @@ WHITELIST: list[str] = [
     "seed~1",
     "seed~2",
     "seed~3",
+    # §4.4 wall budget — written as plain prose, not a \result{} macro.
+    "60 minutes",
     # Table cell sample sizes used as static text in §5.4 (matches WHITELIST "n=93" etc.)
     "& 93",
     "& 100",

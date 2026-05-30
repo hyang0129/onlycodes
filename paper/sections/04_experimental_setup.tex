@@ -158,11 +158,8 @@ in the setup section is what makes every cost column in
 % TODO macro: per-Mtok rate table via \result{cost_rates}{...}
 % — blocked on paper/data/cost_rates.csv promotion.
 
-\paragraph{Wall budget.} A single wall-clock budget is applied per
-\texttt{(instance, arm, run)} (\S\ref{sec:method-harness}); the harness
-declared \texttt{max\_code\_runs} and \texttt{max\_wall\_seconds}
-fields are reserved for future enforcement and are left unenforced
-throughout this paper's runs.
-% TODO macro: \result{setup}{wall_budget_seconds}
-% — blocked on paper/data/setup_constants.csv promotion.
+\paragraph{Wall budget.} Each $(\text{instance}, \text{arm}, \text{run})$
+is capped at 60 minutes of wall time (\S\ref{sec:method-harness});
+per-task execution-budget fields reserved in the artifact task schema
+are not enforced.
 
