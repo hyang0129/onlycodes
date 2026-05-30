@@ -93,11 +93,8 @@ creates a fresh temporary configuration directory containing only the
 credentials and minimal config needed for the run, and points the
 binary at it via \texttt{CLAUDE\_CONFIG\_DIR} or
 \texttt{CODEX\_HOME}. No session-persistence files, no cross-run
-state. Claude is invoked with
-\texttt{--dangerously-skip-permissions}
-\texttt{--no-session-persistence};
-Codex with
-\texttt{--dangerously-bypass-approvals\allowbreak-and-sandbox}.
+state. Both binaries run in headless mode with permission prompts and
+sandbox / approval gates bypassed.
 
 \paragraph{Wall-time cap.} Each invocation runs in a fresh process
 group; on timeout the harness sends \texttt{SIGKILL} to the entire
