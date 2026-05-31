@@ -10,6 +10,17 @@
 
 \label{sec:introduction}
 
+% ---------------------------------------------------------------------------
+% Figure 1 (headline teaser) — four-cell cost structure. Promoted from §5.3.
+% Lets reviewers see the load-bearing finding on page 1 or 2 before reading §5.
+% ---------------------------------------------------------------------------
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{generated/figures/02_signflip}
+\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Paired Wilcoxon signed-rank $p$-values are reported inline in \S\ref{sec:results-structure}; per-cell magnitudes and additional contrasts in Table~\ref{tab:code-only-headline}.}
+\label{fig:cost-structure}
+\end{figure}
+
 % ───────────────────────── ¶1 — The phenomenon ─────────────────────────
 Coding agents now ship with overlapping tool surfaces---Read, Grep, Glob,
 Edit, Write, and Bash on Claude Code; ACI primitives on SWE-agent; an MCP

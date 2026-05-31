@@ -11,8 +11,7 @@
 \item \textbf{Two agent surfaces.} The
 $3\,{\times}\,2\,{\times}\,2$ design exercises Claude Code
 (\texttt{claude-sonnet-4-6}) and Codex CLI (\texttt{gpt-5.5}); GPT-5,
-Gemini~2.5, and open-weight scaffolds are out of scope, and the joint
-four-cell footprint is verified only on these two agents.
+Gemini~2.5, and open-weight scaffolds are out of scope.
 
 \item \textbf{Sample size.} Per-cell $n$ is $93$ (Artifact) and $100$
 (SWE-bench Mini), three seeds each; the directional Claude/SWE-bench
@@ -25,15 +24,12 @@ on Rust, systems-engineering tasks, or long-horizon scenarios.
 
 \item \textbf{Cost is cache-adjusted, not cache-isolated.} Neither the
 Anthropic Messages API nor the OpenAI Responses API exposes a
-documented knob to disable or partition the server-side prompt cache
-(\S\ref{sec:method-cost}). We charge every token at the non-cached rate
-and floor each instance's first-turn \texttt{cache\_read} at the per-arm
-median; within-task multi-turn cache reads and deeper server-side state
-are not adjusted.
+documented knob to disable the server-side prompt cache
+(\S\ref{sec:method-cost}); within-task multi-turn cache reads are not
+adjusted.
 
-\item \textbf{Single-shot, internal-surface scope.} Each
-$(\text{instance}, \text{arm}, \text{seed})$ triple is a single agent
-invocation; multi-shot prompting, scaffold evolution, and external MCP
-tool surfaces (\S\ref{sec:related}) are out of scope.
+\item \textbf{Single-shot, internal-surface scope.} Multi-shot prompting,
+scaffold evolution, and external MCP tool surfaces (\S\ref{sec:related})
+are out of scope.
 
 \end{itemize}
