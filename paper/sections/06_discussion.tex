@@ -20,7 +20,8 @@
 The lone cell of Table~\ref{tab:code-only-headline} in which
 \texttt{code\_only} is directionally costlier than its rival is Claude
 $\times$ SWE-bench: cost runs $+14\%$ (NS) but output tokens are $+40\%$
-at $p{<}10^{-9}$---a volume signature, not a constant-overhead one. The
+at $p{<}10^{-9}$---the extra cost scales with output volume rather than
+reflecting a fixed per-run overhead. The
 working hypothesis is edit friction: under \texttt{code\_only}, every
 file modification must be expressed as a Python script rather than as a
 single native \texttt{Edit} or \texttt{Write} call. The per-instance
@@ -50,7 +51,7 @@ friction is the additional per-line tax, not the whole gap.
 \centering
 \input{figures_src/03_batching.tikz}
 \caption{Tool-call batching at one LLM step
-(Codex on \texttt{sphinx-doc\_\_sphinx-7757}; both arms PASS). On a
+(Codex on \texttt{sphinx-doc\allowbreak\_\_sphinx-7757}; both arms PASS). On a
 context-gathering step, the baseline arm emits three parallel
 \texttt{exec\_command} calls; the code-only arm bundles the same three
 lookups into a single \texttt{execute\_code} script. The aggregate ratio
@@ -63,7 +64,7 @@ on Codex SWE-bench.}
 \centering
 \includegraphics[width=\columnwidth]{generated/figures/04_h2_truncation}
 \caption{Per-call output at one LLM step
-(Codex on \texttt{django\_\_django-11848}; both arms PASS). The baseline
+(Codex on \texttt{django\allowbreak\_\_django-11848}; both arms PASS). The baseline
 arm's broad keyword sweep matched unrelated fixture data and pinned the
 \texttt{exec\_command} output cap at
 $\result{fig.04_h2_truncation}{exec_command_cap}$~chars
@@ -122,14 +123,13 @@ mechanism viewed at two granularities.
 \label{sec:discussion-failure-cost}
 Pass rates differ by less than three percentage points across every cell
 while costs swing $20$--$40\%$ (Table~\ref{tab:code-only-headline}). The
-clean reading is that tool restriction is a harness-efficiency axis
+straightforward interpretation is that tool restriction is a harness-efficiency axis
 orthogonal to model capability: the model solves the task with any
 reasonable interface; the surface changes the path, not the answer.
-This is consistent with the Capability Overlap
-Principle~\cite{zhang2026tooltax} and with the informal pass-rate
-invariance observed under tool ablation
-in~\cite{report:verdent2025swebench}. The agreement matrix
-(Table~\ref{tab:agreement-matrix}) gives the empirical receipt:
+This matches the Capability Overlap
+Principle~\cite{zhang2026tooltax} and the pass-rate invariance
+reported under tool ablation in~\cite{report:verdent2025swebench}. The
+agreement matrix (Table~\ref{tab:agreement-matrix}) confirms it:
 unanimous-outcome instances dominate every cell at
 ${\geq}\result{agreement_matrix}{_all:_all:min_unanimous_majority_pct}[0]\%$
 under majority vote and
@@ -152,13 +152,11 @@ $+\result{headline_unanimous}{swebench:claude:onlycode-vs-baseline:output_tokens
 tax that persists on successful runs; the remaining input-side
 blow-up is a failure-cost---extended doomed-run trajectories on
 instances no surface can solve. Conditioning on success separates them.
-The cache-floor median recomputed on the subset is byte-identical to the
-full-set median in
+The cache-floor median is byte-identical on subset and full set in
 $\result{agreement_matrix}{_all:_all:cache_floor_unchanged_majority}[0]$
 of $\result{agreement_matrix}{_all:_all:cache_floor_total_groups}[0]$
-(benchmark, seed, agent, arm) groups
-(\S\ref{sec:method-cost}), so the collapse is not a cost-adjustment
-artefact.
+(benchmark, seed, agent, arm) groups (\S\ref{sec:method-cost}), so the
+collapse is not a cost-adjustment artefact.
 
 % ─────────────────────── §6.4 — scope of the method ───────────────────
 \subsection{Where the method works, and where it does not}

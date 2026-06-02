@@ -17,7 +17,7 @@
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{generated/figures/02_signflip}
-\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Paired Wilcoxon signed-rank $p$-values are reported inline in \S\ref{sec:results-structure}; per-cell magnitudes and additional contrasts in Table~\ref{tab:code-only-headline}.}
+\caption{Cost ratio $(\text{code-only}\,/\,\text{cheapest rival})$ per $(\text{benchmark}, \text{agent})$ cell, on a $1.0$ parity line. The four bars are the two benchmarks $\times$ two agents that constitute the \emph{four-cell structure} referenced throughout the paper. Three of four cells favor \texttt{code\_only} (significant on Artifact-Claude and SWE-bench-Codex; directional on Artifact-Codex). The lone exception is Claude $\times$ SWE-bench; the source of this anomaly is decomposed in Table~\ref{tab:headline-unanimous}. Paired Wilcoxon signed-rank $p$-values are reported inline in \S\ref{sec:results-structure}; per-cell magnitudes and additional contrasts in Table~\ref{tab:code-only-headline}.}
 \label{fig:cost-structure}
 \end{figure}
 
@@ -53,7 +53,7 @@ post-agent \texttt{test\_patch} application
 \texttt{baseline} arm exposes each agent's default tool surface;
 \texttt{bash\_only} restricts to native bash plus read/glob/grep, with
 Edit and Write removed; \texttt{code\_only} replaces the entire tool
-surface with a single MCP tool---\texttt{mcp\_\_codebox\_\_execute\_code}
+surface with a single MCP tool---\texttt{mcp\allowbreak\_\_codebox\allowbreak\_\_execute\allowbreak\_code}
 on a persistent Python+Bash REPL---and disallows every native
 built-in~\cite{anthropic2024mcp}. The modification cell is SWE-bench Mini
 ($n=100$, canonical post-agent \texttt{test\_patch} protocol); the
@@ -90,9 +90,12 @@ level.
 % ───────────────────────── ¶4 — Contributions ──────────────────────────
 We make three contributions.
 
-\paragraph{(1) A four-cell agent-conditional cost structure.} Across the
-four (regime, agent) cells, \texttt{code\_only} is the cheaper arm in
-three and directionally more expensive in the fourth---Artifact/Claude
+\paragraph{(1) A four-cell agent-conditional cost structure.} The four
+cells are the cross of the two task regimes with the two agents---%
+\{computation (Artifact), modification (SWE-bench)\} $\times$ \{Claude,
+Codex\}. Across these four (regime $\times$ agent) cells,
+\texttt{code\_only} is the cheaper arm in three and directionally more
+expensive in the fourth---Artifact/\allowbreak Claude
 ($\Delta_{\text{cost adj.}} =
 \respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_b}$,
 $p = \resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:wilcoxon_p}$),

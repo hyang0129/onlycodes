@@ -249,6 +249,10 @@ def lint_file(path: Path) -> list[str]:
             context_start = max(0, pos - 60)
             context_end = min(len(line), pos + 60)
             context = line[context_start:context_end]
+            # \allowbreak is a pure line-break hint with no semantic content;
+            # drop it so it can't split a whitelisted token (e.g. an instance
+            # ID) and defeat the substring match below.
+            context = context.replace("\\allowbreak", "")
             if any(entry in context for entry in WHITELIST):
                 continue
 

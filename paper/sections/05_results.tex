@@ -17,19 +17,19 @@
 \label{sec:results-headline}
 
 Reading down the cost-adjusted column of Table~\ref{tab:code-only-headline},
-\texttt{code\_only} is cheaper than its cheapest tool-rich rival in three
-of the four (regime, agent) cells. The two significant wins are
+\texttt{code\_only} is cheaper than its cheapest rival in three
+of the four (regime, agent) cells. The two significant advantages are
 Artifact/Claude (\respct{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:claude:code_only-vs-bash_only:cost_adj:mean_b},
 $p=$\,\resp{paired_contrasts}{artifact:claude:code_only-vs-bash_only:cost_adj:wilcoxon_p})
 and SWE-bench/Codex
 (\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:codex:onlycode-vs-baseline:cost_adj:mean_b},
 $p=$\,\resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:cost_adj:wilcoxon_p});
-the third is a directional Artifact/Codex win
+the third is a directional Artifact/Codex advantage
 (\respct{paired_contrasts}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_delta}{artifact:codex:code_only-vs-bash_only:cost_adj:mean_b}, NS).
 The lone exception is SWE-bench/Claude at
 \respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}
 (NS, $p=$\,\resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:wilcoxon_p}).
-The two significant wins span both benchmarks and both agents; the single
+The two significant advantages span both benchmarks and both agents; the single
 cell where the advantage disappears motivates the edit-friction analysis
 in \S\ref{sec:discussion-edit-friction}. Same model, same harness, same
 prompts --- the per-cell magnitude and sign of the \texttt{code\_only}
@@ -42,17 +42,20 @@ axes. SWE-bench/Claude's directionally costlier outcome is concentrated
 in output tokens
 (\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_delta}{swebench:claude:onlycode-vs-baseline:output_tokens:mean_b},
 $p=$\,\resp{paired_contrasts}{swebench:claude:onlycode-vs-baseline:output_tokens:wilcoxon_p}),
-foreshadowing the edit-friction mechanism
+anticipating the edit-friction mechanism
 (\S\ref{sec:discussion-edit-friction}). SWE-bench/Codex's significant
-cost win is concentrated in input tokens
+cost advantage is concentrated in input tokens
 (\respct{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_delta}{swebench:codex:onlycode-vs-baseline:input_tokens:mean_b},
 $p=$\,\resp{paired_contrasts}{swebench:codex:onlycode-vs-baseline:input_tokens:wilcoxon_p})
-with output statistically flat, foreshadowing the per-call input-budget
+with output statistically flat, anticipating the per-call input-budget
 mechanism (\S\ref{sec:discussion-codex-batching}).
 
 \begin{table*}[t]
 \centering
 \caption{Code-only vs.\ its cheapest rival in each (benchmark, agent) cell.
+The rival is the lower-cost of the two non-code-only arms of the
+\S\ref{sec:method-arms} ablation: \texttt{bash\_only} on Artifact and
+\texttt{baseline} on SWE-bench, for both agents.
 $\Delta_{\text{pass}}$ in percentage points; $\Delta_{\text{cost adj.}}$,
 $\Delta_{\text{input}}$, $\Delta_{\text{output}}$ are relative changes
 ($(\text{code-only} - \text{rival}) / \text{rival}$, in \%); cost is
@@ -120,26 +123,26 @@ within each cell; negative values favor code-only. Artifact/Claude is a
 uniform shift:
 \result{fig.01_distribution}{artifact-claude:n_win}[0] of
 \result{fig.01_distribution}{artifact-claude:n}[0] instances win, median
-$\$\result{fig.01_distribution}{artifact-claude:median_delta}[3]$ per
+$\resdollar{fig.01_distribution}{artifact-claude:median_delta}[3]$ per
 instance. SWE-bench/Codex shows the same shape:
 \result{fig.01_distribution}{swebench-codex:n_win}[0] of
 \result{fig.01_distribution}{swebench-codex:n}[0] win, median
-$\$\result{fig.01_distribution}{swebench-codex:median_delta}[3]$. The
+$\resdollar{fig.01_distribution}{swebench-codex:median_delta}[3]$. The
 two NS cells differ in structure. Artifact/Codex is symmetric near
 parity ---
 \result{fig.01_distribution}{artifact-codex:n_win}[0] of
 \result{fig.01_distribution}{artifact-codex:n}[0] win, IQR
-$\$\result{fig.01_distribution}{artifact-codex:p25_delta}[3]$ to
-$\$\result{fig.01_distribution}{artifact-codex:p75_delta}[3]$ ---
+$\resdollar{fig.01_distribution}{artifact-codex:p25_delta}[3]$ to
+$\resdollar{fig.01_distribution}{artifact-codex:p75_delta}[3]$ ---
 consistent with the Table~\ref{tab:code-only-headline} NS row.
 SWE-bench/Claude inverts: only
 \result{fig.01_distribution}{swebench-claude:n_win}[0] of
 \result{fig.01_distribution}{swebench-claude:n}[0] favor code-only,
 and the loss concentrates in a right tail
-($p_{75}=\$\result{fig.01_distribution}{swebench-claude:p75_delta}[3]$,
-$\max=\$\result{fig.01_distribution}{swebench-claude:max_delta}[2]$).
+($p_{75}=\resdollar{fig.01_distribution}{swebench-claude:p75_delta}[3]$,
+$\max=\resdollar{fig.01_distribution}{swebench-claude:max_delta}[2]$).
 The directionally costlier mean for that cell is task-structural, not
-outlier-driven; the shape of panels (c) and (d) anticipates the two
+outlier-driven; the shape of panels (c) and (d) motivates the two
 mechanism questions in \S\ref{sec:discussion}.
 
 % ---------------------------------------------------------------------------

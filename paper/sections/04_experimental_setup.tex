@@ -21,7 +21,7 @@
 We evaluate on two benchmarks chosen to cover disjoint task regimes; the
 methodology for each lives in \S\ref{sec:m-integrity} (SWE-bench protocol)
 and \S\ref{sec:m-artifact} (artifact-suite contract), and is not
-relitigated here.
+repeated here.
 
 \paragraph{Artifact suite (computation regime).} A self-contained suite of
 $n{=}\result{artifact_categories}{total:n}$ tasks across nine categories,
@@ -62,7 +62,7 @@ We instantiate the three-arm ablation of \S\ref{sec:method-arms}
 (\texttt{baseline}, \texttt{bash\_only}, \texttt{code\_only}) on two
 production coding agents:
 \emph{Claude Code}~\cite{repo:anthropic2026claudecode}
-(model \texttt{claude-sonnet-4-6}, Claude Code 2.1.139) and
+(model \texttt{claude-\allowbreak sonnet-\allowbreak 4-6}, Claude Code 2.1.139) and
 \emph{Codex CLI}~\cite{repo:openai2026codex} (model \texttt{gpt-5.5}).
 Both are invoked under the per-arm subprocess-isolation protocol of
 \S\ref{sec:method-harness} (per-run isolated config dir, no
@@ -79,7 +79,7 @@ Table~\ref{tab:code-only-headline} in \S\ref{sec:results} reports.
 SWE-bench JSONLs (seed~1): \texttt{file\_change} events fire $7$ times
 on \texttt{bash\_only} and $4$ times on \texttt{code\_only} (both
 ${<}1\%$, the $4$ concentrated in
-\texttt{scikit-learn\_\_scikit-learn-11596}) vs.\ $344$ on
+\texttt{scikit-learn\allowbreak\_\_scikit-learn-11596}) vs.\ $344$ on
 \texttt{baseline}. The cross-agent comparisons in \S\ref{sec:results}
 are not biased by leaked \texttt{apply\_patch} use.
 % TODO macro: \result{setup}{codex_cli_version} — blocked on
@@ -96,7 +96,7 @@ that produced every \verb|\result{}| macro in this paper are released with
 the harness; we do not reproduce them in this PDF.
 
 \paragraph{The unit of inference is the task, not the seed.} A
-seed-marginal SE would pool over instances of dramatically heterogeneous
+seed-marginal standard error (SE) would pool over instances of dramatically heterogeneous
 difficulty and confuse between-task variance with within-task
 replication noise. Empirically, on Claude SWE-bench the cross-instance
 SD of cache-adjusted cost is roughly an order of magnitude larger than
@@ -125,7 +125,7 @@ tasks of the per-task mean, $\pm \mathrm{SD}_{\text{task}} /
 \sqrt{n_{\text{tasks}}}$---the SE that respects task as the unit of
 replication. Per-seed values are derivable from the released data but
 are not the inferential unit. Implementation:
-\texttt{paper/data/scripts/paired\_contrasts.py}, fully reproducible
+\texttt{paper/\allowbreak data/\allowbreak scripts/\allowbreak paired\allowbreak\_contrasts.py}, fully reproducible
 from the released JSONL records.
 
 % ──────────────────── §4.4 Metrics, cost rates, exclusions ─────────────
@@ -140,18 +140,18 @@ denominator (see below), reported as an absolute $\Delta$ in
 percentage points. \emph{Cache-adjusted cost}: the
 median-floor-adjusted variant defined in \S\ref{sec:m-cost}, which
 charges the shared per-arm prefix at the cache-read rate using the
-per-arm median first-turn \texttt{cache\_read\_input\_tokens} as the
+per-arm median first-turn \texttt{cache\allowbreak\_read\allowbreak\_input\allowbreak\_tokens} as the
 floor; reported as a relative $\Delta$\%. \emph{Input tokens} and
 \emph{output tokens}: per-run sums of the corresponding usage fields
 across user-role API turns (cached and uncached pooled for input);
 reported as relative $\Delta$\%. Turns, dollars per turn, and median
-per-instance cost are diagnostic, not headline; the raw token-based
+per-instance cost are diagnostic rather than headline; the raw token-based
 cost is the underlying input to the cache-adjusted column, not a
 parallel reporting axis (\S\ref{sec:m-cost}).
 
 \paragraph{Cost rates.} The cache-adjusted cost formula plugs in the
 vendor-published per-million-token rates for input, cached-input, and
-output, separately for \texttt{claude-sonnet-4-6} and \texttt{gpt-5.5},
+output, separately for \texttt{claude-\allowbreak sonnet-\allowbreak 4-6} and \texttt{gpt-5.5},
 as of the access date in \S\ref{sec:m-cost}. Pinning the rate constants
 in the setup section is what makes every cost column in
 \S\ref{sec:results} reproducible from the released JSONL records.
