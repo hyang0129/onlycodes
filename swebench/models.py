@@ -20,6 +20,14 @@ class Problem:
     patch_file: str | None
     added_at: str
     hf_split: str
+    # SWE-bench's per-(repo, version) environment key. Used by
+    # harness._venv_kwargs to look up the official build spec (correct python +
+    # pinned deps) in swebench/data/official_specs.json (#311). Optional for
+    # backward compat with YAMLs materialized before #311.
+    version: str | None = None
+    # The commit SWE-bench installs the environment from (deps may be pinned to
+    # it). Captured for fidelity; the install-at-env-commit flow is a follow-up.
+    environment_setup_commit: str | None = None
 
     def to_yaml(self, path: Path) -> None:
         """Write this problem to a YAML file."""
@@ -32,6 +40,8 @@ class Problem:
             "problem_statement": self.problem_statement,
             "added_at": self.added_at,
             "hf_split": self.hf_split,
+            "version": self.version,
+            "environment_setup_commit": self.environment_setup_commit,
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -58,6 +68,8 @@ class Problem:
             patch_file=data.get("patch_file"),
             added_at=data.get("added_at", ""),
             hf_split=data.get("hf_split", "test"),
+            version=data.get("version"),
+            environment_setup_commit=data.get("environment_setup_commit"),
         )
 
 

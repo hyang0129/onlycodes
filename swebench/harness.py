@@ -12,6 +12,7 @@ import tempfile
 import threading
 from pathlib import Path
 
+from swebench import specs
 from swebench.runner import ClaudeRunner as _ClaudeRunner
 
 # ---------------------------------------------------------------------------
@@ -642,20 +643,38 @@ def _venv_kwargs(problem: "Problem") -> dict:  # type: ignore[name-defined]
     Lookup precedence (highest → lowest):
       1. ``_INSTANCE_PRE_INSTALL`` / ``_INSTANCE_PYTHON`` keyed by ``instance_id``
       2. ``_REPO_PRE_INSTALL`` / ``_REPO_PYTHON`` keyed by ``repo_slug``
-      3. Built-in defaults (``_DEFAULT_PYTHON``, no pre-install pins)
+      3. SWE-bench's **official spec** for the instance's ``(repo, version)``
+         (correct python + pinned deps) — see :mod:`swebench.specs` (#311)
+      4. Built-in defaults (``_DEFAULT_PYTHON``, no pre-install pins)
 
-    An explicit ``[]`` in an instance table suppresses the repo-level pin for
-    that instance (distinct from an absent key which falls through).
+    An explicit ``[]`` in an instance table suppresses the lower-precedence pin
+    for that instance (distinct from an absent key which falls through).
+
+    The official spec only applies when the YAML carries a ``version`` (added by
+    ``add`` post-#311) and that ``(repo, version)`` exists in the vendored map;
+    otherwise behaviour is unchanged. The hand tables always win, so curated
+    instances keep their tuned settings.
 
     Also passes ``repo_slug`` through so ``setup_venv`` can call ``_smoke_import``.
     """
+    spec = specs.spec_for(problem.repo_slug, getattr(problem, "version", None))
+
+    # pre_install: instance table > repo table > official-spec pins > None.
     pre = _INSTANCE_PRE_INSTALL.get(problem.instance_id)
     if pre is None:
         pre = _REPO_PRE_INSTALL.get(problem.repo_slug)
-    python_bin = _INSTANCE_PYTHON.get(
-        problem.instance_id,
-        _REPO_PYTHON.get(problem.repo_slug, _DEFAULT_PYTHON),
-    )
+    if pre is None and spec is not None:
+        pre = specs.pip_requirements(spec) or None
+
+    # python: instance table > repo table > official spec > default.
+    if problem.instance_id in _INSTANCE_PYTHON:
+        python_bin = _INSTANCE_PYTHON[problem.instance_id]
+    elif problem.repo_slug in _REPO_PYTHON:
+        python_bin = _REPO_PYTHON[problem.repo_slug]
+    elif spec is not None and specs.python_bin(spec):
+        python_bin = specs.python_bin(spec)
+    else:
+        python_bin = _DEFAULT_PYTHON
     pre_build_cmd = _REPO_PRE_BUILD.get(problem.repo_slug)
     post = _INSTANCE_POST_INSTALL.get(problem.instance_id)
     pre_sed = _REPO_PRE_INSTALL_SED.get(problem.repo_slug)
@@ -1047,6 +1066,47 @@ def _pip_run_checked(pip: str, args: list[str]) -> None:
         )
 
 
+# Cache of resolved interpreters so concurrent/repeated builds don't re-shell uv.
+_python_resolution_cache: dict[str, str] = {}
+_python_resolution_mu = threading.Lock()
+
+
+def _provision_python(python_bin: str) -> str:
+    """Resolve ``python_bin`` (e.g. ``"python3.8"``) to a usable interpreter.
+
+    If it is already on ``PATH`` (or is an absolute path), use it. Otherwise try
+    ``uv python install`` — which covers CPython **3.8+** — and return uv's path.
+    If neither succeeds, return ``python_bin`` unchanged so the subsequent
+    ``python -m venv`` fails with a clear "not found", which the validator
+    classifies as ``interpreter_unavailable`` (py3.5/3.6/3.7 need deadsnakes or
+    pyenv — #311 follow-up). Result is memoised per interpreter name.
+    """
+    if os.path.isabs(python_bin) or shutil.which(python_bin):
+        return python_bin
+    with _python_resolution_mu:
+        if python_bin in _python_resolution_cache:
+            return _python_resolution_cache[python_bin]
+        resolved = python_bin
+        uv = shutil.which("uv")
+        version = python_bin[len("python"):] if python_bin.startswith("python") else ""
+        if uv and version:
+            try:
+                subprocess.run(
+                    [uv, "python", "install", version],
+                    capture_output=True, text=True, timeout=600, check=True,
+                )
+                found = subprocess.run(
+                    [uv, "python", "find", version],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if found.returncode == 0 and found.stdout.strip():
+                    resolved = found.stdout.strip()
+            except (subprocess.SubprocessError, OSError):
+                pass  # fall through with the bare name; venv-create will error clearly
+        _python_resolution_cache[python_bin] = resolved
+        return resolved
+
+
 def setup_venv(
     venv_dir: str,
     repo_dir: str,
@@ -1157,9 +1217,12 @@ def setup_venv(
             if _needs_jinja2_pin(repo_dir):
                 _pin_jinja2(pip)
             return
-    # Fresh venv creation path.
+    # Fresh venv creation path. Resolve the interpreter (provision via uv if the
+    # spec calls for a version not on PATH); the sentinel keeps the original name
+    # so the reuse-path comparison stays stable regardless of how it resolved.
+    actual_python = _provision_python(python_bin)
     subprocess.run(
-        [python_bin, "-m", "venv", venv_dir],
+        [actual_python, "-m", "venv", venv_dir],
         check=True,
         capture_output=True,
     )

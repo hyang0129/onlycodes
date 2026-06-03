@@ -85,6 +85,15 @@ DEFAULT_CLONE_BASE = "/tmp/swebench-verified-validate"
 # two are collect-time patterns specific to this validator's Gate 2.
 FAILURE_PATTERNS: list[tuple[str, str, str]] = [
     (
+        r"No such file or directory: 'python3\.[0-9]+'|"
+        r"FileNotFoundError.*python3\.[0-9]+|"
+        r"No interpreter found for Python 3\.[0-9]+",
+        "interpreter_unavailable",
+        "The official spec calls for a Python the box doesn't have and uv can't "
+        "fetch (3.5/3.6/3.7). Provision it via deadsnakes/pyenv (#311 follow-up, "
+        "devcontainer change) — uv covers 3.8+ automatically.",
+    ),
+    (
         r"from collections import (Sequence|Mapping|MutableMapping|MutableSequence|Iterable|Iterator|Callable|Set)",
         "collections_abc_removed_3_10",
         "Pin this instance to python3.9 in _INSTANCE_PYTHON in swebench/harness.py "
