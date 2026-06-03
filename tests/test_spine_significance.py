@@ -114,3 +114,10 @@ def test_resolve_filter_file(tmp_path):
     assert ss._resolve_filter(f"@{f}") == {"repo__proj-0001", "repo__proj-0002"}
     assert ss._resolve_filter("a,b ,c") == {"a", "b", "c"}
     assert ss._resolve_filter(None) is None
+
+
+def test_resolve_filter_empty_file_errors(tmp_path):
+    f = tmp_path / "empty.txt"
+    f.write_text("# only a comment\n\n   \n")
+    with pytest.raises(SystemExit):
+        ss._resolve_filter(f"@{f}")

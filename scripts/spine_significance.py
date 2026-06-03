@@ -73,6 +73,8 @@ def _resolve_filter(spec: str | None) -> set[str] | None:
             line = raw.split("#", 1)[0].strip()
             if line:
                 ids.add(line)
+        if not ids:
+            sys.exit(f"ERROR: --filter file has no instance IDs: {path}")
         return ids
     return {s.strip() for s in spec.split(",") if s.strip()}
 
@@ -195,7 +197,7 @@ def _print_report(rep: dict) -> None:
         print(f"    cost  : {cc['pct_effect']:+.1f}%  "
               f"CI[{cc['ci_pct_lo']:+.1f}%, {cc['ci_pct_hi']:+.1f}%]  "
               f"p_boot={cc['p_bootstrap']:.4g}  "
-              f"p_wilcoxon={cc['p_wilcoxon'] if cc['p_wilcoxon'] is None else round(cc['p_wilcoxon'],4)}  "
+              f"p_wilcoxon={round(cc['p_wilcoxon'], 4) if cc['p_wilcoxon'] is not None else None}  "
               f"n={cc['n']} (dropped {cc['n_dropped']})")
         print(f"    TOST  : {'within' if eq['equivalent'] else 'NOT within'} "
               f"±{rep['bound_pct']:.0f}%  "
