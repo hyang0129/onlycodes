@@ -816,12 +816,49 @@ def _cleanup_stale_overlays(
                 break
 
 
+def _parse_filter_ids(filter_spec: str) -> set[str]:
+    """Resolve a ``--filter`` value into a set of instance IDs.
+
+    Two forms (#299):
+      * comma-separated list, e.g. ``django__django-11790,sphinx-doc__sphinx-7985``
+      * ``@path/to/ids.txt`` — read newline-delimited IDs from a file. Blank
+        lines and ``#`` comments are ignored, and a trailing inline ``#`` comment
+        on an ID line is stripped. This is how the Verified-500 spine is scoped
+        to the buildable subset (``--filter @sets/verified-buildable.txt``)
+        without an unwieldy 500-element comma string.
+
+    Raises ``SystemExit`` (with a CLI-friendly message) if an ``@file`` path is
+    missing or yields no usable IDs.
+    """
+    spec = filter_spec.strip()
+    if spec.startswith("@"):
+        path = Path(spec[1:]).expanduser()
+        if not path.is_file():
+            click.echo(f"ERROR: --filter file not found: {path}", err=True)
+            raise SystemExit(1)
+        ids: set[str] = set()
+        for raw in path.read_text().splitlines():
+            line = raw.split("#", 1)[0].strip()  # drop comments (whole-line + inline)
+            if line:
+                ids.add(line)
+        if not ids:
+            click.echo(f"ERROR: --filter file has no instance IDs: {path}", err=True)
+            raise SystemExit(1)
+        return ids
+    return {s.strip() for s in spec.split(",") if s.strip()}
+
+
 @click.command("run")
 @click.option(
     "--filter",
     "filter_ids",
     default=None,
-    help="Comma-separated instance IDs to run (default: all in problems/swe/).",
+    help=(
+        "Instance IDs to run (default: all in problems/swe/). Either a "
+        "comma-separated list, or '@path/to/ids.txt' to read newline-delimited "
+        "IDs from a file (blank lines and '#' comments ignored). The @file form "
+        "is how the Verified-500 spine is scoped to the buildable subset (#299)."
+    ),
 )
 @click.option(
     "--arms",
@@ -1019,9 +1056,9 @@ def run_command(
 
     problems = [Problem.from_yaml(f) for f in yaml_files]
 
-    # Apply filter
+    # Apply filter (comma list or @file of IDs — see _parse_filter_ids)
     if filter_ids:
-        ids = {s.strip() for s in filter_ids.split(",")}
+        ids = _parse_filter_ids(filter_ids)
         problems = [p for p in problems if p.instance_id in ids]
         if not problems:
             click.echo(f"ERROR: No matching problems for filter: {filter_ids}", err=True)
