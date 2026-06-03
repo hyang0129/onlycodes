@@ -364,6 +364,43 @@ def collect(run_dir: Path, mode: str) -> tuple[list[dict], str]:
     return rows, agent
 
 
+def adjusted_costs(
+    run_dir: Path | str,
+    mode: str = "auto",
+    shared_prefix: int | None = None,
+    instances: list[str] | None = None,
+) -> dict:
+    """Importable entry point for the first-call cache adjustment (C5, #299/#307).
+
+    Collects every (instance, arm, run) JSONL under ``run_dir``, applies the
+    same per-task adjustment the CLI prints, and returns::
+
+        {"agent": "claude"|"codex", "n_rows": int,
+         "per_row": [ {instance_id, arm, run, orig_cost, adj_cost, ...}, ... ],
+         "per_arm": { arm: {orig_total_cost, adj_total_cost, ...}, ... }}
+
+    ``adj_cost`` is the cache-adjusted per-task cost used as the canonical cost
+    in the paper's headline cell. ``power_analysis.py`` (#307) and
+    ``spine_significance.py`` (#299) both consume this so the power analysis and
+    the significance test share one cost definition. The CLI ``main()`` is now a
+    thin wrapper around this function.
+    """
+    rows, agent = collect(Path(run_dir), mode)
+    if instances:
+        keep = set(instances)
+        rows = [r for r in rows if r["instance_id"] in keep]
+    if agent == "codex":
+        result = codex_adjust(rows, load_codex_prices(), override_prefix=shared_prefix)
+    else:
+        result = claude_adjust(rows, CLAUDE_RATES)
+    return {
+        "agent": agent,
+        "n_rows": len(rows),
+        "per_row": result["per_row"],
+        "per_arm": result["per_arm"],
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("run_dir", type=Path)
@@ -375,22 +412,19 @@ def main():
                     help="Codex only: override shared prefix tokens.")
     args = ap.parse_args()
 
-    rows, agent = collect(args.run_dir, args.mode)
-    if args.instances:
-        keep = set(args.instances.split(","))
-        rows = [r for r in rows if r["instance_id"] in keep]
-    if not rows:
+    instances = args.instances.split(",") if args.instances else None
+    bundle = adjusted_costs(
+        args.run_dir, mode=args.mode,
+        shared_prefix=args.shared_prefix, instances=instances,
+    )
+    agent = bundle["agent"]
+    result = {"per_row": bundle["per_row"], "per_arm": bundle["per_arm"]}
+    if not bundle["n_rows"]:
         sys.exit("No rows after filter")
-
-    codex_rates = load_codex_prices()
-    if agent == "codex":
-        result = codex_adjust(rows, codex_rates, override_prefix=args.shared_prefix)
-    else:
-        result = claude_adjust(rows, CLAUDE_RATES)
 
     print("=" * 96)
     print(f"First-call cache adjustment — {args.run_dir}")
-    print(f"  agent={agent}  n_rows={len(rows)}"
+    print(f"  agent={agent}  n_rows={bundle['n_rows']}"
           f"{'  instances=' + args.instances if args.instances else ''}")
     print("=" * 96)
 
