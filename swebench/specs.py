@@ -11,11 +11,18 @@ SWE-bench Verified specifies — the correct Python and the exact pinned
 dependencies — instead of a generic `python3.11` + plain editable install. The
 hand-curated override tables in `harness.py` still take precedence (#311).
 
-PR-1 scope: this module surfaces the spec's `python` and the pip-installable
-dependency pins (`pip_packages` + the pip-translatable tokens of `packages`).
-It deliberately does NOT handle the spec's shell `pre_install` commands (sed,
-apt), custom `install` flags, or file-reference packages
-(`requirements.txt` / `environment.yml`) — those are deferred (#311 follow-up).
+Two consumers, two views of the same spec:
+
+* **Venv path (`harness._venv_kwargs`, all non-Verified sets):** `python_bin` +
+  `pip_requirements` — the spec's `python` and the pip-installable pins
+  (`pip_packages` + the pip-translatable tokens of `packages`). The shell
+  `pre_install`, custom `install` flags, and file-reference packages are NOT
+  applied on this path.
+* **Conda-native path (P2-γ, the Verified build, #311):** the full spec —
+  `conda_python`, `packages_kind` / `packages_file` / `conda_packages`,
+  `pip_packages`, `pre_install_commands`, `install_command`, `eval_commands`,
+  `no_use_env` — so the environment is built exactly the way SWE-bench's
+  `MAP_REPO_VERSION_TO_SPECS` specifies (commands run verbatim, not translated).
 """
 
 from __future__ import annotations
@@ -98,3 +105,112 @@ def pip_requirements(spec: dict) -> list[str]:
             seen.add(r)
             out.append(r)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Conda-native build accessors (P2-γ, #311)
+#
+# These expose the spec verbatim for the conda env builder, which runs SWE-bench's
+# own commands rather than translating them. Unlike `pip_requirements` above, they
+# do NOT pip-translate — `micromamba install` consumes conda syntax directly.
+# ---------------------------------------------------------------------------
+
+def conda_python(spec: dict) -> str | None:
+    """Bare CPython version for ``micromamba create python=<X>``, e.g. ``"3.6"``.
+
+    Distinct from :func:`python_bin` (``"python3.6"``), which names a PATH binary
+    for the venv path. Returns ``None`` if the spec has no ``python``.
+    """
+    py = spec.get("python")
+    return str(py) if py else None
+
+
+def install_command(spec: dict) -> str | None:
+    """The spec's ``install`` command, verbatim (e.g. ``"python -m pip install -e .[test] --verbose"``).
+
+    Run as-is by the conda builder, so the build-isolation / pep517 / extras
+    policy is whatever SWE-bench encoded — no second-guessing. ``None`` if absent.
+    """
+    cmd = (spec.get("install") or "").strip()
+    return cmd or None
+
+
+def pre_install_commands(spec: dict) -> list[str]:
+    """Shell commands the spec runs *before* ``install`` (e.g. ``sed`` setup.py pins).
+
+    Returned verbatim and in order. NOTE for the builder: some entries are
+    ``apt-get`` / ``locale-gen`` (system-level, root) — SWE-bench runs these in a
+    per-instance container; our overlay model does not isolate the system, so the
+    builder must decide which are safe to run (sed: yes; apt/locale: handle or log).
+    """
+    return [c for c in (spec.get("pre_install") or []) if (c or "").strip()]
+
+
+def pip_packages(spec: dict) -> list[str]:
+    """The spec's ``pip_packages`` (already pip-style), cleaned. Verbatim, no translation."""
+    return [p.strip() for p in (spec.get("pip_packages") or []) if (p or "").strip()]
+
+
+def eval_commands(spec: dict) -> list[str]:
+    """The spec's ``eval_commands`` (run during evaluation, before the test cmd). Verbatim."""
+    return [c for c in (spec.get("eval_commands") or []) if (c or "").strip()]
+
+
+def no_use_env(spec: dict) -> bool:
+    """The spec's ``no_use_env`` flag.
+
+    When true, an ``environment.yml`` ``packages`` ref must NOT be used to create
+    the conda env directly (``micromamba env create -f``); instead create a plain
+    ``python=<ver>`` env and install deps separately.
+    """
+    return bool(spec.get("no_use_env"))
+
+
+def packages_kind(spec: dict) -> str:
+    """Classify the spec's ``packages`` field for the conda builder.
+
+    One of: ``"none"`` (absent/empty), ``"requirements_txt"`` (a ``*.txt`` file
+    ref), ``"environment_yml"`` (a ``*.yml``/``*.yaml`` file ref), or ``"inline"``
+    (a conda package list). In the vendored data a file ref is always the sole
+    token, so a whole-string suffix test is sufficient.
+    """
+    p = (spec.get("packages") or "").strip()
+    if not p:
+        return "none"
+    low = p.lower()
+    if low.endswith(".txt"):
+        return "requirements_txt"
+    if low.endswith((".yml", ".yaml")):
+        return "environment_yml"
+    return "inline"
+
+
+def packages_file(spec: dict) -> str | None:
+    """For a ``requirements_txt`` / ``environment_yml`` spec, the referenced filename.
+
+    The builder reads this file from the repo checked out at
+    ``environment_setup_commit`` (which differs from ``base_commit`` and is
+    unreachable after history-stripping — read it before the strip). ``None`` for
+    inline / absent ``packages``.
+    """
+    if packages_kind(spec) in ("requirements_txt", "environment_yml"):
+        return (spec.get("packages") or "").strip()
+    return None
+
+
+def conda_packages(spec: dict) -> list[str]:
+    """For an ``"inline"`` ``packages`` spec, the conda package specs, verbatim.
+
+    Shell-quoted tokens are unquoted (``'numpy==1.19.2'`` → ``numpy==1.19.2``) but
+    NOT pip-translated — they are passed straight to ``micromamba install``, which
+    accepts conda match-specs (``numpy=1.19``, ``numpy==1.19.2``, ``pandas<2.0.0``).
+    ``[]`` unless ``packages_kind`` is ``"inline"``.
+    """
+    if packages_kind(spec) != "inline":
+        return []
+    raw = spec.get("packages") or ""
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        tokens = raw.split()
+    return [t for t in (tok.strip() for tok in tokens) if t]

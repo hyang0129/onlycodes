@@ -11,10 +11,17 @@ Run this with the **upstream** package installed in an ISOLATED venv (never our
 repo venv), then commit the regenerated JSON:
 
     python3.11 -m venv /tmp/swe-official
-    /tmp/swe-official/bin/pip install 'swebench==<pinned>'
+    /tmp/swe-official/bin/pip install 'swebench==4.1.0'
     /tmp/swe-official/bin/python scripts/extract_swebench_specs.py \
         --repos-from sets/verified-spine.txt \
         --out swebench/data/official_specs.json
+
+The pin matters: a different upstream `swebench` may ship a different
+`MAP_REPO_VERSION_TO_SPECS`, silently changing the vendored specs (and thus how
+every Verified instance builds). **`swebench==4.1.0` reproduces the committed
+`swebench/data/official_specs.json` byte-for-byte (verified 2026-06-03, #311).**
+After regenerating, `git diff swebench/data/official_specs.json` should be empty
+unless you intentionally bumped the pin.
 
 `--repos-from` reads instance ids (e.g. the frozen spine pool) and extracts only
 the repos they reference, keeping the vendored file small. Omit it to dump every
@@ -27,6 +34,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+# Upstream package version this extractor is pinned to (see module docstring).
+PINNED_SWEBENCH_VERSION = "4.1.0"
 
 
 def _repos_from_ids(path: Path) -> set[str]:
@@ -66,10 +76,26 @@ def main() -> int:
             "ERROR: could not import the upstream swebench package "
             f"({exc}).\nInstall it in an ISOLATED venv (not the repo venv — names "
             "collide):\n  python3.11 -m venv /tmp/swe-official && "
-            "/tmp/swe-official/bin/pip install swebench",
+            f"/tmp/swe-official/bin/pip install 'swebench=={PINNED_SWEBENCH_VERSION}'",
             file=sys.stderr,
         )
         return 1
+
+    # Warn loudly if the installed version isn't the pin — the map can drift
+    # between releases and silently change the vendored specs (#311).
+    try:
+        import importlib.metadata as _md
+        installed = _md.version("swebench")
+        if installed != PINNED_SWEBENCH_VERSION:
+            print(
+                f"WARNING: swebench=={installed} installed, but this extractor is "
+                f"pinned to {PINNED_SWEBENCH_VERSION}. The vendored JSON was generated "
+                f"from {PINNED_SWEBENCH_VERSION}; regenerating from a different version "
+                "may change specs. Re-pin (and re-validate) deliberately.",
+                file=sys.stderr,
+            )
+    except Exception:  # noqa: BLE001 — metadata lookup is best-effort
+        pass
 
     if args.repos_from:
         wanted = _repos_from_ids(args.repos_from)
