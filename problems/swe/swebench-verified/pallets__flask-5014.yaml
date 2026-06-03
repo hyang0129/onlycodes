@@ -6,3 +6,5 @@ patch_file: patches/pallets__flask-5014_tests.patch
 problem_statement: "Require a non-empty name for Blueprints\nThings do not work correctly if a Blueprint is given an empty name (e.g. #4944).\r\nIt would be helpful if a `ValueError` was raised when trying to do that.\n"
 added_at: '2026-06-03'
 hf_split: test
+version: '2.3'
+environment_setup_commit: 182ce3dd15dfa3537391c3efaf9c3ff407d134d4

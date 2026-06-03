@@ -190,6 +190,9 @@ def _write_problem(
         patch_file=patch_file,
         added_at=date.today().isoformat(),
         hf_split="test",
+        # SWE-bench environment keys — drive the official build spec (#311).
+        version=(str(row["version"]) if row.get("version") not in (None, "") else None),
+        environment_setup_commit=row.get("environment_setup_commit") or None,
     )
 
     yaml_path = problems_dir / set_name / f"{instance_id}.yaml"
