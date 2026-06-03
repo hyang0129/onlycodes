@@ -1160,6 +1160,16 @@ def setup_venv(
     """
     pip = os.path.join(venv_dir, "bin", "pip")
     if os.path.isdir(venv_dir):
+        # Never treat a conda env (built by setup_conda_env) as a venv: the
+        # sentinel mismatch below would rmtree it and rebuild a plain venv,
+        # silently discarding the spec-faithful environment. Fail loudly so the
+        # caller routes the rebuild to setup_conda_env instead (#311).
+        _sentinel = _read_sentinel(venv_dir)
+        if _sentinel and _sentinel.startswith("conda:"):
+            raise CondaBuildError(
+                f"{venv_dir} holds a conda env (sentinel {_sentinel!r}); rebuild it "
+                "with setup_conda_env, not setup_venv (#311 conda-native path)."
+            )
         # F-19: Guard against a partially-built venv skeleton that has the
         # directory but not bin/pip (e.g. venv creation crashed mid-way).
         if not os.path.isfile(pip):
@@ -1292,6 +1302,197 @@ def setup_venv(
         _smoke_import(venv_dir, repo_slug)
     # Write the sentinel last — only after a fully successful install.
     Path(_venv_sentinel(venv_dir)).write_text(python_bin + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Conda-native env builder (P2-γ, #311)
+#
+# Builds a conda env per (repo, version) following SWE-bench's official
+# MAP_REPO_VERSION_TO_SPECS *verbatim*, rather than the generic venv + pinned
+# pip path above. Used for the Verified set so instances build exactly the way
+# SWE-bench specifies (correct interpreter incl. 3.5/3.6, file-ref deps, custom
+# install flags). The env drops into the same per-arm overlay slot as a venv —
+# the overlay machinery is path-based and works unchanged (verified, P2-α).
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CONDA_CHANNEL = "conda-forge"
+
+# pre_install commands we must NOT run in our (non-container) flow: they mutate
+# the host system and need root. SWE-bench runs them inside a per-instance
+# container; our overlay isolates the repo + env but not the system. We skip and
+# log these (sed/echo source pins are safe and ARE run).
+_UNSAFE_PRE_INSTALL_RE = re.compile(
+    r"^\s*(sudo\s+)?(apt-get|apt|locale-gen|add-apt-repository|dpkg|yum)\b"
+)
+
+
+class CondaBuildError(RuntimeError):
+    """Raised when a conda-native env build step fails."""
+
+
+def _find_micromamba() -> str | None:
+    """Locate the micromamba binary.
+
+    Order: ``ONLYCODES_MICROMAMBA`` env override → ``micromamba`` on PATH →
+    common install paths. The devcontainer image bakes it at
+    ``/usr/local/bin/micromamba`` (#311); ``None`` if genuinely absent.
+    """
+    override = os.environ.get("ONLYCODES_MICROMAMBA")
+    if override and os.path.isfile(override):
+        return override
+    found = shutil.which("micromamba")
+    if found:
+        return found
+    for cand in (
+        "/usr/local/bin/micromamba",
+        "/tmp/mmroot/bin/micromamba",
+        os.path.expanduser("~/.local/bin/micromamba"),
+    ):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _mm_run(mm: str, args: list[str]) -> None:
+    """Run a micromamba subcommand; raise CondaBuildError with stderr on failure."""
+    result = subprocess.run([mm, *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        head = " ".join(args[:4])
+        raise CondaBuildError(
+            f"micromamba {head}… failed (rc={result.returncode}):\n"
+            f"{(result.stderr or result.stdout)[-2000:]}"
+        )
+
+
+def _conda_path_env(env_dir: str) -> dict:
+    """Environment for shell commands run against *env_dir* without activation.
+
+    Puts ``env_dir/bin`` first on PATH so bare ``python``/``pip`` in the spec's
+    ``install`` / ``pre_install`` lines resolve to the conda env, and clears
+    PYTHONHOME/VIRTUAL_ENV so an outer venv/conda activation can't leak in.
+    """
+    env = dict(os.environ)
+    env["PATH"] = os.path.join(env_dir, "bin") + os.pathsep + env.get("PATH", "")
+    env.pop("PYTHONHOME", None)
+    env.pop("VIRTUAL_ENV", None)
+    return env
+
+
+def _shell_run_checked(cmd: str, *, cwd: str, env: dict, what: str) -> None:
+    """Run a spec shell command (``shell=True``); raise CondaBuildError on failure."""
+    result = subprocess.run(
+        cmd, shell=True, cwd=cwd, env=env, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(
+            f"[harness] conda {what} failed (rc={result.returncode}): {cmd!r}\n"
+            f"{(result.stderr or result.stdout)[-2000:]}",
+            flush=True,
+        )
+        raise CondaBuildError(f"{what} failed (rc={result.returncode}): {cmd!r}")
+
+
+def setup_conda_env(
+    env_dir: str,
+    repo_dir: str,
+    *,
+    spec: dict,
+    repo_slug: str | None = None,
+    channel: str = _DEFAULT_CONDA_CHANNEL,
+    micromamba_bin: str | None = None,
+) -> None:
+    """Build a conda env at *env_dir* from the official SWE-bench spec, verbatim.
+
+    Mirrors ``MAP_REPO_VERSION_TO_SPECS`` build order:
+
+      1. ``micromamba create -p env_dir python=<spec.python> [inline conda pkgs]``
+      2. file-ref ``packages``: ``environment.yml`` → create from the file;
+         ``requirements.txt`` → ``pip install -r`` (read from the working tree)
+      3. ``pip install <pip_packages>``
+      4. ``pre_install`` shell commands — sed/echo source pins run; apt/locale/
+         system mutators are skipped + logged (see ``_UNSAFE_PRE_INSTALL_RE``)
+      5. the spec's ``install`` command, **verbatim** — so the build-isolation /
+         ``--no-use-pep517`` / extras policy is exactly what SWE-bench encoded
+         (this is what fixed the astropy ``-e .[test] --verbose`` case)
+
+    The repo at *repo_dir* MUST already be checked out at the commit whose
+    dependency files the spec references (``environment_setup_commit``, which
+    differs from ``base_commit`` and is unreachable post-strip). This function
+    never touches git state — the caller owns it, exactly like ``setup_venv``.
+
+    Steps 4–5 run with ``env_dir/bin`` first on PATH (no activation), which the
+    P2-α spike confirmed is sufficient for the scientific stack (conda rpath).
+    """
+    mm = micromamba_bin or _find_micromamba()
+    if not mm:
+        raise CondaBuildError(
+            "micromamba not found. Set ONLYCODES_MICROMAMBA or rebuild the "
+            "devcontainer image (it bakes micromamba at /usr/local/bin) — #311."
+        )
+    py = specs.conda_python(spec)
+    if not py:
+        raise CondaBuildError(f"official spec has no python version: {spec!r}")
+
+    kind = specs.packages_kind(spec)
+
+    # --- 1 (+ inline conda packages, or 2 for environment.yml): create the env ---
+    if kind == "environment_yml" and not specs.no_use_env(spec):
+        yml = os.path.join(repo_dir, specs.packages_file(spec))
+        if not os.path.isfile(yml):
+            raise CondaBuildError(
+                f"environment.yml not found at {yml!r} — wrong commit checked out? "
+                "(must be environment_setup_commit)."
+            )
+        _mm_run(mm, ["create", "-y", "-p", env_dir, "-c", channel, "-f", yml])
+        # Env files often omit/loosely pin python; enforce the spec's version.
+        _mm_run(mm, ["install", "-y", "-p", env_dir, "-c", channel, f"python={py}"])
+    else:
+        create_args = ["create", "-y", "-p", env_dir, "-c", channel, f"python={py}"]
+        create_args += specs.conda_packages(spec)  # inline conda specs, verbatim
+        _mm_run(mm, create_args)
+
+    pip = os.path.join(env_dir, "bin", "pip")
+    if not os.path.isfile(pip):  # minimal envs may lack pip
+        _mm_run(mm, ["install", "-y", "-p", env_dir, "-c", channel, "pip"])
+
+    # --- 2 (requirements.txt ref): read from the checked-out working tree ---
+    if kind == "requirements_txt":
+        req = os.path.join(repo_dir, specs.packages_file(spec))
+        if not os.path.isfile(req):
+            raise CondaBuildError(
+                f"requirements file not found at {req!r} — wrong commit checked out?"
+            )
+        _pip_run_checked(pip, ["install", "-r", req])
+
+    # --- 3: pip_packages ---
+    pip_pkgs = specs.pip_packages(spec)
+    if pip_pkgs:
+        _pip_run_checked(pip, ["install", *pip_pkgs])
+
+    # --- 4: pre_install shell commands (cwd=repo, env-on-PATH) ---
+    shell_env = _conda_path_env(env_dir)
+    for cmd in specs.pre_install_commands(spec):
+        if _UNSAFE_PRE_INSTALL_RE.match(cmd):
+            print(
+                f"[harness] SKIP system-level pre_install (needs root, not "
+                f"isolated in our flow): {cmd!r}",
+                flush=True,
+            )
+            continue
+        _shell_run_checked(cmd, cwd=repo_dir, env=shell_env, what="pre_install")
+
+    # --- 5: the spec's install command, verbatim ---
+    install = specs.install_command(spec)
+    if install:
+        _shell_run_checked(install, cwd=repo_dir, env=shell_env, what="install")
+
+    # Ensure pytest exists (tests need it; mirrors setup_venv's fallback). Best-effort.
+    subprocess.run([pip, "install", "--quiet", "pytest"], capture_output=True, text=True)
+
+    # Sentinel mirrors setup_venv's, tagged so the layout is self-describing. The
+    # run-time reuse path keys off lockfile drift, not this value, so a conda env
+    # in the slot is reused (not rebuilt) as long as its pip-freeze matches.
+    Path(_venv_sentinel(env_dir)).write_text(f"conda:python{py}\n")
 
 
 def _parse_patch_targets(patch_path: str) -> tuple[list[str], list[str]]:
