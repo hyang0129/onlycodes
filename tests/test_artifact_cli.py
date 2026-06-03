@@ -12,6 +12,7 @@ from click.testing import CliRunner
 
 from swebench import artifact_run as artifact_run_mod
 from swebench import artifact_cli as artifact_cli_mod
+from swebench.artifact_materialize import scratch_dir_for
 from swebench.cli import cli
 
 
@@ -150,7 +151,7 @@ def test_artifact_run_end_to_end(tmp_path, stub_runtime):
         run_dir = results_dir / iid / arm / "run1"
         assert (run_dir / "result.json").is_file()
         assert (run_dir / "agent.jsonl").is_file()
-        scratch = run_dir / "scratch"
+        scratch = scratch_dir_for(results_dir, iid, arm, 1)
         assert (scratch / "answer.txt").read_text() == "42\n"
         # No-leak invariant — this is the falsifiability check.
         assert not any(scratch.rglob("hidden.py"))

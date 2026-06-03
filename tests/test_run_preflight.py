@@ -2,11 +2,13 @@
 
 Issue #238 / #234 (and Issue #287).  The pre-flight check must:
   - Run after ``apply_test_patch`` — both now happen *post*-agent (#287).
-  - Record ``env_fail`` and skip ``run_tests`` when zero items collect.
+  - Record ``FAIL`` (not ``env_fail``) and skip ``run_tests`` when zero items
+    collect post-agent — the env was proven healthy in setup, so 0 collected
+    means the agent broke an import, which counts against pass rate.
   - Mark the run as a "complete" triple for ``--resume`` purposes.
-  - Preserve the agent transcript already appended to the .jsonl on env_fail
+  - Preserve the agent transcript already appended to the .jsonl on collect-fail
     (#287 ordering change): only the meta record on line 1 gets its
-    ``verdict`` field updated to ``env_fail``.
+    ``verdict`` field updated to ``FAIL``.
 """
 
 from __future__ import annotations
@@ -86,13 +88,13 @@ def _make_problem(tmp_path: Path) -> Problem:
     )
 
 
-def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Path):
-    """When pre-flight reports 0 items, _run_arm must skip ``run_tests`` and
-    write ``env_fail`` to both the jsonl and the test file.
+def test_run_arm_writes_fail_when_preflight_collect_empty(monkeypatch, tmp_path: Path):
+    """When post-agent pre-flight reports 0 items, _run_arm must skip ``run_tests``
+    and write ``FAIL`` to both the jsonl and the test file.
 
     Under Issue #287 the agent runs *before* pre-flight, so the agent
     transcript must be preserved in the .jsonl; only the meta record on
-    line 1 gets its ``verdict`` field flipped to ``env_fail``.
+    line 1 gets its ``verdict`` field flipped to ``FAIL``.
     """
     from swebench import run as run_mod
 
@@ -162,21 +164,21 @@ def test_run_arm_writes_env_fail_when_preflight_fails(monkeypatch, tmp_path: Pat
         runner=_TranscriptRunner(),
     )
 
-    assert verdict == "env_fail"
+    assert verdict == "FAIL"
 
     test_txt = results_dir / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
     assert test_txt.exists()
-    # Last non-empty line is env_fail.
+    # Last non-empty line is FAIL.
     last = [line for line in test_txt.read_text().splitlines() if line.strip()][-1]
-    assert last.strip() == "env_fail"
+    assert last.strip() == "FAIL"
 
     jsonl = results_dir / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
     assert jsonl.exists()
-    # Meta record present and carries env_fail verdict (line 1).
+    # Meta record present and carries FAIL verdict (line 1).
     import json
     lines = jsonl.read_text().splitlines()
     first = json.loads(lines[0])
-    assert first["verdict"] == "env_fail"
+    assert first["verdict"] == "FAIL"
     assert first["instance_id"] == INSTANCE
     # Agent transcript still present after the meta line (#287 invariant).
     assert any("assistant" in ln or "result" in ln for ln in lines[1:]), (

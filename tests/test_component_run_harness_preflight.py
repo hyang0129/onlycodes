@@ -13,7 +13,8 @@ boundaries in ``run.py`` (``git_reset``, the stub ``AgentRunner``, ``run_tests``
 
 These tests assert the cross-module contract that:
   - when preflight returns False via the real harness path, ``_run_arm``
-    writes ``env_fail`` to both output files and returns ``"env_fail"``.
+    writes ``FAIL`` to both output files and returns ``"FAIL"``
+    (post-agent collect-fail counts against pass rate, not excluded as env_fail).
   - when preflight returns True via the real harness path, ``_run_arm``
     continues past the pre-flight gate and finishes ``run_tests``.
 
@@ -120,7 +121,7 @@ class TestRunArmPrefailViaRealHarness:
     """
     _run_arm reads its preflight result from the real harness.run_preflight_collect.
     When the real function reports 0 items collected, _run_arm must write
-    env_fail to disk and return 'env_fail'.
+    FAIL to disk and return 'FAIL' (post-agent collect-fail counts against pass rate).
     """
 
     def test_env_fail_files_written_via_real_harness_path(
@@ -130,7 +131,7 @@ class TestRunArmPrefailViaRealHarness:
 
         We double subprocess.run inside the harness to return 'no tests ran'
         (exit 5).  Everything else — the harness preflight logic, the run.py
-        env_fail write path — runs for real.
+        collect-fail write path — runs for real.
 
         Under Issue #287 the pre-flight runs *after* ``runner.invoke()``,
         so the test installs a ``_NoopRunner`` to keep ``_run_arm`` from
@@ -173,28 +174,28 @@ class TestRunArmPrefailViaRealHarness:
             runner=_NoopRunner(),
         )
 
-        # _run_arm must return "env_fail".
-        assert verdict == "env_fail", f"Expected 'env_fail', got {verdict!r}"
+        # _run_arm must return "FAIL".
+        assert verdict == "FAIL", f"Expected 'FAIL', got {verdict!r}"
 
-        # The _test.txt must end with "env_fail".
+        # The _test.txt must end with "FAIL".
         test_txt = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
         assert test_txt.exists(), "_test.txt was not written"
         last_line = [ln for ln in test_txt.read_text().splitlines() if ln.strip()][-1]
-        assert last_line.strip() == "env_fail", (
-            f"Expected last non-empty line 'env_fail'; got {last_line!r}"
+        assert last_line.strip() == "FAIL", (
+            f"Expected last non-empty line 'FAIL'; got {last_line!r}"
         )
 
-        # The .jsonl must contain a meta record with verdict=env_fail.
+        # The .jsonl must contain a meta record with verdict=FAIL.
         jsonl = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
         assert jsonl.exists(), ".jsonl was not written"
         record = json.loads(jsonl.read_text().splitlines()[0])
-        assert record["verdict"] == "env_fail", (
+        assert record["verdict"] == "FAIL", (
             f"jsonl meta record has wrong verdict: {record}"
         )
         assert record["instance_id"] == INSTANCE
 
     def test_env_fail_jsonl_has_required_fields(self, monkeypatch, tmp_path: Path):
-        """The meta record written by the real env_fail path must carry all
+        """The meta record written by the real collect-fail path must carry all
         fields that downstream tools (analyze, summary, _is_triple_complete) need."""
         repo_dir, venv_dir, results_dir = _make_dirs(tmp_path)
 
@@ -226,7 +227,7 @@ class TestRunArmPrefailViaRealHarness:
 
         # Required fields for downstream tools.
         assert record.get("type") == "meta"
-        assert record.get("verdict") == "env_fail"
+        assert record.get("verdict") == "FAIL"
         assert record.get("instance_id") == INSTANCE
         assert record.get("arm") == ARM
         assert record.get("run") == RUN_IDX
@@ -309,18 +310,18 @@ class TestRunArmEnvFailAgentBinaryPropagation:
             runner=_NoopRunner(),
         )
 
-        assert verdict == "env_fail"
+        assert verdict == "FAIL"
 
         jsonl = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
         assert jsonl.exists(), ".jsonl was not written"
         record = json.loads(jsonl.read_text().splitlines()[0])
-        assert record["verdict"] == "env_fail"
+        assert record["verdict"] == "FAIL"
         assert record["agent_binary"] == "/fake/binary", (
             f"agent_binary not propagated correctly into meta record: {record}"
         )
 
-    def test_test_txt_ends_with_env_fail(self, monkeypatch, tmp_path: Path):
-        """_test.txt must exist and its last non-empty line must be 'env_fail'."""
+    def test_test_txt_ends_with_fail(self, monkeypatch, tmp_path: Path):
+        """_test.txt must exist and its last non-empty line must be 'FAIL'."""
         repo_dir, venv_dir, results_dir = _make_dirs(tmp_path)
 
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
@@ -347,8 +348,8 @@ class TestRunArmEnvFailAgentBinaryPropagation:
         test_txt = Path(results_dir) / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
         assert test_txt.exists(), "_test.txt was not written"
         last_line = [ln for ln in test_txt.read_text().splitlines() if ln.strip()][-1]
-        assert last_line.strip() == "env_fail", (
-            f"Expected last non-empty line 'env_fail'; got {last_line!r}"
+        assert last_line.strip() == "FAIL", (
+            f"Expected last non-empty line 'FAIL'; got {last_line!r}"
         )
 
 

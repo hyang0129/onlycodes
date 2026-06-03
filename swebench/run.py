@@ -178,9 +178,11 @@ def _run_arm(
     """Run a single arm (baseline or onlycode) for one instance.
 
     Returns the verdict string ("PASS", "FAIL", "ERROR", or "env_fail").
-    ``env_fail`` is returned when the pre-flight ``pytest --collect-only``
-    check collects zero items (Issue #238): the agent is not invoked and the
-    run is excluded from pass-rate aggregates downstream.
+    ``FAIL`` is returned when the post-agent ``pytest --collect-only`` check
+    collects zero items (Issue #238 / commit 050947f): the env was proven
+    healthy at setup, so 0 collected means the agent broke an import, and the
+    run counts against the pass rate.  (``env_fail`` is kept in
+    ``_is_triple_complete`` for --resume backward-compat with old result files.)
 
     When *log_buffer* is provided, all output is written there instead of
     directly to stdout so that parallel runs don't interleave.
