@@ -73,6 +73,28 @@
 }
 
 % --------------------------------------------------------------------------
+% \resdollar{csv}{key}[precision]
+% Render a USD value with the sign OUTSIDE the dollar sign: a negative
+% value prints as "-\$0.023", not "\$-0.023". Rounds first so that values
+% that round to zero print "\$0.000" rather than "-\$0.000". Use inside
+% math mode (the bare "-" is a math minus), mirroring the old
+% "$\$\result{...}$" idiom that placed the minus after the dollar sign.
+% --------------------------------------------------------------------------
+\DeclareRobustCommand{\resdollar}[2]{%
+  \@ifnextchar[%]
+    {\oc@dollar@prec{#1}{#2}}%
+    {\oc@dollar@prec{#1}{#2}[\ocgetdefprec{#1}]}%
+}
+\def\oc@dollar@prec#1#2[#3]{%
+  \edef\oc@dv{\fpeval{round(\ocget{#1}{#2},#3)}}%
+  \ifnum\fpeval{\oc@dv<0}=1 %
+    -\$\num[round-mode=places,round-precision=#3]{\fpeval{abs(\oc@dv)}}%
+  \else
+    \$\num[round-mode=places,round-precision=#3]{\oc@dv}%
+  \fi
+}
+
+% --------------------------------------------------------------------------
 % \resdelta{csv}{key_a}{key_b}[precision]
 % Computes key_a - key_b using \fpeval from xfp.
 % (Named \resdelta, not \delta, to avoid clashing with the Greek letter.)

@@ -104,12 +104,12 @@ failure-cost mechanism we identify on SWE-bench/Claude
 Our paired evaluation spans both halves of an established benchmark
 axis. On the modification side, SWE-bench~\cite{jimenez2024swebench}
 and its human-validated Verified
-subset~\cite{report:openai2024swebenchverified} are the substrate;
-stratified follow-ons --- SWE-bench Pro~\cite{scaleai2025swebenchpro},
+subset~\cite{report:openai2024swebenchverified} are the foundation;
+later benchmarks that build on them --- SWE-bench Pro~\cite{scaleai2025swebenchpro},
 Multi-SWE-bench~\cite{bytedance2025multiswebench},
 SWE-PolyBench~\cite{amazon2025swepolybench}, and SWE
-Atlas~\cite{sweatlas2026} --- cross SWE-bench with difficulty,
-language, and task-shape axes but never with the agent's tool surface.
+Atlas~\cite{sweatlas2026} --- extend SWE-bench along difficulty,
+language, and task-shape axes, but never along the agent's tool surface.
 Ganhotra's audit~\cite{blog:ganhotra2025multifile} that the bulk of
 SWE-bench Verified is single-file motivates our targeted multi-file
 sampling. On the computation side, MLE-Bench~\cite{chan2024mlebench}

@@ -7,7 +7,9 @@ fast and hermetic (no subprocess, no network, no real repos).
 
 from __future__ import annotations
 
-from swebench.run import _is_triple_complete
+import pytest
+
+from swebench.run import _is_triple_complete, _parse_filter_ids
 
 
 INSTANCE = "django__django-16379"
@@ -138,3 +140,52 @@ def test_is_triple_complete_accepts_path_object(tmp_path):
     assert _is_triple_complete(tmp_path, INSTANCE, ARM, RUN_IDX) == "PASS"
     # str form
     assert _is_triple_complete(str(tmp_path), INSTANCE, ARM, RUN_IDX) == "PASS"
+
+
+# --- _parse_filter_ids (#299: comma list OR @file) --------------------------
+
+
+def test_parse_filter_ids_comma_list():
+    """Comma-separated form splits and strips whitespace."""
+    assert _parse_filter_ids("a__b-1, c__d-2 ,e__f-3") == {
+        "a__b-1",
+        "c__d-2",
+        "e__f-3",
+    }
+
+
+def test_parse_filter_ids_comma_list_drops_empties():
+    """Trailing/duplicate commas don't produce empty IDs."""
+    assert _parse_filter_ids("a__b-1,,c__d-2,") == {"a__b-1", "c__d-2"}
+
+
+def test_parse_filter_ids_at_file(tmp_path):
+    """@file reads newline-delimited IDs, ignoring blanks and comments."""
+    ids_file = tmp_path / "ids.txt"
+    ids_file.write_text(
+        "# buildable Verified subset\n"
+        "django__django-11790\n"
+        "\n"
+        "sphinx-doc__sphinx-7985   # flaky once, kept\n"
+        "   \n"
+        "scikit-learn__scikit-learn-13496\n"
+    )
+    assert _parse_filter_ids(f"@{ids_file}") == {
+        "django__django-11790",
+        "sphinx-doc__sphinx-7985",
+        "scikit-learn__scikit-learn-13496",
+    }
+
+
+def test_parse_filter_ids_at_file_missing(tmp_path):
+    """A missing @file path is a clean CLI error, not a traceback."""
+    with pytest.raises(SystemExit):
+        _parse_filter_ids(f"@{tmp_path / 'nope.txt'}")
+
+
+def test_parse_filter_ids_at_file_empty(tmp_path):
+    """An @file with only comments/blanks yields no IDs → CLI error."""
+    ids_file = tmp_path / "empty.txt"
+    ids_file.write_text("# only a comment\n\n   \n")
+    with pytest.raises(SystemExit):
+        _parse_filter_ids(f"@{ids_file}")

@@ -26,20 +26,20 @@ launch; the same Claude Code or Codex CLI binary runs all three. The
 \texttt{baseline} arm passes no restriction flag and exposes the agent's
 default surface --- Read, Grep, Glob, Edit, Write, Bash, and the
 agent-built-in subagents on Claude Code; the analogous file
-primitives, shell tool, and structured \texttt{apply\_patch} on Codex.
+primitives, shell tool, and structured \texttt{apply\allowbreak\_patch} on Codex.
 The \texttt{bash\_only} arm restricts to bash plus read-only browsing
 primitives, disallowing every file-editing built-in
-(\texttt{Edit}/\texttt{Write}/\texttt{MultiEdit}/\texttt{NotebookEdit}
+(\texttt{Edit}/\allowbreak\texttt{Write}/\allowbreak\texttt{MultiEdit}/\allowbreak\texttt{NotebookEdit}
 on Claude; \texttt{shell\_tool} with structured patching disabled on
 Codex). The \texttt{code\_only} arm replaces the entire surface with a
-single MCP tool, \texttt{mcp\_\_codebox\_\_execute\_code}, served by
+single MCP tool, \texttt{mcp\allowbreak\_\_codebox\allowbreak\_\_execute\allowbreak\_code}, served by
 our exec-server stack as a persistent Python+Bash REPL keyed by
 working directory across calls; all native built-ins are explicitly
 disallowed.
 
 Two implementation asymmetries are worth surfacing. First, Codex
 exposes no feature flag for disabling its structured
-\texttt{apply\_patch} tool, so on Codex the \texttt{bash\_only} and
+\texttt{apply\allowbreak\_patch} tool, so on Codex the \texttt{bash\_only} and
 \texttt{code\_only} arms enforce restriction with a prompt-prefix
 directive rather than a hard flag; this is soft enforcement and model
 compliance is not guaranteed. We measure and report the resulting
@@ -64,12 +64,12 @@ scaffold implementations.
 \paragraph{Per-instance setup (SWE-bench).} Each SWE-bench instance is
 cloned at its \texttt{base\_commit} and a per-instance Python virtual
 environment is built against it. The repository and the virtual
-environment are each given their own pristine fuse-overlayfs lower
+environment are each given their own read-only fuse-overlayfs lower
 directory, so a per-arm upper directory captures every write and is
 discarded between arms --- no re-clone, no
 \texttt{pip~install~-e~.} between arms. The
 virtual-environment overlay is mounted back at its original creation
-path because console-script shebangs bake that absolute path at
+path because console-script shebangs hard-code that absolute path at
 install time. Artifact tasks are self-contained and skip this step.
 
 \paragraph{Git-history strip.} Before the agent runs, the worktree is
@@ -91,7 +91,7 @@ the underlying state is fresh.
 \paragraph{Per-arm subprocess isolation.} Each agent invocation
 creates a fresh temporary configuration directory containing only the
 credentials and minimal config needed for the run, and points the
-binary at it via \texttt{CLAUDE\_CONFIG\_DIR} or
+binary at it via \texttt{CLAUDE\allowbreak\_CONFIG\allowbreak\_DIR} or
 \texttt{CODEX\_HOME}. No session-persistence files, no cross-run
 state. Both binaries run in headless mode with permission prompts and
 sandbox / approval gates bypassed.
@@ -100,7 +100,7 @@ sandbox / approval gates bypassed.
 group; on timeout the harness sends \texttt{SIGKILL} to the entire
 group (so subagents and spawned shells die with the parent) and the
 run is recorded \texttt{FAIL} with a synthetic \texttt{wall\_timeout}
-JSONL record. The numerical wall budget is pinned in
+JSONL record. The numerical wall budget is specified in
 §\ref{sec:setup}.
 
 % ────────────────── 3.3 Evaluation integrity (SWE-bench) ───────────────
@@ -150,10 +150,10 @@ byte-precise replacement with linting --- awkward to express in bash.
 The per-call tax is task-invariant; the gain term depends on regime, on
 which primitives the agent uses, and on its call pattern.
 §\ref{sec:results} reads the four-cell cost structure as the empirical
-landing of this inequality; §\ref{sec:discussion} decomposes it into
+outcome of this inequality; §\ref{sec:discussion} decomposes it into
 three mechanisms (edit-friction path-cost, failure-cost on doomed
 trajectories, and pricing-asymmetry batching/output-control) that the
-framework alone does not pin down.
+framework alone does not determine.
 
 % ──────────────── 3.5 Cache isolation and cost reporting ───────────────
 \subsection{Cache isolation and cost reporting}
@@ -163,21 +163,21 @@ framework alone does not pin down.
 Across the four surfaces this paper touches --- the Anthropic
 Messages API, the Claude Code CLI, the OpenAI Responses API, and the
 OpenAI Codex CLI --- no documented parameter, flag, environment
-variable, or namespace knob forces a server-side cache miss or scopes
+variable, or namespace setting forces a server-side cache miss or scopes
 cached tokens to a single caller. The only documented mechanism is
 implicit: change the cached content so the cache key changes.
 Anthropic's \texttt{cache\_control} controls breakpoints, not
 bypass~\cite{docs:anthropic2026promptcaching}; the context-editing
 primitive exposes lifecycle and scope but no per-session isolation
 knob~\cite{docs:anthropic2026contextediting}; the Claude Code CLI's
-\texttt{--no-session-persistence} flag controls local session state,
+\texttt{--no-\allowbreak session-\allowbreak persistence} flag controls local session state,
 not the upstream
 cache~\cite{docs:claudecode2026cli,docs:claudecode2026settings}.
-OpenAI's \texttt{prompt\_cache\_key} is a routing and partition hint,
+OpenAI's \texttt{prompt\allowbreak\_cache\allowbreak\_key} is a routing and partition hint,
 not a disable
 switch~\cite{docs:openai2026promptcaching}, and the Responses API's
 stored-state primitives (\texttt{store=true} retention,
-\texttt{previous\_response\_id}, the Sessions API) are alternative
+\texttt{previous\allowbreak\_response\allowbreak\_id}, the Sessions API) are alternative
 stateful channels rather than isolation knobs layered on top of the
 cache~\cite{docs:openai2026convstate}; the Codex CLI exposes no cache
 flag or environment variable~\cite{repo:openai2026codex}. We
@@ -194,7 +194,7 @@ $\text{cost} = \text{input\_tokens} \cdot r_{\text{in}}
 rates~$r_{\text{in}}, r_{\text{out}}$ are pinned in
 §\ref{sec:setup}) plus a per-arm median-floor adjustment.
 For each arm, let $M_{\text{arm}}$ be the median across that arm's
-instances of first-turn \texttt{cache\_read\_input\_tokens} ---
+instances of first-turn \texttt{cache\allowbreak\_read\allowbreak\_input\allowbreak\_tokens} ---
 empirically the floor representing ``system prompt plus tool
 definitions are warm in cache.'' Any instance whose first-turn
 \texttt{cache\_read} falls below $M_{\text{arm}}$ is bumped up to

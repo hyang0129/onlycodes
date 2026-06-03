@@ -740,9 +740,9 @@ def test_write_codex_config_baseline_native_tools(tmp_path):
     content = (tmp_path / "config.toml").read_text()
     assert "shell_tool = true" in content
     assert "apply_patch_freeform = true" in content
-    # No browser/computer restrictions — matches Claude tool_rich (full toolset).
-    assert "browser_use" not in content
-    assert "computer_use" not in content
+    # browser_use/computer_use disabled for all arms (plugin-loader race fix).
+    assert "browser_use = false" in content
+    assert "computer_use = false" in content
     # No codebox MCP server registered.
     assert "[mcp_servers.codebox]" not in content
 
@@ -753,8 +753,9 @@ def test_write_codex_config_tool_rich_native_tools(tmp_path):
     content = (tmp_path / "config.toml").read_text()
     assert "shell_tool = true" in content
     assert "apply_patch_freeform = true" in content
-    assert "browser_use" not in content
-    assert "computer_use" not in content
+    # browser_use/computer_use disabled for all arms (plugin-loader race fix).
+    assert "browser_use = false" in content
+    assert "computer_use = false" in content
     assert "[mcp_servers.codebox]" not in content
 
 
@@ -766,8 +767,8 @@ def test_write_codex_config_bash_only_restrictions(tmp_path):
     assert "apply_patch_freeform = false" in content
     assert "browser_use = false" in content
     assert "computer_use = false" in content
-    # apps fix is code_only-specific; bash_only retains native plugin tools.
-    assert "apps =" not in content
+    # apps=false applied to all non-codebox arms (plugin-loader race fix).
+    assert "apps = false" in content
     assert "[mcp_servers.codebox]" not in content
 
 
@@ -801,8 +802,8 @@ def test_write_codex_config_tool_rich_valid_toml(tmp_path):
     parsed = tomllib.loads((tmp_path / "config.toml").read_text())
     assert parsed["features"]["shell_tool"] is True
     assert parsed["features"]["apply_patch_freeform"] is True
-    assert "browser_use" not in parsed["features"]
-    assert "computer_use" not in parsed["features"]
+    assert parsed["features"]["browser_use"] is False
+    assert parsed["features"]["computer_use"] is False
     assert "mcp_servers" not in parsed
 
 

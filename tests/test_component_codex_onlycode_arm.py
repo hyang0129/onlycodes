@@ -433,9 +433,9 @@ class TestRunArmExtraPytestArgsForwardedToPreflight:
             runner=_NoopRunner(),
         )
 
-        # _run_arm must have taken the env_fail path (0 collected → env_fail).
-        assert verdict == "env_fail", (
-            f"Expected 'env_fail' when preflight returns 0 collected; got {verdict!r}"
+        # _run_arm must have taken the collect-fail path (0 collected → FAIL).
+        assert verdict == "FAIL", (
+            f"Expected 'FAIL' when preflight returns 0 collected; got {verdict!r}"
         )
 
         # The real run_preflight_collect must have been called at least once.
@@ -620,10 +620,10 @@ class TestRunArmWritesCodexModelToMeta:
         monkeypatch.setattr(_harness_mod.subprocess, "run", _fake_run)
         monkeypatch.setattr(run_mod, "git_reset", lambda *a, **kw: None)
 
-    def test_env_fail_meta_includes_model_for_codex_cli(
+    def test_collectfail_meta_includes_model_for_codex_cli(
         self, monkeypatch, tmp_path: Path
     ):
-        """codex_cli + env_fail short-circuit → meta line carries `model`."""
+        """codex_cli + post-agent collect-fail → meta line carries `model`."""
         repo_dir, venv_dir, results_dir = self._dirs(tmp_path)
         self._patch_to_env_fail(monkeypatch)
 
@@ -643,19 +643,19 @@ class TestRunArmWritesCodexModelToMeta:
             codex_model="gpt-5.4-mini",
         )
 
-        assert verdict == "env_fail"
+        assert verdict == "FAIL"
         meta = self._read_meta(results_dir)
         assert meta["type"] == "meta"
         assert meta["agent_surface"] == "codex_cli"
         assert meta["model"] == "gpt-5.4-mini", (
-            f"Expected `model` field in env_fail meta line for codex_cli, "
+            f"Expected `model` field in collect-fail meta line for codex_cli, "
             f"but got: {meta}"
         )
 
-    def test_env_fail_meta_omits_model_for_claude_code(
+    def test_collectfail_meta_omits_model_for_claude_code(
         self, monkeypatch, tmp_path: Path
     ):
-        """claude_code + env_fail → meta line MUST NOT include `model`.
+        """claude_code + post-agent collect-fail → meta line MUST NOT include `model`.
 
         Claude's USD cost comes from `total_cost_usd` in its own stream-json
         output. A `model` field would be misleading and is therefore omitted.
@@ -682,7 +682,7 @@ class TestRunArmWritesCodexModelToMeta:
             codex_model=None,
         )
 
-        assert verdict == "env_fail"
+        assert verdict == "FAIL"
         meta = self._read_meta(results_dir)
         assert meta["type"] == "meta"
         assert meta["agent_surface"] == "claude_code"

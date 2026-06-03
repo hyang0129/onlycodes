@@ -10,7 +10,7 @@
 % "2026-05-28 — Paper title renamed" log entry.
 
 Modern coding agents expose multiple tool surfaces --- IDE primitives,
-bash, and MCP code-execution --- and the field has shipped three
+bash, and Model Context Protocol (MCP) code-execution --- and the field has shipped three
 contradictory claims about which one matters. We run the missing
 crossed comparison: an integrity-clean three-arm ablation
 (\texttt{baseline} / \texttt{bash\_only} / \texttt{code\_only}) on
@@ -24,7 +24,7 @@ rival in three cells (significantly on Artifact/Claude and
 SWE-bench/Codex; directionally on Artifact/Codex), with pass rates
 statistically tied within each cell. The lone exception is
 SWE-bench/Claude, where \texttt{code\_only} is directionally costlier
-($+\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$, NS);
+($+\respct{paired_contrasts}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_delta}{swebench:claude:onlycode-vs-baseline:cost_adj:mean_b}$, not significant (NS));
 a conditional-cost analysis localizes that gap to
 failure-cost on doomed-run trajectories, not a per-edit tax on
 successful runs. Two implications: the cheapest tool surface is
