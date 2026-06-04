@@ -105,6 +105,50 @@ def test_eval_commands_and_no_use_env() -> None:
     assert specs.no_use_env({}) is False
 
 
+def test_eval_env_parses_exports_and_ignores_system_commands() -> None:
+    spec = {
+        "eval_commands": [
+            "export LANG=en_US.UTF-8",
+            "export PYTHONIOENCODING=utf8",
+            "  export LC_ALL=en_US.UTF-8  ",          # surrounding whitespace tolerated
+            "sed -i 's/x/y/' /etc/locale.gen && locale-gen",  # system-level: not env
+            "",                                        # blank dropped
+        ]
+    }
+    assert specs.eval_env(spec) == {
+        "LANG": "en_US.UTF-8",
+        "PYTHONIOENCODING": "utf8",
+        "LC_ALL": "en_US.UTF-8",
+    }
+    # The non-export command is surfaced separately so the caller can log the skip.
+    assert specs.eval_system_commands(spec) == [
+        "sed -i 's/x/y/' /etc/locale.gen && locale-gen"
+    ]
+    assert specs.eval_env({}) == {}
+    assert specs.eval_system_commands({}) == []
+
+
+def test_eval_env_strips_quotes_no_shell_expansion() -> None:
+    spec = {"eval_commands": ["export FOO='bar baz'", 'export QUX="q"', "export RAW=$HOME"]}
+    env = specs.eval_env(spec)
+    assert env["FOO"] == "bar baz"   # single quotes stripped
+    assert env["QUX"] == "q"         # double quotes stripped
+    assert env["RAW"] == "$HOME"     # left verbatim — no shell expansion
+
+
+def test_eval_env_real_vendored_django() -> None:
+    # Django specs carry the locale pins as export-style eval_commands; they must
+    # surface as a plain env dict for the Gate-2 collect (#311 P2-δ test fidelity).
+    m = specs._load()
+    dj = m["django/django"]["1.10"]
+    env = specs.eval_env(dj)
+    assert env.get("LANG") == "en_US.UTF-8"
+    assert env.get("LC_ALL") == "en_US.UTF-8"
+    assert env.get("LANGUAGE") == "en_US:en"
+    # Every value parsed is non-empty and quote-free.
+    assert all(v and "'" not in v and '"' not in v for v in env.values())
+
+
 def test_packages_kind_discrimination() -> None:
     assert specs.packages_kind({}) == "none"
     assert specs.packages_kind({"packages": "  "}) == "none"

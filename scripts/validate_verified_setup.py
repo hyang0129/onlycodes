@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -74,6 +75,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = REPO_ROOT / "runs" / "validation"
+
+
+def _conda_default() -> bool:
+    """Default for ``--conda`` when the flag is unset — mirrors
+    ``cache_cli.setup``'s ``ONLYCODES_CONDA_BUILD`` convention so the validator
+    builds the same way the spine's ``cache setup`` does."""
+    return os.environ.get("ONLYCODES_CONDA_BUILD", "").lower() in ("1", "true", "yes", "on")
 
 # Throwaway clones for the Gate-2 collect check. The bare repo is local after
 # Gate 1, so these clones are cheap; each is wiped before and after use.
@@ -200,6 +208,7 @@ WORKER_SCRIPT = r"""
 import json, os, sys, shutil, traceback
 sys.path.insert(0, {repo_root!r})
 from pathlib import Path
+from swebench import specs
 from swebench.models import Problem
 from swebench.cache import cache_paths, bare_repo_path
 from swebench.cache_cli import _setup_one
@@ -212,16 +221,19 @@ from swebench.run import _INSTANCE_ENV, _INSTANCE_EXTRA_PYTEST_ARGS
 yaml_path = Path({yaml_path!r})
 clone_base = {clone_base!r}
 force = {force!r}
+conda = {conda!r}
 repo_root = {repo_root!r}
 
 problem = Problem.from_yaml(yaml_path)
 iid = problem.instance_id
 result = {{"ok": False, "status": "build_fail", "reason": None,
-          "lockfile": False, "collect_skipped": False}}
+          "lockfile": False, "collect_skipped": False, "conda": conda}}
 
 try:
     # --- Gate 1: clone + venv-build (identical to `cache setup` for one id) ---
-    _id, built_ok, build_msg = _setup_one(problem, force=force)
+    # Under --conda, spec-bearing instances build conda-native (the faithful
+    # MAP_REPO_VERSION_TO_SPECS path); instances without a spec fall back to venv.
+    _id, built_ok, build_msg = _setup_one(problem, force=force, conda=conda)
     result["build_msg"] = build_msg
     paths = cache_paths(iid)
     if not built_ok:
@@ -249,13 +261,33 @@ try:
             problem.test_cmd, repo_dir=tmp_repo, venv_dir=venv_dir,
             repo_slug=problem.repo_slug,
         )
+        # Collect-time env. Under --conda we run the collect faithfully under the
+        # spec's `export`-style eval_commands (LANG/LC_ALL/... locale pins) — the
+        # test-fidelity half of the conda-native build — with the hand-curated
+        # _INSTANCE_ENV taking precedence (hand-tables > official-spec, per #311).
+        # System-level eval_commands (locale-gen) need root and are skipped+logged,
+        # exactly as setup_conda_env skips system-level pre_install.
+        extra_env = dict(_INSTANCE_ENV.get(iid) or {{}})
+        if conda:
+            spec = specs.spec_for(problem.repo_slug, getattr(problem, "version", None))
+            if spec:
+                spec_env = specs.eval_env(spec)
+                if spec_env:
+                    extra_env = {{**spec_env, **extra_env}}
+                    result["eval_env"] = spec_env
+                skipped = specs.eval_system_commands(spec)
+                if skipped:
+                    result["eval_system_skipped"] = skipped
+                    sys.stdout.write("\n--- spec eval_commands skipped (system-level, need root) ---\n")
+                    for c in skipped:
+                        sys.stdout.write(c + "\n")
         # run_preflight_collect returns (True, "") for non-pytest/-unittest
         # runners (e.g. Django runtests.py) — record that as collect_skipped so
         # the report is honest about which gate actually fired.
         is_pytest_like = (" -m pytest" in resolved) or (" -m unittest" in resolved)
         collected_ok, output = run_preflight_collect(
             repo_dir=tmp_repo, test_cmd=resolved, venv_dir=venv_dir,
-            extra_env=_INSTANCE_ENV.get(iid),
+            extra_env=extra_env or None,
             extra_pytest_args=_INSTANCE_EXTRA_PYTEST_ARGS.get(iid),
         )
         sys.stdout.write("\n--- pytest --collect-only (tail) ---\n")
@@ -284,7 +316,8 @@ print("__VALIDATOR_RESULT__" + json.dumps(result))
 """
 
 
-def run_one(yaml_path: Path, *, clone_base: str, timeout: int, force: bool, log_dir: Path) -> dict:
+def run_one(yaml_path: Path, *, clone_base: str, timeout: int, force: bool,
+            conda: bool, log_dir: Path) -> dict:
     """Validate one instance in a subprocess. Always returns; never raises."""
     instance_id = yaml_path.stem
     log_file = log_dir / f"{instance_id}.log"
@@ -294,6 +327,7 @@ def run_one(yaml_path: Path, *, clone_base: str, timeout: int, force: bool, log_
         yaml_path=str(yaml_path),
         clone_base=clone_base,
         force=force,
+        conda=conda,
     )
 
     started = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -358,6 +392,9 @@ def run_one(yaml_path: Path, *, clone_base: str, timeout: int, force: bool, log_
         "build_msg": (worker_result or {}).get("build_msg"),
         "lockfile": (worker_result or {}).get("lockfile", False),
         "collect_skipped": (worker_result or {}).get("collect_skipped", False),
+        "conda": (worker_result or {}).get("conda", conda),
+        "eval_env": (worker_result or {}).get("eval_env"),
+        "eval_system_skipped": (worker_result or {}).get("eval_system_skipped"),
         "failure_class": klass,
         "fix_hint": hint,
         "log_file": str(log_file.relative_to(REPO_ROOT)),
@@ -379,7 +416,7 @@ def write_buildable(results: list[dict], paths: list[Path]) -> None:
 
 
 def write_summary(results: list[dict], out_path: Path, *, set_name: str,
-                  start: dt.datetime, pool_size: int) -> None:
+                  start: dt.datetime, pool_size: int, conda: bool = False) -> None:
     total = len(results)
     ok = sum(1 for r in results if r["status"] == "ok")
     shortfall = pool_size - ok
@@ -395,6 +432,12 @@ def write_summary(results: list[dict], out_path: Path, *, set_name: str,
     lines.append("")
     lines.append(f"- Started (UTC): `{start.isoformat()}`")
     lines.append(f"- Pool size (validated): **{pool_size}**")
+    lines.append(
+        "- Build path: **"
+        + ("conda-native (spec-faithful `MAP_REPO_VERSION_TO_SPECS`) + venv fallback "
+           "for spec-less instances" if conda else "venv (generic)")
+        + "**"
+    )
     lines.append(f"- Buildable (built + collected cleanly): **{ok}**")
     lines.append(f"- **Shortfall (pool − buildable): {shortfall}**")
     lines.append("")
@@ -420,6 +463,18 @@ def write_summary(results: list[dict], out_path: Path, *, set_name: str,
         Only `buildable.txt` ids feed #299's spine and #301's powered subset.
     """).strip())
     lines.append("")
+
+    if conda:
+        lines.append(textwrap.dedent("""
+            Under conda-native build, Gate 1 builds each spec-bearing instance from
+            `MAP_REPO_VERSION_TO_SPECS` verbatim (correct interpreter via micromamba,
+            file-ref deps, custom install flags), and Gate 2 runs the collect under
+            the spec's `export`-style `eval_commands` (locale pins). System-level
+            `eval_commands` (`locale-gen`) need root and are skipped + logged in the
+            per-instance log, the same way `setup_conda_env` skips system-level
+            `pre_install`. Instances with no official spec fall back to the venv path.
+        """).strip())
+        lines.append("")
 
     lines.append("## Per-instance result")
     lines.append("")
@@ -525,11 +580,39 @@ def main() -> int:
         help="Also write the buildable id list here (e.g. sets/verified-buildable.txt). "
              "Always written to the run dir's buildable.txt regardless.",
     )
+    parser.add_argument(
+        "--conda", action=argparse.BooleanOptionalAction, default=None,
+        help="Build spec-bearing instances conda-native (faithful "
+             "MAP_REPO_VERSION_TO_SPECS via micromamba) in Gate 1, and run the Gate-2 "
+             "collect under the spec's eval_commands env (locale pins). Instances "
+             "without an official spec fall back to the venv path. Defaults to the "
+             "ONLYCODES_CONDA_BUILD env var (falsey if unset). Requires micromamba in "
+             "the image (#311).",
+    )
     args = parser.parse_args()
 
     if args.concurrency < 1:
         print("ERROR: --concurrency must be >= 1.", file=sys.stderr)
         return 2
+
+    conda = _conda_default() if args.conda is None else args.conda
+    if conda:
+        # Fail loudly up front rather than letting every instance fall back or
+        # error mid-run: conda-native builds need micromamba, which is baked into
+        # the devcontainer image (#311). A pre-rebuild container won't have it.
+        # REPO_ROOT on the path so the import works when run as a bare script
+        # (the worker subprocess does the same before its own swebench imports).
+        sys.path.insert(0, str(REPO_ROOT))
+        from swebench.harness import _find_micromamba
+        if _find_micromamba() is None:
+            print(
+                "ERROR: --conda requested but micromamba was not found. The "
+                "conda-native build needs micromamba (baked at /usr/local/bin by the "
+                "devcontainer image — rebuild the container, or set ONLYCODES_MICROMAMBA "
+                "to its path). Re-run with --no-conda for the generic venv path. (#311)",
+                file=sys.stderr,
+            )
+            return 2
 
     problems_dir = REPO_ROOT / "problems" / args.set_name
     if not problems_dir.is_dir():
@@ -565,6 +648,7 @@ def main() -> int:
     print(f"Instances:   {pool_size}")
     print(f"Concurrency: {args.concurrency}")
     print(f"Timeout:     {args.timeout}s per instance")
+    print(f"Build path:  {'conda-native (spec-faithful) + venv fallback' if conda else 'venv (generic)'}")
     print(f"Output dir:  {out_dir.relative_to(REPO_ROOT)}")
     print(f"Started:     {start.isoformat()}")
     print(flush=True)
@@ -580,14 +664,15 @@ def main() -> int:
         ordered = sorted(results, key=lambda r: r["instance_id"])
         (out_dir / "results.json").write_text(json.dumps(ordered, indent=2))
         write_summary(ordered, out_dir / "summary.md", set_name=args.set_name,
-                      start=start, pool_size=pool_size)
+                      start=start, pool_size=pool_size, conda=conda)
         write_buildable(ordered, buildable_targets)
 
     done = 0
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         futs = {
             pool.submit(run_one, yp, clone_base=args.clone_base,
-                        timeout=args.timeout, force=args.force, log_dir=log_dir): yp
+                        timeout=args.timeout, force=args.force, conda=conda,
+                        log_dir=log_dir): yp
             for yp in yamls
         }
         for fut in as_completed(futs):

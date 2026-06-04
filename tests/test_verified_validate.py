@@ -157,3 +157,54 @@ def test_write_summary_reports_shortfall(tmp_path: Path) -> None:
 def test_results_json_is_valid(tmp_path: Path) -> None:
     """Sanity: the record shape we write is JSON-serializable as-is."""
     json.dumps(_results())
+
+
+# --------------------------------------------------------------------------
+# conda-native wiring (#311 P2-δ): --conda flag, worker threading, report
+# --------------------------------------------------------------------------
+
+def test_conda_default_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ONLYCODES_CONDA_BUILD", raising=False)
+    assert vvs._conda_default() is False
+    for truthy in ("1", "true", "YES", "on"):
+        monkeypatch.setenv("ONLYCODES_CONDA_BUILD", truthy)
+        assert vvs._conda_default() is True
+    for falsey in ("0", "no", "", "off"):
+        monkeypatch.setenv("ONLYCODES_CONDA_BUILD", falsey)
+        assert vvs._conda_default() is False
+
+
+@pytest.mark.parametrize("conda", [True, False])
+def test_worker_script_threads_conda_and_compiles(conda: bool) -> None:
+    """The per-instance worker template must embed the conda flag and compile
+    for both values — brace-escaping in the f-string-free .format() is fragile."""
+    code = vvs.WORKER_SCRIPT.format(
+        repo_root="/repo", yaml_path="/repo/x.yaml",
+        clone_base="/tmp/cb", force=False, conda=conda,
+    )
+    compile(code, "<worker>", "exec")
+    assert f"conda = {conda}" in code
+    # Gate 1 builds via the conda-aware path…
+    assert "_setup_one(problem, force=force, conda=conda)" in code
+    # …and Gate 2 layers the spec's eval_commands env over the hand-table.
+    assert "specs.eval_env(spec)" in code
+    assert "specs.eval_system_commands(spec)" in code
+    assert "_INSTANCE_ENV.get(iid)" in code
+
+
+def test_write_summary_notes_build_path(tmp_path: Path) -> None:
+    import datetime as dt
+    start = dt.datetime(2026, 6, 3, tzinfo=dt.timezone.utc)
+
+    venv_out = tmp_path / "venv.md"
+    vvs.write_summary(_results(), venv_out, set_name="swe/swebench-verified",
+                      start=start, pool_size=4, conda=False)
+    assert "Build path: **venv (generic)**" in venv_out.read_text()
+
+    conda_out = tmp_path / "conda.md"
+    vvs.write_summary(_results(), conda_out, set_name="swe/swebench-verified",
+                      start=start, pool_size=4, conda=True)
+    text = conda_out.read_text()
+    assert "conda-native (spec-faithful" in text
+    # the conda-only Gate-2 fidelity note is present
+    assert "eval_commands" in text and "locale-gen" in text

@@ -29,10 +29,14 @@ from __future__ import annotations
 
 import functools
 import json
+import re
 import shlex
 from pathlib import Path
 
 _SPECS_PATH = Path(__file__).resolve().parent / "data" / "official_specs.json"
+
+# `export KEY=VALUE` form of an eval_command (see `eval_env` below).
+_EVAL_EXPORT_RE = re.compile(r"^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 # `packages` tokens we cannot pip-translate in PR-1 (file refs / conda env files).
 _FILE_PKG_SUFFIXES = (".txt", ".yml", ".yaml", ".cfg")
@@ -154,6 +158,42 @@ def pip_packages(spec: dict) -> list[str]:
 def eval_commands(spec: dict) -> list[str]:
     """The spec's ``eval_commands`` (run during evaluation, before the test cmd). Verbatim."""
     return [c for c in (spec.get("eval_commands") or []) if (c or "").strip()]
+
+
+def eval_env(spec: dict) -> dict[str, str]:
+    """Env-var overrides distilled from the spec's ``export``-style ``eval_commands``.
+
+    SWE-bench runs ``eval_commands`` in the eval shell *before* the test command.
+    In the vendored data they are overwhelmingly ``export KEY=VALUE`` locale pins
+    (``LANG`` / ``LC_ALL`` / ``LANGUAGE`` / ``PYTHONIOENCODING``, mostly Django), so
+    we surface them as a plain env dict the test/collect step can run *under* — the
+    test-fidelity counterpart to the conda-native build (#311 P2-δ). Surrounding
+    single/double quotes on the value are stripped; no shell ``$VAR`` expansion.
+
+    Non-``export`` eval_commands (e.g. ``sed … /etc/locale.gen && locale-gen``) are
+    system-level mutators that need root and are deliberately NOT represented here —
+    SWE-bench runs them inside its per-instance container, but our overlay model does
+    not isolate the system, exactly as :func:`harness.setup_conda_env` skips
+    system-level ``pre_install``. Use :func:`eval_system_commands` to see what was
+    left out.
+    """
+    env: dict[str, str] = {}
+    for cmd in eval_commands(spec):
+        m = _EVAL_EXPORT_RE.match(cmd)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2).strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            val = val[1:-1]
+        env[key] = val
+    return env
+
+
+def eval_system_commands(spec: dict) -> list[str]:
+    """The non-``export`` ``eval_commands`` — system-level mutators (``locale-gen``
+    etc.) that :func:`eval_env` deliberately omits. Surfaced so callers can log the
+    skip rather than silently dropping spec steps."""
+    return [c for c in eval_commands(spec) if not _EVAL_EXPORT_RE.match(c)]
 
 
 def no_use_env(spec: dict) -> bool:
