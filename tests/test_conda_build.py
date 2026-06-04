@@ -58,6 +58,9 @@ def test_conda_path_env_prepends_bin_and_clears_activation(monkeypatch) -> None:
         "locale-gen en_US.UTF-8",
         "add-apt-repository ppa:foo/bar",
         "  apt install build-essential",
+        # redirects into root-owned system dirs need root (django py3.5 #311 P2-δ)
+        "echo 'en_US UTF-8' > /etc/locale.gen",
+        "echo 'deb ...' >> /etc/apt/sources.list",
     ],
 )
 def test_unsafe_pre_install_matches_system_mutators(cmd: str) -> None:
@@ -68,7 +71,8 @@ def test_unsafe_pre_install_matches_system_mutators(cmd: str) -> None:
     "cmd",
     [
         "sed -i 's/requires = \\[\"setuptools\",/requires = \\[\"setuptools==68.0.0\",/' pyproject.toml",
-        "echo 'en_US UTF-8' > /etc/locale.gen",
+        "echo 'x' > local_config.txt",          # redirect to a repo-relative file: safe
+        "python setup.py build > /dev/null",     # /dev is not a root-owned config dir
         "python -m pip install -e .",
     ],
 )

@@ -1320,9 +1320,14 @@ _DEFAULT_CONDA_CHANNEL = "conda-forge"
 # pre_install commands we must NOT run in our (non-container) flow: they mutate
 # the host system and need root. SWE-bench runs them inside a per-instance
 # container; our overlay isolates the repo + env but not the system. We skip and
-# log these (sed/echo source pins are safe and ARE run).
+# log these (sed/echo source pins targeting the repo tree are safe and ARE run).
 _UNSAFE_PRE_INSTALL_RE = re.compile(
+    # a system package manager (optionally via sudo), e.g. `apt-get install …`
     r"^\s*(sudo\s+)?(apt-get|apt|locale-gen|add-apt-repository|dpkg|yum)\b"
+    # …or a redirect that writes into a root-owned system dir, e.g. django's
+    # `echo 'en_US UTF-8' > /etc/locale.gen` — fails (rc=2) without root in our
+    # flow, so skip it the same way (the matching locale-gen step is skipped too).
+    r"|.*[>]{1,2}\s*/(etc|usr|var|opt|boot|lib|lib64|sbin|bin|root)/"
 )
 
 
