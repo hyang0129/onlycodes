@@ -60,19 +60,24 @@ for 100% of the set*.
 ## Decision
 
 **Migrate Verified execution to pull the official prebuilt images and run the agent +
-tests inside containers.** This is the only path to **frozen reproducibility + exact
-parity with published SWE-bench numbers, with zero coverage gaps** — precisely what the
-conda-on-host path structurally cannot deliver.
+tests inside containers.** This is the only path to **frozen reproducibility + environment
+parity with zero coverage gaps** — precisely what the conda-on-host path structurally
+cannot deliver.
 
-Two non-negotiable framings:
+Three non-negotiable framings:
 
+- **Environment parity, not leaderboard equality.** Running the canonical environment
+  *removes the environment as a confound*; it does **not** make our pass-rate equal a
+  specific published leaderboard row — our agent/scaffold differs from those submissions.
 - **Reproducibility comes from *pulling* the frozen images, not from Docker-in-Docker.**
   Building the images locally from the upstream Dockerfiles re-runs `conda env create` at
   build time and reintroduces the same drift. **We pull; we do not build.**
-- **#311 is not wasted.** Conda-native build becomes the **fallback** for instances without
-  a published image (or future custom, non-SWE-bench tasks). The rest of #311 — the vendored
-  specs, `test_cmd` / `eval_commands` resolution, the official log-parser grading, the
-  validator harness, and the analysis pipeline — all still apply on the image path.
+- **#311 is not wasted, but the fallback is dual-backend.** Conda-native build becomes the
+  **fallback** for instances without a published image (or future custom, non-SWE-bench
+  tasks); the vendored specs, `test_cmd` / `eval_commands` resolution, official log-parser
+  grading, validator harness, and analysis pipeline all still apply. Keeping it means
+  `run.py` carries **both** execution backends (container + conda/overlay) under an
+  *image-if-published-else-conda* rule — dual-backend maintenance, not a clean replace.
 
 ## Why images (not "just fix more conda bugs")
 
@@ -81,8 +86,9 @@ Two non-negotiable framings:
 - **Stops the per-instance fidelity treadmill.** 500 instances × per-spec quirks
   (qhull-from-source, env.yml solves, 3.5/3.6/3.7 provisioning, locale/root steps) are all
   pre-solved and frozen in the images SWE-bench already debugged across the dataset.
-- **Exact published-number parity.** Running the canonical environment makes our pass-rates
-  directly comparable to the literature — valuable for an archival paper (#298).
+- **Removes the environment confound.** Running the canonical environment means a pass-rate
+  difference is attributable to the agent/scaffold, not to env drift — valuable for an
+  archival paper (#298). (This is env parity, not equality with a specific leaderboard row.)
 - **Stronger isolation.** A container is a better sandbox than overlay + conda-on-host,
   aligned with the benchmark-integrity posture in CLAUDE.md.
 - **The freezing we want, we get for free.** A pulled image *is* the frozen env; our cache
@@ -110,22 +116,33 @@ Decomposed into child issues on #314:
   **host-orchestration** (run the orchestrator on the WSL2 host with native Docker, no
   nesting). Per CLAUDE.md, read `~/.claude/guides/devcontainer-guide.md` before any
   devcontainer change. *Prereq — gates everything.*
-- **C2 (#316) — De-risk spike.** Actually `docker pull` a *failing-for-us* matplotlib image,
-  run one in-container agent turn + a test, capture the transcript. The only unverified link
-  is the real pull (vs the manifest existing); this is the go/no-go before the rewrite.
+- **C2 (#316) — De-risk spike + early measurement.** Actually `docker pull` a *failing-for-us*
+  matplotlib image, run one in-container agent turn + a test, and verify the exec-server's
+  `unshare` net-iso works in-container. **Also measure** pull size/time, container spin-up,
+  and per-arm reset throughput — the numbers that decide C3's reset strategy and grid
+  feasibility. Go/no-go before the rewrite.
 - **C3 (#317) — Container runtime + per-arm reset.** Pull/run/stop per instance; expose
-  `/testbed`; git-history strip inside; **fresh container per arm** replaces the overlay
-  refresh; pull-on-demand + prune to bound disk.
-- **C4 (#318) — In-container agent execution.** Claude Code + the MCP exec-server inside the
-  container; tool restriction for `code_only`/`onlycode` (mirror
-  `runner.py:build_tools_flags`); isolated Claude config; JSONL transcript captured to the
-  host; no grader/transcript leak.
-- **C5 (#319) — In-container test execution + gold-patch fidelity gate.** Apply `test_patch`,
-  run `eval_commands` + `test_cmd`, parse via the official `MAP_REPO_TO_PARSER`; add the
-  **gold-patch transition gate** (gold patch flips `FAIL_TO_PASS`→pass, `PASS_TO_PASS` stays
-  green) as the real fidelity metric; **pin images by digest**, not `:latest`.
-- **C6 (#320) — Parity validation + conda fallback + docs.** Image-vs-conda on the coverage
-  sample; image-if-published-else-conda selection rule; update CLAUDE.md / README / ADR.
+  `/testbed`; git-history strip inside; **reset strategy (fresh-container vs `docker commit`
+  snapshot vs checkpoint) is an open choice decided by C2's throughput numbers** — the
+  current overlay reset is fast; do not regress the grid blindly.
+- **C3b (#323) — Image + registry + disk management.** Pull-by-digest; Docker Hub
+  rate-limits/auth/bandwidth (~1 TB for the set); optional registry mirror; prune/disk.
+- **C4 (#318) — In-container *Claude* agent execution.** Claude Code + the MCP exec-server
+  inside the container; tool restriction (mirror `runner.py:build_tools_flags`); isolated
+  config/creds; **preserve the exec-server's executed-code network isolation**. (Codex is the
+  follow-up #325; output capture is C4b #324.)
+- **C4b (#324) — Agent output capture.** JSONL transcript + result out to the host, no-leak.
+- **C5 (#319) — In-container test execution.** Apply `test_patch`, run `eval_commands` +
+  `test_cmd`, parse via the official `MAP_REPO_TO_PARSER`; **pin by digest + arch**; reuse the
+  gold-patch gate (now standalone **#322**) against the image path.
+- **C6 (#320) — Parity + dual-backend selection + docs.** Image-vs-conda (buildable +
+  gold-faithful) on the #313 sample; image-if-published-else-conda rule; update CLAUDE.md /
+  README / ADR.
+
+A **standalone, non-blocking** issue feeds the decision: **#322 — gold-patch transition gate
+on the existing validator** (quantifies the conda baseline's *fidelity*, not just buildable;
+C5 reuses it). Decoupled so the evidence that justifies/de-justifies this epic isn't gated
+behind the migration itself.
 
 ### Invariants to preserve in-container
 
@@ -135,6 +152,11 @@ The onlycodes integrity invariants must hold **inside** the container:
   `test_harness_strip.py`); the agent must not recover the fix via `git log`.
 - **Tool restriction** for the code-execution-only arm (`--disallowedTools` + exec-server
   only).
+- **Executed-code network isolation.** Preserve the exec-server's `unshare -n` no-network
+  sandbox for code the agent *runs* (the cheat boundary). The agent process itself keeps API
+  network — it must, to reach the model — so this is *not* `--network none` on the container;
+  only *executed code* is isolated, matching the host implementation. C2 verifies the
+  `unshare` mechanism still works under Docker (it may need a cap/seccomp adjustment).
 - **Isolated Claude config** (`CLAUDE_CONFIG_DIR`; `.credentials.json` + `.claude.json` only;
   `--dangerously-skip-permissions --no-session-persistence`); credentials never persist into
   an image/commit.
@@ -142,9 +164,10 @@ The onlycodes integrity invariants must hold **inside** the container:
 
 ## Consequences
 
-- **`cache.py` / `venv_overlay` / `setup_conda_env` move off the Verified hot path.** The
-  overlay machinery is replaced by fresh-container-per-arm. Conda-native remains for the
-  fallback selection branch; the venv path stays for non-Verified sets.
+- **`cache.py` / `venv_overlay` / `setup_conda_env` move off the Verified *primary* hot
+  path** (but stay live for the conda fallback branch — `run.py` is dual-backend). The
+  overlay reset is replaced by the C3 reset strategy (chosen against C2's throughput numbers,
+  not assumed). The venv path stays for non-Verified sets.
 - **Disk profile changes** from conda envs (~150 GB) to pulled image layers (~100–200 GB),
   pull-on-demand + prune.
 - **New dependency: a container runtime** in the environment (the C1 decision). This is the
