@@ -34,6 +34,7 @@ import shlex
 from pathlib import Path
 
 _SPECS_PATH = Path(__file__).resolve().parent / "data" / "official_specs.json"
+_REQS_PATHS_PATH = Path(__file__).resolve().parent / "data" / "official_reqs_paths.json"
 
 # `export KEY=VALUE` form of an eval_command (see `eval_env` below).
 _EVAL_EXPORT_RE = re.compile(r"^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
@@ -46,6 +47,17 @@ _FILE_PKG_SUFFIXES = (".txt", ".yml", ".yaml", ".cfg")
 def _load() -> dict:
     try:
         return json.loads(_SPECS_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+@functools.lru_cache(maxsize=1)
+def _load_reqs_paths() -> dict:
+    """The vendored requirements / environment.yml path maps (see
+    `scripts/extract_swebench_specs.py`). Separate file from the spec map so the
+    spec map stays byte-for-byte reproducible."""
+    try:
+        return json.loads(_REQS_PATHS_PATH.read_text())
     except (OSError, ValueError):
         return {}
 
@@ -228,14 +240,49 @@ def packages_kind(spec: dict) -> str:
 def packages_file(spec: dict) -> str | None:
     """For a ``requirements_txt`` / ``environment_yml`` spec, the referenced filename.
 
-    The builder reads this file from the repo checked out at
-    ``environment_setup_commit`` (which differs from ``base_commit`` and is
-    unreachable after history-stripping — read it before the strip). ``None`` for
-    inline / absent ``packages``.
+    NOTE: in the vendored data this is the *sentinel* string ``"requirements.txt"``
+    / ``"environment.yml"``, NOT a literal repo-root path — upstream resolves the
+    real path(s) via :func:`reqs_paths` / :func:`env_yml_paths` (e.g. flask's
+    ``"requirements.txt"`` → ``requirements/dev.txt``). The conda builder reads the
+    resolved file from the repo checked out at ``environment_setup_commit`` (which
+    differs from ``base_commit`` and is unreachable after history-stripping — read
+    it before the strip). ``None`` for inline / absent ``packages``.
     """
     if packages_kind(spec) in ("requirements_txt", "environment_yml"):
         return (spec.get("packages") or "").strip()
     return None
+
+
+# ---------------------------------------------------------------------------
+# Requirements / environment.yml path resolution (#311 P2-δ)
+#
+# A `packages` value of "requirements.txt" / "environment.yml" is an upstream
+# SWE-bench sentinel, not a literal file. The real path(s) come from these maps
+# (vendored in official_reqs_paths.json); the builder tries each in order and
+# reads the first that exists in the checked-out tree. See setup_conda_env.
+# ---------------------------------------------------------------------------
+
+def reqs_paths(repo_slug: str) -> list[str]:
+    """Candidate ``requirements.txt`` paths for *repo_slug*, in upstream order.
+
+    Empty if the repo isn't in the vendored ``MAP_REPO_TO_REQS_PATHS`` (then the
+    builder falls back to the literal ``packages`` filename for back-compat)."""
+    return list(_load_reqs_paths().get("reqs_paths", {}).get(repo_slug, []))
+
+
+def env_yml_paths(repo_slug: str) -> list[str]:
+    """Candidate ``environment.yml`` paths for *repo_slug*, in upstream order.
+
+    Empty if the repo isn't in the vendored ``MAP_REPO_TO_ENV_YML_PATHS`` (then the
+    builder falls back to the literal ``packages`` filename for back-compat)."""
+    return list(_load_reqs_paths().get("env_yml_paths", {}).get(repo_slug, []))
+
+
+def replace_req_packages() -> list[tuple[str, str]]:
+    """Upstream ``REPLACE_REQ_PACKAGES`` substitutions (yanked-package fixups,
+    e.g. ``types-pkg_resources`` → ``types-setuptools``) applied to resolved
+    requirements text. ``(old, new)`` pairs."""
+    return [(a, b) for a, b in _load_reqs_paths().get("replace_req_packages", [])]
 
 
 def conda_packages(spec: dict) -> list[str]:

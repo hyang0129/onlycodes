@@ -18,7 +18,10 @@ from swebench.harness import (
     CondaBuildError,
     _conda_path_env,
     _find_micromamba,
+    _resolve_first_existing,
     _UNSAFE_PRE_INSTALL_RE,
+    resolve_env_yml_path,
+    resolve_requirements_text,
     setup_conda_env,
     setup_venv,
 )
@@ -94,3 +97,84 @@ def test_setup_venv_refuses_to_clobber_a_conda_env(tmp_path: Path) -> None:
         setup_venv(str(env), str(tmp_path), python_bin="python3.11")
     # The guard must fire BEFORE any deletion.
     assert (env / ".python_bin").exists()
+
+
+# ---------------------------------------------------------------------------
+# requirements.txt / environment.yml sentinel resolution (#311 P2-δ)
+# ---------------------------------------------------------------------------
+
+def test_resolve_first_existing(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "found.txt").write_text("x")
+    assert _resolve_first_existing(str(tmp_path), ["missing.txt", "a/found.txt"]) == (
+        "a/found.txt", str(tmp_path / "a" / "found.txt"),
+    )
+    assert _resolve_first_existing(str(tmp_path), ["nope.txt"]) is None
+
+
+def test_resolve_requirements_text_resolves_map_path_inlines_and_cleans(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # flask's real layout: the "requirements.txt" sentinel resolves to
+    # requirements/dev.txt, which `-r`-includes requirements/tests.txt.
+    monkeypatch.setattr(harness.specs, "reqs_paths",
+                        lambda repo: ["requirements/dev.txt"])
+    monkeypatch.setattr(harness.specs, "replace_req_packages",
+                        lambda: [("types-pkg_resources", "types-setuptools")])
+    reqdir = tmp_path / "requirements"
+    reqdir.mkdir()
+    (reqdir / "dev.txt").write_text(
+        "-r tests.txt\n"
+        "-e .\n"                       # editable self-install: excluded
+        "# a comment\n"                # comment: excluded
+        ".[test]\n"                    # extras ref: excluded
+        "flask==2.3.0\n"
+        "types-pkg_resources==0.1.3\n"  # yanked → replaced (version dropped)
+    )
+    (reqdir / "tests.txt").write_text("-e .\npytest==7.3.0\n")  # -e . excluded here too
+
+    text = resolve_requirements_text(str(tmp_path), "pallets/flask")
+    lines = [l for l in text.split("\n") if l.strip()]
+    assert "pytest==7.3.0" in lines           # inlined from the -r include
+    assert "flask==2.3.0" in lines
+    assert "types-setuptools" in lines        # replacement applied
+    assert not any(l.startswith("-e .") for l in lines)
+    assert not any(l.startswith("#") for l in lines)
+    assert not any("pkg_resources" in l for l in lines)
+    assert not any(l.startswith(".[test") for l in lines)
+
+
+def test_resolve_requirements_text_none_when_no_candidate(tmp_path: Path, monkeypatch) -> None:
+    # Repo not in the vendored map → no candidates → None (caller falls back).
+    monkeypatch.setattr(harness.specs, "reqs_paths", lambda repo: [])
+    assert resolve_requirements_text(str(tmp_path), "unknown/repo") is None
+    # In-map path but file absent → still None.
+    monkeypatch.setattr(harness.specs, "reqs_paths", lambda repo: ["requirements/dev.txt"])
+    assert resolve_requirements_text(str(tmp_path), "pallets/flask") is None
+
+
+def test_resolve_env_yml_path_prefers_map_order_then_literal(tmp_path: Path, monkeypatch) -> None:
+    # xarray-style: first map candidate is ci/requirements/environment.yml.
+    monkeypatch.setattr(harness.specs, "env_yml_paths",
+                        lambda repo: ["ci/requirements/environment.yml", "environment.yml"])
+    deep = tmp_path / "ci" / "requirements"
+    deep.mkdir(parents=True)
+    (deep / "environment.yml").write_text("name: x\n")
+    got = resolve_env_yml_path(str(tmp_path), "pydata/xarray", {"packages": "environment.yml"})
+    assert got == str(deep / "environment.yml")
+
+    # No map entry → fall back to the literal packages filename at repo root.
+    monkeypatch.setattr(harness.specs, "env_yml_paths", lambda repo: [])
+    (tmp_path / "environment.yml").write_text("name: y\n")
+    got2 = resolve_env_yml_path(str(tmp_path), "some/repo", {"packages": "environment.yml"})
+    assert got2 == str(tmp_path / "environment.yml")
+
+
+def test_vendored_reqs_paths_match_known_repos() -> None:
+    # Guard the vendored data against silent drift on regeneration.
+    from swebench import specs
+    assert specs.reqs_paths("pallets/flask") == ["requirements/dev.txt"]
+    assert specs.reqs_paths("django/django") == ["tests/requirements/py3.txt"]
+    assert specs.env_yml_paths("pydata/xarray")[0] == "ci/requirements/environment.yml"
+    assert specs.reqs_paths("psf/requests") == []   # inline repo, not in the map
+    assert ("types-pkg_resources", "types-setuptools") in specs.replace_req_packages()

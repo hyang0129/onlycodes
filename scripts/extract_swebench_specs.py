@@ -64,13 +64,25 @@ def main() -> int:
         help="Where to write the vendored JSON (default: swebench/data/official_specs.json).",
     )
     parser.add_argument(
+        "--reqs-out", type=Path, default=Path("swebench/data/official_reqs_paths.json"),
+        help="Where to write the vendored requirements/environment.yml path maps "
+             "(default: swebench/data/official_reqs_paths.json). Kept in a SEPARATE "
+             "file so --out stays byte-for-byte reproducible.",
+    )
+    parser.add_argument(
         "--repos-from", type=Path, default=None,
         help="Id file (e.g. sets/verified-spine.txt) — extract only the repos it references.",
     )
     args = parser.parse_args()
 
     try:
-        from swebench.harness.constants import MAP_REPO_VERSION_TO_SPECS
+        from swebench.harness.constants import (
+            MAP_REPO_VERSION_TO_SPECS,
+            MAP_REPO_TO_REQS_PATHS,
+            MAP_REPO_TO_ENV_YML_PATHS,
+        )
+        # REPLACE_REQ_PACKAGES lives in the test-spec builder, not constants.
+        from swebench.harness.test_spec.python import REPLACE_REQ_PACKAGES
     except ImportError as exc:
         print(
             "ERROR: could not import the upstream swebench package "
@@ -107,11 +119,33 @@ def main() -> int:
                   file=sys.stderr)
     else:
         out = dict(MAP_REPO_VERSION_TO_SPECS)
+        wanted = set(out)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
     n_specs = sum(len(v) for v in out.values())
     print(f"Wrote {len(out)} repos / {n_specs} specs to {args.out}", file=sys.stderr)
+
+    # Requirements / environment.yml path maps. A spec whose `packages` is the
+    # sentinel "requirements.txt" / "environment.yml" does NOT name a literal
+    # repo-root file — upstream resolves the real path(s) via these maps and reads
+    # the file at environment_setup_commit. Vendored so setup_conda_env resolves
+    # them the same way (e.g. flask → requirements/dev.txt, not ./requirements.txt).
+    # Filtered to the same repos as --out; REPLACE_REQ_PACKAGES kept whole (tiny).
+    reqs_out = {
+        "reqs_paths": {r: MAP_REPO_TO_REQS_PATHS[r] for r in sorted(wanted)
+                       if r in MAP_REPO_TO_REQS_PATHS},
+        "env_yml_paths": {r: MAP_REPO_TO_ENV_YML_PATHS[r] for r in sorted(wanted)
+                          if r in MAP_REPO_TO_ENV_YML_PATHS},
+        "replace_req_packages": [list(pair) for pair in REPLACE_REQ_PACKAGES],
+    }
+    args.reqs_out.parent.mkdir(parents=True, exist_ok=True)
+    args.reqs_out.write_text(json.dumps(reqs_out, indent=2, sort_keys=True) + "\n")
+    print(
+        f"Wrote {len(reqs_out['reqs_paths'])} reqs-path + "
+        f"{len(reqs_out['env_yml_paths'])} env-yml-path repos to {args.reqs_out}",
+        file=sys.stderr,
+    )
     return 0
 
 

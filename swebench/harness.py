@@ -1392,6 +1392,81 @@ def _shell_run_checked(cmd: str, *, cwd: str, env: dict, what: str) -> None:
         raise CondaBuildError(f"{what} failed (rc={result.returncode}): {cmd!r}")
 
 
+# Lines excluded from a resolved requirements file, mirroring upstream
+# get_requirements: editable self-installs (handled by the spec's `install`
+# command), comments, and `.[test]`-style extras refs.
+_REQ_EXCLUDE_PREFIXES = ("-e .", "#", ".[test")
+
+
+def _resolve_first_existing(repo_dir: str, candidates: list[str]) -> tuple[str, str] | None:
+    """First ``(relpath, abspath)`` in *candidates* that exists under *repo_dir*."""
+    for rel in candidates:
+        ap = os.path.join(repo_dir, rel)
+        if os.path.isfile(ap):
+            return rel, ap
+    return None
+
+
+def resolve_requirements_text(repo_dir: str, repo_slug: str | None) -> str | None:
+    """Build the combined requirements text for a ``requirements.txt``-sentinel spec.
+
+    Faithful local port of upstream SWE-bench ``get_requirements`` (which reads from
+    GitHub raw at ``environment_setup_commit``): the real path comes from the
+    vendored ``MAP_REPO_TO_REQS_PATHS`` (``specs.reqs_paths``), not the literal
+    ``"requirements.txt"`` token — e.g. flask resolves to ``requirements/dev.txt``.
+    We read from the working tree instead (the caller has it checked out at
+    ``environment_setup_commit``). One level of ``-r`` includes is inlined (relative
+    to the requirements file's dir); ``-e .`` / comment / ``.[test`` lines are
+    dropped; ``REPLACE_REQ_PACKAGES`` substitutions are applied.
+
+    Returns the requirements text, or ``None`` if no candidate path exists (or the
+    repo has no vendored reqs-path entry) so the caller can fall back.
+    """
+    candidates = specs.reqs_paths(repo_slug) if repo_slug else []
+    found = _resolve_first_existing(repo_dir, candidates)
+    if not found:
+        return None
+    rel, abspath = found
+    req_dir = os.path.dirname(rel)
+
+    def _excluded(line: str) -> bool:
+        s = line.strip()
+        return any(s.startswith(x) for x in _REQ_EXCLUDE_PREFIXES)
+
+    original: list[str] = []
+    additional: list[str] = []
+    for line in Path(abspath).read_text().split("\n"):
+        if line.strip().startswith("-r"):
+            inc = line[len("-r"):].strip()
+            inc_path = os.path.join(repo_dir, req_dir, inc)
+            if os.path.isfile(inc_path):
+                additional += [l for l in Path(inc_path).read_text().split("\n")
+                               if not _excluded(l)]
+        elif not _excluded(line):
+            original.append(line)
+
+    additional.append("\n".join(original))   # match upstream ordering
+    text = "\n".join(additional)
+    for old, new in specs.replace_req_packages():
+        text = re.sub(rf"^{re.escape(old)}([<>=!~]=?.*|$)", new, text, flags=re.MULTILINE)
+    return text
+
+
+def resolve_env_yml_path(repo_dir: str, repo_slug: str | None, spec: dict) -> str | None:
+    """Resolved ``environment.yml`` abspath for an ``environment.yml``-sentinel spec.
+
+    Tries the vendored ``MAP_REPO_TO_ENV_YML_PATHS`` (``specs.env_yml_paths``) in
+    order, then falls back to the literal ``packages`` filename at repo root (for a
+    repo not in the map). ``None`` if nothing resolves.
+    """
+    candidates = list(specs.env_yml_paths(repo_slug) if repo_slug else [])
+    literal = specs.packages_file(spec)
+    if literal and literal not in candidates:
+        candidates.append(literal)   # back-compat fallback
+    found = _resolve_first_existing(repo_dir, candidates)
+    return found[1] if found else None
+
+
 def setup_conda_env(
     env_dir: str,
     repo_dir: str,
@@ -1437,11 +1512,14 @@ def setup_conda_env(
 
     # --- 1 (+ inline conda packages, or 2 for environment.yml): create the env ---
     if kind == "environment_yml" and not specs.no_use_env(spec):
-        yml = os.path.join(repo_dir, specs.packages_file(spec))
-        if not os.path.isfile(yml):
+        # "environment.yml" is a sentinel — resolve the real path via the vendored
+        # env-yml-path map (e.g. xarray → ci/requirements/environment.yml).
+        yml = resolve_env_yml_path(repo_dir, repo_slug, spec)
+        if not yml:
             raise CondaBuildError(
-                f"environment.yml not found at {yml!r} — wrong commit checked out? "
-                "(must be environment_setup_commit)."
+                f"environment.yml not found for {repo_slug} at any of "
+                f"{specs.env_yml_paths(repo_slug) or [specs.packages_file(spec)]!r} — "
+                "wrong commit checked out? (must be environment_setup_commit)."
             )
         _mm_run(mm, ["create", "-y", "-p", env_dir, "-c", channel, "-f", yml])
         # Env files often omit/loosely pin python; enforce the spec's version.
@@ -1455,14 +1533,32 @@ def setup_conda_env(
     if not os.path.isfile(pip):  # minimal envs may lack pip
         _mm_run(mm, ["install", "-y", "-p", env_dir, "-c", channel, "pip"])
 
-    # --- 2 (requirements.txt ref): read from the checked-out working tree ---
+    # --- 2 (requirements.txt ref): resolve the real path (sentinel, not literal),
+    # following upstream get_requirements, and install from the working tree. ---
     if kind == "requirements_txt":
-        req = os.path.join(repo_dir, specs.packages_file(spec))
-        if not os.path.isfile(req):
-            raise CondaBuildError(
-                f"requirements file not found at {req!r} — wrong commit checked out?"
-            )
-        _pip_run_checked(pip, ["install", "-r", req])
+        reqs_text = resolve_requirements_text(repo_dir, repo_slug)
+        if reqs_text is None:
+            # Back-compat: a repo with no vendored reqs-path entry — try the literal
+            # packages filename at repo root, as the pre-resolution code did.
+            literal = os.path.join(repo_dir, specs.packages_file(spec) or "")
+            if not os.path.isfile(literal):
+                raise CondaBuildError(
+                    f"requirements file not found for {repo_slug} at any of "
+                    f"{specs.reqs_paths(repo_slug) or [specs.packages_file(spec)]!r} — "
+                    "wrong commit checked out? (must be environment_setup_commit)."
+                )
+            _pip_run_checked(pip, ["install", "-r", literal])
+        else:
+            # Write the combined, cleaned requirements to a temp file and install it.
+            with tempfile.NamedTemporaryFile(
+                "w", suffix=".txt", prefix="swebench_reqs_", delete=False
+            ) as fh:
+                fh.write(reqs_text)
+                reqs_file = fh.name
+            try:
+                _pip_run_checked(pip, ["install", "-r", reqs_file])
+            finally:
+                os.unlink(reqs_file)
 
     # --- 3: pip_packages ---
     pip_pkgs = specs.pip_packages(spec)
