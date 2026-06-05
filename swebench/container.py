@@ -237,6 +237,11 @@ def prepare_instance(
     Strip is the only per-instance cost paid here; per-arm resets
     (:func:`start_arm_container` / :func:`reset_arm`) inherit the stripped state
     for free.
+
+    Not concurrency-safe: two callers preparing the same instance would both
+    build + commit the snapshot (last commit wins). Harmless today — image mode
+    isn't wired into ``run.py``'s parallel loop yet — but C4 (#318) must serialise
+    prepare per instance (cf. ``cache.clone_bare_repo``'s per-slug lock).
     """
     base = base_image or official_image_for(instance_id)
     tag = prepared_tag(instance_id)

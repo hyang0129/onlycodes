@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import uuid
 
 import pytest
 
@@ -223,8 +222,12 @@ def test_prepare_start_reset_teardown_lifecycle(base_image):
     instance_id = slug.replace(container._NAMESPACE_TOKEN, "__")
     snapshot = prepared_tag(instance_id)
 
-    # Unique throwaway snapshot so we never collide with / clobber a real one.
-    uniq = f"{snapshot}-test-{uuid.uuid4().hex[:8]}"
+    # prepare_instance derives the snapshot tag from the instance id, so the
+    # test necessarily uses the canonical tag — and its cleanup `rmi`s it. Skip
+    # rather than rebuild+delete a snapshot a real run may have prepared.
+    if container.image_present(snapshot):
+        pytest.skip(f"would clobber an existing snapshot: {snapshot}")
+
     handle = None
     try:
         prepared = container.prepare_instance(instance_id, force=True)
@@ -258,4 +261,3 @@ def test_prepare_start_reset_teardown_lifecycle(base_image):
             container.teardown(handle)
         # Remove the snapshot image we built so the test leaves no disk residue.
         subprocess.run(["docker", "rmi", "-f", snapshot], capture_output=True)
-        subprocess.run(["docker", "rmi", "-f", uniq], capture_output=True)
