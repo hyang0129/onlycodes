@@ -11,10 +11,17 @@ Run this with the **upstream** package installed in an ISOLATED venv (never our
 repo venv), then commit the regenerated JSON:
 
     python3.11 -m venv /tmp/swe-official
-    /tmp/swe-official/bin/pip install 'swebench==<pinned>'
+    /tmp/swe-official/bin/pip install 'swebench==4.1.0'
     /tmp/swe-official/bin/python scripts/extract_swebench_specs.py \
         --repos-from sets/verified-spine.txt \
         --out swebench/data/official_specs.json
+
+The pin matters: a different upstream `swebench` may ship a different
+`MAP_REPO_VERSION_TO_SPECS`, silently changing the vendored specs (and thus how
+every Verified instance builds). **`swebench==4.1.0` reproduces the committed
+`swebench/data/official_specs.json` byte-for-byte (verified 2026-06-03, #311).**
+After regenerating, `git diff swebench/data/official_specs.json` should be empty
+unless you intentionally bumped the pin.
 
 `--repos-from` reads instance ids (e.g. the frozen spine pool) and extracts only
 the repos they reference, keeping the vendored file small. Omit it to dump every
@@ -27,6 +34,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+# Upstream package version this extractor is pinned to (see module docstring).
+PINNED_SWEBENCH_VERSION = "4.1.0"
 
 
 def _repos_from_ids(path: Path) -> set[str]:
@@ -54,22 +64,50 @@ def main() -> int:
         help="Where to write the vendored JSON (default: swebench/data/official_specs.json).",
     )
     parser.add_argument(
+        "--reqs-out", type=Path, default=Path("swebench/data/official_reqs_paths.json"),
+        help="Where to write the vendored requirements/environment.yml path maps "
+             "(default: swebench/data/official_reqs_paths.json). Kept in a SEPARATE "
+             "file so --out stays byte-for-byte reproducible.",
+    )
+    parser.add_argument(
         "--repos-from", type=Path, default=None,
         help="Id file (e.g. sets/verified-spine.txt) — extract only the repos it references.",
     )
     args = parser.parse_args()
 
     try:
-        from swebench.harness.constants import MAP_REPO_VERSION_TO_SPECS
+        from swebench.harness.constants import (
+            MAP_REPO_VERSION_TO_SPECS,
+            MAP_REPO_TO_REQS_PATHS,
+            MAP_REPO_TO_ENV_YML_PATHS,
+        )
+        # REPLACE_REQ_PACKAGES lives in the test-spec builder, not constants.
+        from swebench.harness.test_spec.python import REPLACE_REQ_PACKAGES
     except ImportError as exc:
         print(
             "ERROR: could not import the upstream swebench package "
             f"({exc}).\nInstall it in an ISOLATED venv (not the repo venv — names "
             "collide):\n  python3.11 -m venv /tmp/swe-official && "
-            "/tmp/swe-official/bin/pip install swebench",
+            f"/tmp/swe-official/bin/pip install 'swebench=={PINNED_SWEBENCH_VERSION}'",
             file=sys.stderr,
         )
         return 1
+
+    # Warn loudly if the installed version isn't the pin — the map can drift
+    # between releases and silently change the vendored specs (#311).
+    try:
+        import importlib.metadata as _md
+        installed = _md.version("swebench")
+        if installed != PINNED_SWEBENCH_VERSION:
+            print(
+                f"WARNING: swebench=={installed} installed, but this extractor is "
+                f"pinned to {PINNED_SWEBENCH_VERSION}. The vendored JSON was generated "
+                f"from {PINNED_SWEBENCH_VERSION}; regenerating from a different version "
+                "may change specs. Re-pin (and re-validate) deliberately.",
+                file=sys.stderr,
+            )
+    except Exception:  # noqa: BLE001 — metadata lookup is best-effort
+        pass
 
     if args.repos_from:
         wanted = _repos_from_ids(args.repos_from)
@@ -81,11 +119,33 @@ def main() -> int:
                   file=sys.stderr)
     else:
         out = dict(MAP_REPO_VERSION_TO_SPECS)
+        wanted = set(out)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
     n_specs = sum(len(v) for v in out.values())
     print(f"Wrote {len(out)} repos / {n_specs} specs to {args.out}", file=sys.stderr)
+
+    # Requirements / environment.yml path maps. A spec whose `packages` is the
+    # sentinel "requirements.txt" / "environment.yml" does NOT name a literal
+    # repo-root file — upstream resolves the real path(s) via these maps and reads
+    # the file at environment_setup_commit. Vendored so setup_conda_env resolves
+    # them the same way (e.g. flask → requirements/dev.txt, not ./requirements.txt).
+    # Filtered to the same repos as --out; REPLACE_REQ_PACKAGES kept whole (tiny).
+    reqs_out = {
+        "reqs_paths": {r: MAP_REPO_TO_REQS_PATHS[r] for r in sorted(wanted)
+                       if r in MAP_REPO_TO_REQS_PATHS},
+        "env_yml_paths": {r: MAP_REPO_TO_ENV_YML_PATHS[r] for r in sorted(wanted)
+                          if r in MAP_REPO_TO_ENV_YML_PATHS},
+        "replace_req_packages": [list(pair) for pair in REPLACE_REQ_PACKAGES],
+    }
+    args.reqs_out.parent.mkdir(parents=True, exist_ok=True)
+    args.reqs_out.write_text(json.dumps(reqs_out, indent=2, sort_keys=True) + "\n")
+    print(
+        f"Wrote {len(reqs_out['reqs_paths'])} reqs-path + "
+        f"{len(reqs_out['env_yml_paths'])} env-yml-path repos to {args.reqs_out}",
+        file=sys.stderr,
+    )
     return 0
 
 

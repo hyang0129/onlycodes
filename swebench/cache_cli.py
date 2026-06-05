@@ -15,6 +15,7 @@ once ``run`` starts calling into the cache).
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import threading
@@ -34,11 +35,13 @@ from swebench.cache import (
     scrub_cache_dir,
     write_lockfile,
 )
+from swebench import specs
 from swebench.harness import (
     _venv_kwargs,
     clone_bare_repo,
     clone_from_bare,
     git_reset,
+    setup_conda_env,
     setup_venv,
 )
 from swebench.models import Problem
@@ -78,7 +81,7 @@ def _load_problems(filter_ids: str | None) -> list[Problem]:
     return problems
 
 
-def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
+def _setup_one(problem: Problem, *, force: bool, conda: bool = False) -> tuple[str, bool, str]:
     """Build the cache for one instance. Returns (id, ok, message).
 
     New cache entries use the isolated layout (``venv_lower/`` as the pristine
@@ -86,9 +89,22 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
     overlays).  Existing legacy entries (``venv/`` present, no ``venv_lower/``)
     are left as-is here — lazy migration happens in ``_setup_problem_cached``
     when ``swebench run`` first uses them with ``--venv-isolation``.
+
+    When *conda* is True and the instance has an official spec
+    (``version`` present + in the vendored ``MAP_REPO_VERSION_TO_SPECS``), the
+    environment is built **conda-native** (``setup_conda_env``) following the
+    spec verbatim, instead of the generic venv path. The conda env occupies the
+    same ``venv/`` → ``venv_lower/`` slot (the overlay machinery is path-based;
+    P2-α verified it works unchanged). Instances without a spec fall back to the
+    venv path even under ``--conda``. (#311)
     """
     instance_id = problem.instance_id
     paths = cache_paths(instance_id)
+    spec = (
+        specs.spec_for(problem.repo_slug, getattr(problem, "version", None))
+        if conda else None
+    )
+    use_conda = spec is not None
 
     # Check isolated layout first (preferred), then fall back to legacy.
     if not force and (has_cached_instance(instance_id, venv_isolation=True)
@@ -113,13 +129,10 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
             shutil.rmtree(repo_dir, ignore_errors=True)
         clone_from_bare(bare, repo_dir)
 
-        # 3. Checkout base commit
-        git_reset(repo_dir, problem.base_commit)
-
-        # 4. Venv + editable install — build into venv/ (the canonical creation path).
-        # Shebangs in console scripts are baked to the creation path; the overlay
-        # mounts back at venv/ so they keep working after migration. After building,
-        # we rename venv/ → venv_lower/ so the mountpoint (venv/) is free.
+        # 3+4. Build the environment into venv/ (the canonical creation path).
+        # Shebangs/prefix paths bake to the creation path; the overlay mounts
+        # back at venv/ so they keep working after migration. After building, we
+        # rename venv/ → venv_lower/ so the mountpoint (venv/) is free.
         venv_lower_dir = paths["venv_lower"]
         venv_canonical = paths["venv"]
         if force and Path(venv_lower_dir).exists():
@@ -127,8 +140,20 @@ def _setup_one(problem: Problem, *, force: bool) -> tuple[str, bool, str]:
         # On --force or fresh build, ensure venv/ is clear (not a live mount).
         if force and Path(venv_canonical).exists() and not Path(venv_canonical).is_mount():
             shutil.rmtree(venv_canonical, ignore_errors=True)
-        # Build into venv/ (canonical path — shebangs will point here).
-        setup_venv(venv_canonical, repo_dir, **_venv_kwargs(problem))
+
+        if use_conda:
+            # Conda-native: build at environment_setup_commit so file-ref deps
+            # (requirements.txt / environment.yml) resolve from the right tree —
+            # it differs from base_commit and is unreachable post-strip. Then
+            # reset the working tree to base_commit for the frozen repo.
+            setup_commit = getattr(problem, "environment_setup_commit", None) or problem.base_commit
+            git_reset(repo_dir, setup_commit)
+            setup_conda_env(venv_canonical, repo_dir, spec=spec, repo_slug=problem.repo_slug)
+            git_reset(repo_dir, problem.base_commit)
+        else:
+            # Generic venv + editable install at base_commit (legacy path).
+            git_reset(repo_dir, problem.base_commit)
+            setup_venv(venv_canonical, repo_dir, **_venv_kwargs(problem))
 
         # 5. Scrub transient artifacts
         scrub_cache_dir(repo_dir)
@@ -176,16 +201,27 @@ def cache_group() -> None:
     default=False,
     help="Rebuild even if a cache entry already exists.",
 )
-def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
+@click.option(
+    "--conda/--no-conda",
+    default=None,
+    help="Build spec-bearing instances conda-native (faithful MAP_REPO_VERSION_TO_SPECS) "
+         "instead of the generic venv path. Defaults to the ONLYCODES_CONDA_BUILD env var "
+         "(falsey if unset). Instances without an official spec always use the venv path. (#311)",
+)
+def setup(filter_ids: str | None, concurrency: int, force: bool, conda: bool | None) -> None:
     """Pre-build the instance cache.
 
     Produces ``/workspaces/.swebench-cache/instances/<id>/`` for each problem,
     each containing ``repo/`` (scrubbed working tree at base commit),
-    ``venv/`` (python3.11 + editable install), and ``lockfile.txt``.
+    ``venv/`` (the per-arm-overlay env: a venv, or a conda env under ``--conda``),
+    and ``lockfile.txt``.
     """
     if concurrency < 1:
         click.echo("ERROR: --concurrency must be >= 1.", err=True)
         sys.exit(1)
+
+    if conda is None:
+        conda = os.environ.get("ONLYCODES_CONDA_BUILD", "").lower() in ("1", "true", "yes", "on")
 
     problems = _load_problems(filter_ids)
 
@@ -195,7 +231,7 @@ def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
 
     _echo(
         f"cache setup: {len(problems)} instance(s), concurrency={concurrency}, "
-        f"force={force}"
+        f"force={force}, conda={conda}"
     )
 
     successes: list[str] = []
@@ -203,7 +239,8 @@ def setup(filter_ids: str | None, concurrency: int, force: bool) -> None:
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
-            pool.submit(_setup_one, p, force=force): p.instance_id for p in problems
+            pool.submit(_setup_one, p, force=force, conda=conda): p.instance_id
+            for p in problems
         }
         for fut in as_completed(futures):
             iid, ok, msg = fut.result()

@@ -1,0 +1,36 @@
+{
+  "env_yml_paths": {
+    "matplotlib/matplotlib": [
+      "environment.yml"
+    ],
+    "pydata/xarray": [
+      "ci/requirements/environment.yml",
+      "environment.yml"
+    ]
+  },
+  "replace_req_packages": [
+    [
+      "types-pkg_resources",
+      "types-setuptools"
+    ]
+  ],
+  "reqs_paths": {
+    "django/django": [
+      "tests/requirements/py3.txt"
+    ],
+    "matplotlib/matplotlib": [
+      "requirements/dev/dev-requirements.txt",
+      "requirements/testing/travis_all.txt"
+    ],
+    "pallets/flask": [
+      "requirements/dev.txt"
+    ],
+    "pylint-dev/pylint": [
+      "requirements_test.txt"
+    ],
+    "sympy/sympy": [
+      "requirements-dev.txt",
+      "requirements-test.txt"
+    ]
+  }
+}

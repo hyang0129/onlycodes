@@ -69,6 +69,131 @@ def test_vendored_map_nonempty() -> None:
 
 
 # --------------------------------------------------------------------------
+# Conda-native build accessors (P2-γ, #311)
+# --------------------------------------------------------------------------
+
+def test_conda_python_is_bare_version() -> None:
+    assert specs.conda_python({"python": "3.6"}) == "3.6"
+    assert specs.conda_python({"python": 3.9}) == "3.9"  # tolerate non-str
+    assert specs.conda_python({}) is None
+
+
+def test_install_command_verbatim() -> None:
+    spec = {"install": "python -m pip install -e .[test] --verbose"}
+    assert specs.install_command(spec) == "python -m pip install -e .[test] --verbose"
+    assert specs.install_command({}) is None
+    assert specs.install_command({"install": "   "}) is None
+
+
+def test_pre_install_commands_filters_blanks_keeps_order() -> None:
+    spec = {"pre_install": ["sed -i 's/a/b/' setup.py", "", "  ", "apt-get update"]}
+    assert specs.pre_install_commands(spec) == ["sed -i 's/a/b/' setup.py", "apt-get update"]
+    assert specs.pre_install_commands({}) == []
+
+
+def test_pip_packages_cleaned() -> None:
+    assert specs.pip_packages({"pip_packages": [" numpy==1.19.2 ", "", "pytest"]}) == [
+        "numpy==1.19.2", "pytest",
+    ]
+    assert specs.pip_packages({}) == []
+
+
+def test_eval_commands_and_no_use_env() -> None:
+    assert specs.eval_commands({"eval_commands": ["echo hi", ""]}) == ["echo hi"]
+    assert specs.eval_commands({}) == []
+    assert specs.no_use_env({"no_use_env": True}) is True
+    assert specs.no_use_env({}) is False
+
+
+def test_eval_env_parses_exports_and_ignores_system_commands() -> None:
+    spec = {
+        "eval_commands": [
+            "export LANG=en_US.UTF-8",
+            "export PYTHONIOENCODING=utf8",
+            "  export LC_ALL=en_US.UTF-8  ",          # surrounding whitespace tolerated
+            "sed -i 's/x/y/' /etc/locale.gen && locale-gen",  # system-level: not env
+            "",                                        # blank dropped
+        ]
+    }
+    assert specs.eval_env(spec) == {
+        "LANG": "en_US.UTF-8",
+        "PYTHONIOENCODING": "utf8",
+        "LC_ALL": "en_US.UTF-8",
+    }
+    # The non-export command is surfaced separately so the caller can log the skip.
+    assert specs.eval_system_commands(spec) == [
+        "sed -i 's/x/y/' /etc/locale.gen && locale-gen"
+    ]
+    assert specs.eval_env({}) == {}
+    assert specs.eval_system_commands({}) == []
+
+
+def test_eval_env_strips_quotes_no_shell_expansion() -> None:
+    spec = {"eval_commands": ["export FOO='bar baz'", 'export QUX="q"', "export RAW=$HOME"]}
+    env = specs.eval_env(spec)
+    assert env["FOO"] == "bar baz"   # single quotes stripped
+    assert env["QUX"] == "q"         # double quotes stripped
+    assert env["RAW"] == "$HOME"     # left verbatim — no shell expansion
+
+
+def test_eval_env_real_vendored_django() -> None:
+    # Django specs carry the locale pins as export-style eval_commands; they must
+    # surface as a plain env dict for the Gate-2 collect (#311 P2-δ test fidelity).
+    m = specs._load()
+    dj = m["django/django"]["1.10"]
+    env = specs.eval_env(dj)
+    assert env.get("LANG") == "en_US.UTF-8"
+    assert env.get("LC_ALL") == "en_US.UTF-8"
+    assert env.get("LANGUAGE") == "en_US:en"
+    # Every value parsed is non-empty and quote-free.
+    assert all(v and "'" not in v and '"' not in v for v in env.values())
+
+
+def test_packages_kind_discrimination() -> None:
+    assert specs.packages_kind({}) == "none"
+    assert specs.packages_kind({"packages": "  "}) == "none"
+    assert specs.packages_kind({"packages": "requirements.txt"}) == "requirements_txt"
+    assert specs.packages_kind({"packages": "environment.yml"}) == "environment_yml"
+    assert specs.packages_kind({"packages": "environment.yaml"}) == "environment_yml"
+    assert specs.packages_kind({"packages": "numpy scipy 'pandas<2'"}) == "inline"
+
+
+def test_packages_file_only_for_file_refs() -> None:
+    assert specs.packages_file({"packages": "requirements.txt"}) == "requirements.txt"
+    assert specs.packages_file({"packages": "environment.yml"}) == "environment.yml"
+    assert specs.packages_file({"packages": "numpy scipy"}) is None
+    assert specs.packages_file({}) is None
+
+
+def test_conda_packages_unquotes_but_does_not_translate() -> None:
+    # Quotes stripped; conda single-'=' pins are NOT rewritten to '==' (conda syntax kept).
+    spec = {"packages": "'numpy==1.19.2' scipy 'pandas<2.0.0' setuptools=38.2.4"}
+    assert specs.conda_packages(spec) == [
+        "numpy==1.19.2", "scipy", "pandas<2.0.0", "setuptools=38.2.4",
+    ]
+    # File-ref / absent → no inline conda packages.
+    assert specs.conda_packages({"packages": "requirements.txt"}) == []
+    assert specs.conda_packages({}) == []
+
+
+def test_conda_accessors_against_real_vendored_data() -> None:
+    m = specs._load()
+    # astropy v5.3: the build-isolation-needing install line PR-1 broke.
+    ast = m["astropy/astropy"]["v5.3"]
+    assert specs.install_command(ast) == "python -m pip install -e .[test] --verbose"
+    assert specs.conda_python(ast) == "3.10"
+    # django uses a requirements.txt ref.
+    dj = next(iter(m["django/django"].values()))
+    assert specs.packages_kind(dj) == "requirements_txt"
+    assert specs.packages_file(dj) == "requirements.txt"
+    # matplotlib / xarray are the genuine conda-native (environment.yml) cases.
+    assert any(
+        specs.packages_kind(s) == "environment_yml"
+        for s in m["matplotlib/matplotlib"].values()
+    )
+
+
+# --------------------------------------------------------------------------
 # harness._venv_kwargs precedence: hand-tables > official-spec > default
 # --------------------------------------------------------------------------
 

@@ -11,21 +11,33 @@ SWE-bench Verified specifies — the correct Python and the exact pinned
 dependencies — instead of a generic `python3.11` + plain editable install. The
 hand-curated override tables in `harness.py` still take precedence (#311).
 
-PR-1 scope: this module surfaces the spec's `python` and the pip-installable
-dependency pins (`pip_packages` + the pip-translatable tokens of `packages`).
-It deliberately does NOT handle the spec's shell `pre_install` commands (sed,
-apt), custom `install` flags, or file-reference packages
-(`requirements.txt` / `environment.yml`) — those are deferred (#311 follow-up).
+Two consumers, two views of the same spec:
+
+* **Venv path (`harness._venv_kwargs`, all non-Verified sets):** `python_bin` +
+  `pip_requirements` — the spec's `python` and the pip-installable pins
+  (`pip_packages` + the pip-translatable tokens of `packages`). The shell
+  `pre_install`, custom `install` flags, and file-reference packages are NOT
+  applied on this path.
+* **Conda-native path (P2-γ, the Verified build, #311):** the full spec —
+  `conda_python`, `packages_kind` / `packages_file` / `conda_packages`,
+  `pip_packages`, `pre_install_commands`, `install_command`, `eval_commands`,
+  `no_use_env` — so the environment is built exactly the way SWE-bench's
+  `MAP_REPO_VERSION_TO_SPECS` specifies (commands run verbatim, not translated).
 """
 
 from __future__ import annotations
 
 import functools
 import json
+import re
 import shlex
 from pathlib import Path
 
 _SPECS_PATH = Path(__file__).resolve().parent / "data" / "official_specs.json"
+_REQS_PATHS_PATH = Path(__file__).resolve().parent / "data" / "official_reqs_paths.json"
+
+# `export KEY=VALUE` form of an eval_command (see `eval_env` below).
+_EVAL_EXPORT_RE = re.compile(r"^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 # `packages` tokens we cannot pip-translate in PR-1 (file refs / conda env files).
 _FILE_PKG_SUFFIXES = (".txt", ".yml", ".yaml", ".cfg")
@@ -35,6 +47,17 @@ _FILE_PKG_SUFFIXES = (".txt", ".yml", ".yaml", ".cfg")
 def _load() -> dict:
     try:
         return json.loads(_SPECS_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+@functools.lru_cache(maxsize=1)
+def _load_reqs_paths() -> dict:
+    """The vendored requirements / environment.yml path maps (see
+    `scripts/extract_swebench_specs.py`). Separate file from the spec map so the
+    spec map stays byte-for-byte reproducible."""
+    try:
+        return json.loads(_REQS_PATHS_PATH.read_text())
     except (OSError, ValueError):
         return {}
 
@@ -98,3 +121,183 @@ def pip_requirements(spec: dict) -> list[str]:
             seen.add(r)
             out.append(r)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Conda-native build accessors (P2-γ, #311)
+#
+# These expose the spec verbatim for the conda env builder, which runs SWE-bench's
+# own commands rather than translating them. Unlike `pip_requirements` above, they
+# do NOT pip-translate — `micromamba install` consumes conda syntax directly.
+# ---------------------------------------------------------------------------
+
+def conda_python(spec: dict) -> str | None:
+    """Bare CPython version for ``micromamba create python=<X>``, e.g. ``"3.6"``.
+
+    Distinct from :func:`python_bin` (``"python3.6"``), which names a PATH binary
+    for the venv path. Returns ``None`` if the spec has no ``python``.
+    """
+    py = spec.get("python")
+    return str(py) if py else None
+
+
+def install_command(spec: dict) -> str | None:
+    """The spec's ``install`` command, verbatim (e.g. ``"python -m pip install -e .[test] --verbose"``).
+
+    Run as-is by the conda builder, so the build-isolation / pep517 / extras
+    policy is whatever SWE-bench encoded — no second-guessing. ``None`` if absent.
+    """
+    cmd = (spec.get("install") or "").strip()
+    return cmd or None
+
+
+def pre_install_commands(spec: dict) -> list[str]:
+    """Shell commands the spec runs *before* ``install`` (e.g. ``sed`` setup.py pins).
+
+    Returned verbatim and in order. NOTE for the builder: some entries are
+    ``apt-get`` / ``locale-gen`` (system-level, root) — SWE-bench runs these in a
+    per-instance container; our overlay model does not isolate the system, so the
+    builder must decide which are safe to run (sed: yes; apt/locale: handle or log).
+    """
+    return [c for c in (spec.get("pre_install") or []) if (c or "").strip()]
+
+
+def pip_packages(spec: dict) -> list[str]:
+    """The spec's ``pip_packages`` (already pip-style), cleaned. Verbatim, no translation."""
+    return [p.strip() for p in (spec.get("pip_packages") or []) if (p or "").strip()]
+
+
+def eval_commands(spec: dict) -> list[str]:
+    """The spec's ``eval_commands`` (run during evaluation, before the test cmd). Verbatim."""
+    return [c for c in (spec.get("eval_commands") or []) if (c or "").strip()]
+
+
+def eval_env(spec: dict) -> dict[str, str]:
+    """Env-var overrides distilled from the spec's ``export``-style ``eval_commands``.
+
+    SWE-bench runs ``eval_commands`` in the eval shell *before* the test command.
+    In the vendored data they are overwhelmingly ``export KEY=VALUE`` locale pins
+    (``LANG`` / ``LC_ALL`` / ``LANGUAGE`` / ``PYTHONIOENCODING``, mostly Django), so
+    we surface them as a plain env dict the test/collect step can run *under* — the
+    test-fidelity counterpart to the conda-native build (#311 P2-δ). Surrounding
+    single/double quotes on the value are stripped; no shell ``$VAR`` expansion.
+
+    Non-``export`` eval_commands (e.g. ``sed … /etc/locale.gen && locale-gen``) are
+    system-level mutators that need root and are deliberately NOT represented here —
+    SWE-bench runs them inside its per-instance container, but our overlay model does
+    not isolate the system, exactly as :func:`harness.setup_conda_env` skips
+    system-level ``pre_install``. Use :func:`eval_system_commands` to see what was
+    left out.
+    """
+    env: dict[str, str] = {}
+    for cmd in eval_commands(spec):
+        m = _EVAL_EXPORT_RE.match(cmd)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2).strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            val = val[1:-1]
+        env[key] = val
+    return env
+
+
+def eval_system_commands(spec: dict) -> list[str]:
+    """The non-``export`` ``eval_commands`` — system-level mutators (``locale-gen``
+    etc.) that :func:`eval_env` deliberately omits. Surfaced so callers can log the
+    skip rather than silently dropping spec steps."""
+    return [c for c in eval_commands(spec) if not _EVAL_EXPORT_RE.match(c)]
+
+
+def no_use_env(spec: dict) -> bool:
+    """The spec's ``no_use_env`` flag.
+
+    When true, an ``environment.yml`` ``packages`` ref must NOT be used to create
+    the conda env directly (``micromamba env create -f``); instead create a plain
+    ``python=<ver>`` env and install deps separately.
+    """
+    return bool(spec.get("no_use_env"))
+
+
+def packages_kind(spec: dict) -> str:
+    """Classify the spec's ``packages`` field for the conda builder.
+
+    One of: ``"none"`` (absent/empty), ``"requirements_txt"`` (a ``*.txt`` file
+    ref), ``"environment_yml"`` (a ``*.yml``/``*.yaml`` file ref), or ``"inline"``
+    (a conda package list). In the vendored data a file ref is always the sole
+    token, so a whole-string suffix test is sufficient.
+    """
+    p = (spec.get("packages") or "").strip()
+    if not p:
+        return "none"
+    low = p.lower()
+    if low.endswith(".txt"):
+        return "requirements_txt"
+    if low.endswith((".yml", ".yaml")):
+        return "environment_yml"
+    return "inline"
+
+
+def packages_file(spec: dict) -> str | None:
+    """For a ``requirements_txt`` / ``environment_yml`` spec, the referenced filename.
+
+    NOTE: in the vendored data this is the *sentinel* string ``"requirements.txt"``
+    / ``"environment.yml"``, NOT a literal repo-root path — upstream resolves the
+    real path(s) via :func:`reqs_paths` / :func:`env_yml_paths` (e.g. flask's
+    ``"requirements.txt"`` → ``requirements/dev.txt``). The conda builder reads the
+    resolved file from the repo checked out at ``environment_setup_commit`` (which
+    differs from ``base_commit`` and is unreachable after history-stripping — read
+    it before the strip). ``None`` for inline / absent ``packages``.
+    """
+    if packages_kind(spec) in ("requirements_txt", "environment_yml"):
+        return (spec.get("packages") or "").strip()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Requirements / environment.yml path resolution (#311 P2-δ)
+#
+# A `packages` value of "requirements.txt" / "environment.yml" is an upstream
+# SWE-bench sentinel, not a literal file. The real path(s) come from these maps
+# (vendored in official_reqs_paths.json); the builder tries each in order and
+# reads the first that exists in the checked-out tree. See setup_conda_env.
+# ---------------------------------------------------------------------------
+
+def reqs_paths(repo_slug: str) -> list[str]:
+    """Candidate ``requirements.txt`` paths for *repo_slug*, in upstream order.
+
+    Empty if the repo isn't in the vendored ``MAP_REPO_TO_REQS_PATHS`` (then the
+    builder falls back to the literal ``packages`` filename for back-compat)."""
+    return list(_load_reqs_paths().get("reqs_paths", {}).get(repo_slug, []))
+
+
+def env_yml_paths(repo_slug: str) -> list[str]:
+    """Candidate ``environment.yml`` paths for *repo_slug*, in upstream order.
+
+    Empty if the repo isn't in the vendored ``MAP_REPO_TO_ENV_YML_PATHS`` (then the
+    builder falls back to the literal ``packages`` filename for back-compat)."""
+    return list(_load_reqs_paths().get("env_yml_paths", {}).get(repo_slug, []))
+
+
+def replace_req_packages() -> list[tuple[str, str]]:
+    """Upstream ``REPLACE_REQ_PACKAGES`` substitutions (yanked-package fixups,
+    e.g. ``types-pkg_resources`` → ``types-setuptools``) applied to resolved
+    requirements text. ``(old, new)`` pairs."""
+    return [(a, b) for a, b in _load_reqs_paths().get("replace_req_packages", [])]
+
+
+def conda_packages(spec: dict) -> list[str]:
+    """For an ``"inline"`` ``packages`` spec, the conda package specs, verbatim.
+
+    Shell-quoted tokens are unquoted (``'numpy==1.19.2'`` → ``numpy==1.19.2``) but
+    NOT pip-translated — they are passed straight to ``micromamba install``, which
+    accepts conda match-specs (``numpy=1.19``, ``numpy==1.19.2``, ``pandas<2.0.0``).
+    ``[]`` unless ``packages_kind`` is ``"inline"``.
+    """
+    if packages_kind(spec) != "inline":
+        return []
+    raw = spec.get("packages") or ""
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        tokens = raw.split()
+    return [t for t in (tok.strip() for tok in tokens) if t]
