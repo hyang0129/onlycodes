@@ -850,6 +850,39 @@ def _parse_filter_ids(filter_spec: str) -> set[str]:
     return {s.strip() for s in spec.split(",") if s.strip()}
 
 
+def _run_image_runtime_preflight() -> None:
+    """Handle ``--runtime image`` for C3 (#317).
+
+    The container runtime (``swebench.container``) is built and tested, but a
+    full arm needs C3b's pull/disk policy (#323) and C4/C5's agent + test
+    execution (#318/#319).  Until those land, image mode does a real Docker
+    preflight and reports the runtime is ready, rather than running a partial
+    arm through the overlay-centric loop.
+    """
+    from swebench import container
+
+    proc = container._docker(["version", "--format", "{{.Server.Version}}"], check=False)
+    if proc.returncode != 0:
+        click.echo(
+            "ERROR: --runtime image needs a reachable Docker daemon "
+            "(DooD: the host socket must be mounted). `docker version` failed.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    server = proc.stdout.decode("utf-8", "replace").strip()
+    click.echo(f"Image runtime: Docker daemon reachable (server {server}).")
+    click.echo(
+        "Container layer ready (C3 #317): prepare_instance -> stripped snapshot, "
+        "per-arm reset = fresh container from the snapshot (~286 ms, measured in "
+        "C2 #316)."
+    )
+    click.echo(
+        "Not yet wired for a full arm: pull/disk policy is C3b (#323); agent + "
+        "test execution are C4/C5 (#318/#319). Use --runtime overlay to run."
+    )
+
+
 @click.command("run")
 @click.option(
     "--filter",
@@ -1009,6 +1042,22 @@ def _parse_filter_ids(filter_spec: str) -> set[str]:
         "this is a known follow-up."
     ),
 )
+@click.option(
+    "--runtime",
+    "runtime",
+    type=click.Choice(["overlay", "image"]),
+    default="overlay",
+    show_default=True,
+    help=(
+        "Environment backend. 'overlay' (default): clone + cache + per-arm "
+        "fuse-overlayfs on the host (the established path). 'image': run inside "
+        "the official prebuilt SWE-bench Docker images, resetting per arm from a "
+        "stripped snapshot container (ADR-0004, epic #314). The 'image' runtime "
+        "container layer is C3 (#317); pull/disk policy is C3b (#323) and agent + "
+        "test execution are C4/C5 (#318/#319), so selecting it today reports "
+        "readiness and exits rather than running a full arm."
+    ),
+)
 def run_command(
     filter_ids: str | None,
     arms: str,
@@ -1025,11 +1074,16 @@ def run_command(
     max_wall_seconds: int,
     cache_isolation: bool,
     venv_isolation: bool,
+    runtime: str,
 ) -> None:
     """Run SWE-bench evaluation arms on problem instances."""
     if parallel < 1:
         click.echo("ERROR: --parallel must be >= 1", err=True)
         raise SystemExit(1)
+
+    if runtime == "image":
+        _run_image_runtime_preflight()
+        return
 
     root = repo_root()
     problems_dir = root / "problems" / "swe"
