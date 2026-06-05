@@ -130,6 +130,12 @@ def test_stage_arm_copies_bundle_creds_and_chowns(monkeypatch, tmp_path) -> None
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
     monkeypatch.setattr(container, "_docker", _fake_docker)
+    # Fake the (gitignored, build-only) exec-server dist so the test is hermetic.
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    for fname in ca._EXEC_SERVER_FILES:
+        (dist / fname).write_text("x")
+    monkeypatch.setattr(ca, "_exec_server_dist", lambda: dist)
     creds = tmp_path / "creds"
     creds.mkdir()
     (creds / ".credentials.json").write_text("{}")
