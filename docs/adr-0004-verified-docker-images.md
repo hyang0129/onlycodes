@@ -1,6 +1,7 @@
 # ADR 0004 — Run SWE-bench Verified from Official Prebuilt Docker Images
 
-**Status:** Accepted (pending the C2 de-risk spike — see Reversibility).
+**Status:** Accepted. C2 de-risk spike complete — **GO** (`docs/spike-c2-docker-images.md`,
+#316). C3 reset strategy decided (see below).
 **Date:** 2026-06-04.
 **Tracking issue:** [#314](https://github.com/hyang0129/onlycodes/issues/314).
 **Supersedes:** the *build half* of [#311](https://github.com/hyang0129/onlycodes/issues/311) / PR [#313](https://github.com/hyang0129/onlycodes/pull/313) (conda-native build) for Verified. Conda is retained as a fallback.
@@ -122,9 +123,17 @@ Decomposed into child issues on #314:
   and per-arm reset throughput — the numbers that decide C3's reset strategy and grid
   feasibility. Go/no-go before the rewrite.
 - **C3 (#317) — Container runtime + per-arm reset.** Pull/run/stop per instance; expose
-  `/testbed`; git-history strip inside; **reset strategy (fresh-container vs `docker commit`
-  snapshot vs checkpoint) is an open choice decided by C2's throughput numbers** — the
-  current overlay reset is fast; do not regress the grid blindly.
+  `/testbed`; git-history strip inside. **Reset strategy — DECIDED (settled by C2's numbers):
+  prepare-once + `docker commit` a stripped snapshot, then per-arm reset = fresh container
+  from that snapshot.** Rationale: the official image carries full upstream history (incl. the
+  fix), so the strip is mandatory; C2 measured strip at **~2.0 s** on matplotlib's 42k-commit
+  history (`git repack` dominates) vs. a fresh-container reset at **~286 ms**. Baking the strip
+  into the snapshot pays it **once per instance** instead of once per arm (×arms×seeds×500), and
+  a fresh container is pristine by construction — no in-place reset, no cross-arm leakage, and
+  no checkpoint/restore complexity. Delivered as `swebench/container.py`
+  (`prepare_instance`/`start_arm_container`/`reset_arm`/`exec_in`/`copy_in`/`copy_out`/`teardown`)
+  + `test_container_strip.py`; gated behind `--runtime image`. Files move by `docker cp`, **not
+  bind-mounts** (under DooD the `-v` source resolves on the docker host — C2 finding).
 - **C3b (#323) — Image + registry + disk management.** Pull-by-digest; Docker Hub
   rate-limits/auth/bandwidth (~1 TB for the set); optional registry mirror; prune/disk.
 - **C4 (#318) — In-container *Claude* agent execution.** Claude Code + the MCP exec-server
@@ -190,8 +199,8 @@ kill-switch, not an irreversible migration.
 
 ## Acceptance criteria (from #314)
 
-- [ ] C2 spike confirms a real pull + in-container agent turn + parsed test (go/no-go).
-- [ ] Container runtime with in-container git-strip and fresh-container per-arm reset (C3).
+- [x] C2 spike confirms a real pull + in-container agent turn + parsed test (go/no-go).
+- [x] Container runtime with in-container git-strip and fresh-container per-arm reset (C3).
 - [ ] Both arms run in-container with correct tool restriction + transcript capture (C4).
 - [ ] Official-parser grading + gold-patch fidelity gate + digest pinning (C5).
 - [ ] Image-vs-conda parity table + image-else-conda selection rule + docs updated (C6).
