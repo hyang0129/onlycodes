@@ -208,10 +208,18 @@ _RUN_ARGS = ["--cap-add=SYS_ADMIN", "--user", "root"]
 _IDLE_CMD = ["tail", "-f", "/dev/null"]
 
 
-def _run_detached(image: str, *, name: str | None = None) -> str:
+def _run_detached(
+    image: str, *, name: str | None = None, volumes: list[str] | None = None
+) -> str:
+    """Start a detached idle container.  ``volumes`` are raw ``docker -v`` specs
+    (e.g. ``"onlycodes-agent-rt:/opt/agent:ro"``) — used by C4 to mount the
+    shared agent runtime.  Named volumes live in the daemon, so they are immune
+    to the DooD bind-mount-resolves-on-host problem (C2)."""
     args = ["run", "-d", *_RUN_ARGS]
     if name:
         args += ["--name", name]
+    for spec in volumes or []:
+        args += ["-v", spec]
     args += [image, *_IDLE_CMD]
     return _decode(_docker(args))
 
@@ -226,17 +234,26 @@ def prepare_instance(
     base_image: str | None = None,
     testbed: str = "/testbed",
     force: bool = False,
+    post_strip_exec: list[list[str]] | None = None,
 ) -> PreparedImage:
     """Build (or reuse) the stripped per-instance snapshot image.
 
     Idempotent: if ``onlycodes/prepared:<instance_id>`` already exists and
     ``force`` is False, returns it without rebuilding.  Otherwise: ensure the
-    base image is present, start a prep container, strip ``/testbed``, commit the
-    snapshot, and remove the prep container.
+    base image is present, start a prep container, strip ``/testbed``, run any
+    ``post_strip_exec`` setup commands, commit the snapshot, and remove the prep
+    container.
 
-    Strip is the only per-instance cost paid here; per-arm resets
-    (:func:`start_arm_container` / :func:`reset_arm`) inherit the stripped state
-    for free.
+    ``post_strip_exec`` is a list of argv lists run via ``docker exec`` (as root)
+    after the strip and before the commit, so their effect is baked into the
+    snapshot.  C4 (#318) uses it to create the non-root agent user and
+    ``chown /testbed`` to it once per instance — avoiding a per-arm ``chown -R``
+    on large repos.  Keep it free of secrets: anything run here lands in the
+    committed image.
+
+    Strip is the only mandatory per-instance cost paid here; per-arm resets
+    (:func:`start_arm_container` / :func:`reset_arm`) inherit the stripped (and
+    set-up) state for free.
 
     Not concurrency-safe: two callers preparing the same instance would both
     build + commit the snapshot (last commit wins). Harmless today — image mode
@@ -253,6 +270,8 @@ def prepare_instance(
     prep = _run_detached(base)
     try:
         strip_testbed(prep, testbed)
+        for argv in post_strip_exec or []:
+            _docker(["exec", prep, *argv], check=True)
         # Commit the stripped worktree as the snapshot.  --pause keeps the fs
         # quiescent during commit (the idle container writes nothing, but be
         # explicit).  The committed layer mostly *shrinks* .git (repack+gc),
@@ -269,14 +288,18 @@ def prepare_instance(
 # --------------------------------------------------------------------------
 
 def start_arm_container(
-    prepared: PreparedImage, *, name: str | None = None
+    prepared: PreparedImage,
+    *,
+    name: str | None = None,
+    volumes: list[str] | None = None,
 ) -> ContainerHandle:
     """Start a fresh container from the prepared snapshot.
 
     The container's ``/testbed`` is pristine and already history-stripped (it
-    was stripped into the snapshot at prepare time).  ~286 ms in C2.
+    was stripped into the snapshot at prepare time).  ~286 ms in C2.  ``volumes``
+    (raw ``-v`` specs) let C4 mount the shared read-only agent runtime.
     """
-    cid = _run_detached(prepared.snapshot_tag, name=name)
+    cid = _run_detached(prepared.snapshot_tag, name=name, volumes=volumes)
     return ContainerHandle(
         instance_id=prepared.instance_id,
         container_id=cid,
@@ -284,10 +307,16 @@ def start_arm_container(
     )
 
 
-def reset_arm(handle: ContainerHandle, *, name: str | None = None) -> ContainerHandle:
+def reset_arm(
+    handle: ContainerHandle,
+    *,
+    name: str | None = None,
+    volumes: list[str] | None = None,
+) -> ContainerHandle:
     """Reset between arms: discard the current container and start a fresh one
     from the same snapshot.  Returns a NEW handle (the old ``container_id`` is
-    dead) — mirrors ``_refresh_overlay`` returning a refreshed handle.
+    dead) — mirrors ``_refresh_overlay`` returning a refreshed handle.  Pass the
+    same ``volumes`` as the original start so the agent runtime stays mounted.
 
     Chosen reset strategy (C3 #317, settled by C2's numbers): fresh container
     from the stripped snapshot.  Pristine by construction, no in-place reset, no
@@ -299,7 +328,7 @@ def reset_arm(handle: ContainerHandle, *, name: str | None = None) -> ContainerH
         base_image="",  # not needed for a restart; snapshot already exists
         snapshot_tag=handle.snapshot_tag,
     )
-    return start_arm_container(prepared, name=name)
+    return start_arm_container(prepared, name=name, volumes=volumes)
 
 
 def teardown(handle: ContainerHandle) -> None:
