@@ -98,10 +98,16 @@ def run_eval_in_container(
         f"source /opt/miniconda3/bin/activate {testbed_env.rsplit('/', 1)[-1]}\n"
         f"{exports}cd /testbed\n{cmd}\n"
     )
+    # Feed the script over stdin (``bash -ls``), NOT as a ``-lc`` argv element.
+    # High-test-count instances (e.g. django-10097: 1870 ids) produce a >128 KiB
+    # eval line, and a single argv string is capped at MAX_ARG_STRLEN (32 pages =
+    # 128 KiB) by execve -> E2BIG / "Argument list too long" before docker starts
+    # (#333). Over stdin the per-arg cap does not apply; the ids still reach the
+    # test command as separate words, well under the ~2 MB total ARG_MAX.
     proc = container._docker(
-        ["exec", "-u", AGENT_USER, "-e", f"HOME={AGENT_HOME}", handle.container_id,
-         "bash", "-lc", script],
-        check=False, timeout=timeout,
+        ["exec", "-i", "-u", AGENT_USER, "-e", f"HOME={AGENT_HOME}", handle.container_id,
+         "bash", "-ls"],
+        check=False, timeout=timeout, input_bytes=script.encode(),
     )
     log = (proc.stdout or b"").decode("utf-8", "replace")
     with open(log_dest, "w") as f:

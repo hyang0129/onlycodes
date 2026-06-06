@@ -62,7 +62,8 @@ def test_run_eval_writes_log_and_activates_testbed(monkeypatch, tmp_path) -> Non
     captured = {}
 
     def _fake(args, **kw):
-        captured["script"] = args[-1]  # bash -lc <script>
+        captured["args"] = args
+        captured["script"] = (kw.get("input_bytes") or b"").decode()  # piped via stdin
         return types.SimpleNamespace(returncode=0, stdout=b"PASSED a.py::test_x\n", stderr=b"")
 
     monkeypatch.setattr(container, "_docker", _fake)
@@ -73,9 +74,38 @@ def test_run_eval_writes_log_and_activates_testbed(monkeypatch, tmp_path) -> Non
         eval_env={"LANG": "en_US.UTF-8"}, log_dest=str(dest),
     )
     assert "PASSED a.py::test_x" in log and dest.read_text() == log
+    # script goes over stdin (``bash -ls`` + ``-i``), never as a ``-lc`` argv element (#333).
+    assert "-i" in captured["args"] and captured["args"][-2:] == ["bash", "-ls"]
     assert "activate" in captured["script"] and "testbed" in captured["script"]
     assert "export LANG=" in captured["script"]
     assert "pytest -rA a.py::test_x" in captured["script"]
+
+
+def test_run_eval_large_id_list_stays_under_max_arg_strlen(monkeypatch, tmp_path) -> None:
+    """High-test-count instances must not blow MAX_ARG_STRLEN (128 KiB per argv
+    string). With 1870 django-style ids the eval line is ~150 KiB; it must travel
+    over stdin, leaving every individual argv element small (#333)."""
+    MAX_ARG_STRLEN = 128 * 1024
+    captured = {}
+
+    def _fake(args, **kw):
+        captured["args"] = args
+        captured["script"] = (kw.get("input_bytes") or b"").decode()
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(container, "_docker", _fake)
+    ids = [f"tests.deeply.nested.module.path.SomeReallyLongTestClassName"
+           f".test_case_with_a_descriptive_name_number_{i:04d}" for i in range(1870)]
+    ct.run_eval_in_container(
+        container.ContainerHandle("i", "c", "s"),
+        spec_test_cmd="pytest -rA", test_ids=ids,
+        eval_env={}, log_dest=str(tmp_path / "eval.log"),
+    )
+    # the giant id list lands in the stdin script, not argv...
+    assert len(captured["script"].encode()) > MAX_ARG_STRLEN
+    # ...and no single argv string is anywhere near the per-arg cap.
+    assert all(len(a.encode()) < MAX_ARG_STRLEN for a in captured["args"])
+    assert all(id_ in captured["script"] for id_ in (ids[0], ids[-1]))
 
 
 def test_gold_patch_gate_orchestrates(monkeypatch, tmp_path) -> None:
