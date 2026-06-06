@@ -105,6 +105,19 @@ def _validate_instance(instance_id: str, repo_slug: str, base_commit: str) -> No
     _echo(f"  Validation complete for {instance_id}.")
 
 
+def _coerce_test_list(value) -> list[str] | None:
+    """Normalise a dataset ``FAIL_TO_PASS``/``PASS_TO_PASS`` field to a list of
+    test node-ids (the HF dataset stores them as a JSON string or a list)."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return [value]
+    return [str(t) for t in value] or None
+
+
 def _build_test_cmd(row: dict, repo_slug: str) -> str:
     """Derive a test command from the dataset row.
 
@@ -193,6 +206,9 @@ def _write_problem(
         # SWE-bench environment keys — drive the official build spec (#311).
         version=(str(row["version"]) if row.get("version") not in (None, "") else None),
         environment_setup_commit=row.get("environment_setup_commit") or None,
+        # Transition-grading ground truth for the image-runtime path (#319).
+        fail_to_pass=_coerce_test_list(row.get("FAIL_TO_PASS")),
+        pass_to_pass=_coerce_test_list(row.get("PASS_TO_PASS")),
     )
 
     yaml_path = problems_dir / set_name / f"{instance_id}.yaml"

@@ -28,6 +28,12 @@ class Problem:
     # The commit SWE-bench installs the environment from (deps may be pinned to
     # it). Captured for fidelity; the install-at-env-commit flow is a follow-up.
     environment_setup_commit: str | None = None
+    # Official transition-grading ground truth (the test node-ids that must flip
+    # red->green, and those that must stay green). Needed by the image-runtime
+    # grading path (C5 #319) via the official parsers; small lists, so stored
+    # inline. Optional for backward compat with pre-#319 YAMLs.
+    fail_to_pass: list[str] | None = None
+    pass_to_pass: list[str] | None = None
 
     def to_yaml(self, path: Path) -> None:
         """Write this problem to a YAML file."""
@@ -42,6 +48,8 @@ class Problem:
             "hf_split": self.hf_split,
             "version": self.version,
             "environment_setup_commit": self.environment_setup_commit,
+            "fail_to_pass": self.fail_to_pass,
+            "pass_to_pass": self.pass_to_pass,
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -70,6 +78,8 @@ class Problem:
             hf_split=data.get("hf_split", "test"),
             version=data.get("version"),
             environment_setup_commit=data.get("environment_setup_commit"),
+            fail_to_pass=data.get("fail_to_pass"),
+            pass_to_pass=data.get("pass_to_pass"),
         )
 
 

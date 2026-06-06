@@ -850,16 +850,18 @@ def _parse_filter_ids(filter_spec: str) -> set[str]:
     return {s.strip() for s in spec.split(",") if s.strip()}
 
 
-def _run_image_runtime_preflight() -> None:
-    """Handle ``--runtime image`` for C3 (#317).
-
-    The container runtime (``swebench.container``) is built and tested, but a
-    full arm needs C3b's pull/disk policy (#323) and C4/C5's agent + test
-    execution (#318/#319).  Until those land, image mode does a real Docker
-    preflight and reports the runtime is ready, rather than running a partial
-    arm through the overlay-centric loop.
-    """
-    from swebench import container
+def _run_image_runtime(
+    problems: list[Problem],
+    arm_list: list[str],
+    *,
+    results_dir: str,
+    agent_binary: str,
+    num_runs: int,
+    max_wall_seconds: int,
+) -> None:
+    """Handle ``--runtime image`` (C5 #319): Docker preflight, then dispatch to
+    the dedicated image-runtime orchestrator (``swebench.image_run``)."""
+    from swebench import container, image_run
 
     proc = container._docker(["version", "--format", "{{.Server.Version}}"], check=False)
     if proc.returncode != 0:
@@ -869,18 +871,21 @@ def _run_image_runtime_preflight() -> None:
             err=True,
         )
         raise SystemExit(1)
+    click.echo(f"Image runtime: Docker daemon reachable "
+               f"(server {proc.stdout.decode('utf-8', 'replace').strip()}).")
 
-    server = proc.stdout.decode("utf-8", "replace").strip()
-    click.echo(f"Image runtime: Docker daemon reachable (server {server}).")
-    click.echo(
-        "Container layer ready (C3 #317): prepare_instance -> stripped snapshot, "
-        "per-arm reset = fresh container from the snapshot (~286 ms, measured in "
-        "C2 #316)."
+    os.environ.setdefault("ONLYCODES_REPO_ROOT", str(repo_root()))
+    # wall_timeout: max_wall_seconds==0 means unlimited; the orchestrator wants a
+    # positive bound (in-container `timeout`), so fall back to 1800s when unset.
+    wall = max_wall_seconds if max_wall_seconds and max_wall_seconds > 0 else 1800
+    results = image_run.run_image_arms(
+        problems, arms=arm_list, num_runs=num_runs,
+        results_dir=results_dir, agent_binary=agent_binary,
+        wall_timeout=wall, echo=click.echo,
     )
-    click.echo(
-        "Not yet wired for a full arm: pull/disk policy is C3b (#323); agent + "
-        "test execution are C4/C5 (#318/#319). Use --runtime overlay to run."
-    )
+    n_pass = sum(1 for _, _, v in results if v == "PASS")
+    click.echo(f"\nImage runtime: {n_pass}/{len(results)} PASS across "
+               f"{len({i for i, _, _ in results})} instances.")
 
 
 @click.command("run")
@@ -1081,10 +1086,6 @@ def run_command(
         click.echo("ERROR: --parallel must be >= 1", err=True)
         raise SystemExit(1)
 
-    if runtime == "image":
-        _run_image_runtime_preflight()
-        return
-
     root = repo_root()
     problems_dir = root / "problems" / "swe"
     results_dir = Path(output_dir) if output_dir else root / "runs" / "swebench"
@@ -1128,6 +1129,18 @@ def run_command(
         arm_list.append("onlycode")
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
+
+    # --- Image runtime: dispatch to the dedicated orchestrator (C5 #319) -------
+    # Runs on the official prebuilt images (pull-by-digest + LRU + in-container
+    # agent + official-parser grading). Deliberately separate from the overlay
+    # serial/parallel loop below.
+    if runtime == "image":
+        _run_image_runtime(
+            problems, arm_list,
+            results_dir=str(results_dir), agent_binary=agent_binary,
+            num_runs=num_runs, max_wall_seconds=max_wall_seconds,
+        )
+        return
 
     # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
     # baseline and bash_only run on Codex's native shell/apply_patch surface
