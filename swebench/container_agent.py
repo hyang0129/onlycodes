@@ -419,3 +419,124 @@ def run_agent(
             max_attempts, arm,
         )
     return rc
+
+
+# --------------------------------------------------------------------------
+# Output capture + no-leak (C4b #324)
+# --------------------------------------------------------------------------
+
+class ContainerLeakError(RuntimeError):
+    """A held-out grader / reference / test artifact was visible to the agent.
+
+    The image-runtime analog of artifact ``MaterializationError`` — raised by
+    :func:`assert_no_leak` (mirror of ``artifact_materialize._assert_no_leak``).
+    """
+
+
+def extract_agent_diff(handle: ContainerHandle, dest_path: str) -> str:
+    """Write the agent's repo diff (``git diff`` over ``/testbed``) to the host.
+
+    The snapshot's ``/testbed`` is a single orphan commit at the instance's
+    ``base_commit`` tree (C3 strip), so ``git diff`` is exactly the agent's
+    change set vs base — the *model patch* C5 grades.  Run as the agent user
+    (it owns ``/testbed``).  ``dest_path`` is a **host** path, never mounted into
+    the container, so the agent cannot read its own captured result.  Returns the
+    diff text.
+    """
+    proc = container._docker(
+        ["exec", "-u", AGENT_USER, "-w", "/testbed", handle.container_id,
+         "git", "diff"],
+        check=True,
+    )
+    diff = proc.stdout.decode("utf-8", "replace") if proc.stdout else ""
+    Path(dest_path).write_text(diff)
+    return diff
+
+
+def held_out_markers_from_patch(test_patch: str) -> list[str]:
+    """Names of test functions/classes *added* by a held-out test patch.
+
+    These are the content markers that must NOT already be present in the
+    agent's ``/testbed`` (the SWE-bench leak vector is added assertions in
+    existing files, which a filename scan can't catch).  Parses ``+def test_*``
+    / ``+class *Test*`` from the patch's added lines.
+    """
+    markers: list[str] = []
+    for line in test_patch.splitlines():
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        s = line[1:].strip()
+        if s.startswith("def "):
+            name = s[4:].split("(", 1)[0].strip()
+            if name.startswith("test") or name.startswith("Test"):
+                markers.append(name)
+        elif s.startswith("class ") and "Test" in s:
+            markers.append(s[6:].split("(", 1)[0].split(":", 1)[0].strip())
+    return markers
+
+
+#: Held-out artifact basenames that must never be visible in-container — mirrors
+#: the artifact no-leak scan (``hidden.py`` grader module, ``reference_output.*``
+#: golden artifact) plus the SWE-bench held-out test patch file.
+_LEAK_FIND_SCRIPT = r"""
+set -eu
+for root in "$@"; do
+    [ -e "$root" ] || continue
+    find "$root" -type f \( \
+        -name hidden.py -o \
+        -name 'reference_output*' -o \
+        -name '*_tests.patch' -o \
+        -name '*.gold.patch' \
+    \) 2>/dev/null
+done
+"""
+
+
+def assert_no_leak(
+    handle: ContainerHandle,
+    *,
+    test_patch: str | None = None,
+    extra_markers: tuple[str, ...] = (),
+    roots: tuple[str, ...] = ("/testbed", CFG_DIR),
+) -> None:
+    """Fail loudly if any held-out grader/reference/test artifact is visible to
+    the agent inside the container (mirror of ``_assert_no_leak``).
+
+    Two checks over ``roots`` (default ``/testbed`` + the agent-readable
+    ``/opt/cfg``):
+
+    1. **Filenames** — ``hidden.py``, ``reference_output*``, ``*_tests.patch``,
+       ``*.gold.patch`` must not exist.
+    2. **Content markers** — the held-out test names added by ``test_patch``
+       (plus ``extra_markers``) must not already appear in ``/testbed`` sources;
+       their presence means the held-out assertions leaked.
+
+    Call after the agent finishes and **before** the held-out test patch is
+    applied (C5).  Raises :class:`ContainerLeakError` on any hit.
+    """
+    cid = handle.container_id
+    leaks: list[str] = []
+
+    found = container._docker(
+        ["exec", cid, "bash", "-c", _LEAK_FIND_SCRIPT, "scan", *roots], check=False,
+    )
+    names = [l for l in (found.stdout or b"").decode("utf-8", "replace").splitlines() if l.strip()]
+    leaks += [f"file: {n}" for n in names]
+
+    markers = list(held_out_markers_from_patch(test_patch or "")) + list(extra_markers)
+    if markers:
+        # grep -F (fixed strings) -r -l: list files in /testbed containing a marker.
+        pattern = "\n".join(markers)
+        hit = container._docker(
+            ["exec", "-i", cid, "bash", "-c",
+             'grep -rlF -f - /testbed 2>/dev/null || true'],
+            check=False, input_bytes=pattern.encode(),
+        )
+        hits = [l for l in (hit.stdout or b"").decode("utf-8", "replace").splitlines() if l.strip()]
+        leaks += [f"held-out marker in: {h}" for h in hits]
+
+    if leaks:
+        raise ContainerLeakError(
+            "held-out artifacts visible to the agent in-container:\n  "
+            + "\n  ".join(leaks)
+        )
