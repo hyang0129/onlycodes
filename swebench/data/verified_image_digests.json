@@ -1,0 +1,6 @@
+{
+ "matplotlib__matplotlib-20826": "sha256:6e34ae7f0c917617fe48b1d29bf8f07cd9ca48b471df62c8c8d407de3368737d",
+ "matplotlib__matplotlib-20859": "sha256:e74c8dcf1966a38f12c006153569fd813144bf8afa2eece4912dd37a0c5ce10c",
+ "matplotlib__matplotlib-22865": "sha256:4bb5781835eaff37b779787ccfed5e8baef26abbd3c6af187caef594bdc3b882",
+ "psf__requests-1142": "sha256:9b0b13a4a762e809a60424f8fd9ba40b45f87874de87479a771e4e673f937d59"
+}

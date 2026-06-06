@@ -136,6 +136,25 @@ Decomposed into child issues on #314:
   bind-mounts** (under DooD the `-v` source resolves on the docker host — C2 finding).
 - **C3b (#323) — Image + registry + disk management.** Pull-by-digest; Docker Hub
   rate-limits/auth/bandwidth (~1 TB for the set); optional registry mirror; prune/disk.
+  **Implemented (`swebench/image_store.py`):**
+  - *Pull-by-digest* — `resolve_remote_digest` (`buildx imagetools inspect`, **no pull**)
+    pins `:latest`→`repo@sha256:…`; digests vendored in
+    `swebench/data/verified_image_digests.json` (backfill: `scripts/resolve_image_digests.py`).
+  - *Measured disk* — marginal **~4–6 GB per same-repo image** (conda env layer shared only
+    within repo+version; first image of a repo is full, e.g. matplotlib 11.2 GB). Full set is
+    hundreds of GB → ~1 TB on disk; **can't be held at once**.
+  - *Disk policy* — **default cap 150 GB** (`ONLYCODES_IMAGE_CAP_GB`); `ensure_image` pulls on
+    demand and `prune_to_cap` LRU-evicts prepared snapshots + base images (after reclaiming
+    dangling images/stopped containers) to stay under cap. `group_by_repo_version` clusters a
+    repo's instances so its shared layer is reused before eviction (minimises re-pulls).
+  - *Auth — token now, mirror later.* `registry_login` uses `ONLYCODES_DOCKERHUB_TOKEN`
+    (token via stdin, never argv) for a higher pull limit; pulls retry on `toomanyrequests`
+    with exponential backoff. A **registry:2 pull-through cache** is the documented scale-up for
+    the full 500-image sweep (each image hits Hub once; re-pulls after prune served locally) —
+    deferred until the sweep is actually run (needs host dockerd `registry-mirrors` config).
+  - *Op note (C1 follow-up):* the DooD socket reverts to `root:root 0660` on a host Docker
+    Desktop restart; `vscode` then needs re-adding (post-create `chmod a+rw /var/run/docker.sock`).
+    Not a C3b code concern, but it gates any image-runtime run.
 - **C4 (#318) — In-container *Claude* agent execution.** Claude Code + the MCP exec-server
   inside the container; tool restriction (mirror `runner.py:build_tools_flags`); isolated
   config/creds; **preserve the exec-server's executed-code network isolation**. (Codex is the
