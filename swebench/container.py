@@ -147,6 +147,25 @@ def pull_image(ref: str, *, timeout: float | None = 1800) -> None:
     _docker(["pull", ref], timeout=timeout)
 
 
+def resolve_image_digest(ref: str) -> dict:
+    """Resolve a local image to its content-addressed identity for the run record.
+
+    Returns ``{"ref", "digest", "arch"}`` where ``digest`` is the registry
+    ``repoDigest`` (``...@sha256:...``) when available, else the local image ID,
+    and ``arch`` is the image's architecture (``amd64``/``x86_64``).  C5 (#319)
+    records this per run so a result is pinned to an exact, reproducible image
+    (not a moving ``:latest``).
+    """
+    proc = _docker(
+        ["image", "inspect", ref, "--format",
+         "{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}|{{.Architecture}}"],
+        check=True,
+    )
+    out = _decode(proc)
+    digest, _, arch = out.partition("|")
+    return {"ref": ref, "digest": digest.strip(), "arch": arch.strip()}
+
+
 # --------------------------------------------------------------------------
 # Git-history strip inside /testbed (port of harness.strip_git_history)
 # --------------------------------------------------------------------------
