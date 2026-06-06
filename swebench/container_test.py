@@ -5,17 +5,21 @@ apply the held-out ``test_patch`` to ``/testbed``, run the spec's test command
 over ``FAIL_TO_PASS + PASS_TO_PASS`` in the testbed conda env, capture the log to
 the host, and grade it with the **official** parsers (:mod:`swebench.official_grade`).
 
-The eval command is the faithful SWE-bench one: ``<spec test_cmd> <test ids>``
-(e.g. ``pytest -rA <node ids>`` for pytest repos; ``./tests/runtests.py ...
-<dotted ids>`` for django).  The ``-rA``-style per-test ``PASSED``/``FAILED``
-lines are what ``MAP_REPO_TO_PARSER`` consumes.
-
-Grading runs over the union of FAIL_TO_PASS + PASS_TO_PASS so resolution checks
-both transitions (bug tests flip red->green, regression tests stay green).
+The eval command is the faithful SWE-bench one: ``<spec test_cmd> <directives>``,
+where the directives are the test FILES touched by the ``test_patch`` (via
+:func:`eval_directives`, ported from the official harness) — NOT the F2P/P2P
+method-ids.  pytest accepts node-ids so the old method-id form worked for pytest
+repos, but non-pytest runners (django ``runtests.py``, etc.) reject it and select
+zero tests (#335).  The per-test ``PASSED``/``FAILED`` lines are what
+``MAP_REPO_TO_PARSER`` consumes; the official parser then extracts the F2P/P2P
+statuses, so resolution still checks both transitions (bug tests flip
+red->green, regression tests stay green) regardless of how many tests the
+directives run.
 """
 
 from __future__ import annotations
 
+import re
 import shlex
 
 from swebench import container, official_grade
@@ -66,8 +70,57 @@ def _patch_targets(patch_text: str) -> list[str]:
     return out
 
 
+# Non-test file extensions, mirrored from swebench==4.1.0
+# (harness/constants NON_TEST_EXTS) — the grader package pinned in
+# :mod:`official_grade`.  Keep in sync if PINNED_SWEBENCH changes.
+_NON_TEST_EXTS = (".json", ".png", "csv", ".txt", ".md", ".jpg", ".jpeg",
+                  ".pkl", ".yml", ".yaml", ".toml")
+_DIFF_PAT = re.compile(r"diff --git a/.* b/(.*)")
+
+
+def eval_directives(instance: dict) -> list[str]:
+    """Test-selection directives for the eval command, derived the **official**
+    way: the test FILES touched by the held-out ``test_patch`` — NOT the
+    FAIL_TO_PASS/PASS_TO_PASS method-ids.
+
+    Ported verbatim from ``swebench.harness.test_spec.python.get_test_directives``
+    (swebench==4.1.0, the package pinned in :mod:`official_grade`) so our test
+    selection matches the grader **by construction** (#335).  pytest accepts
+    node-ids, so the old "append the method-ids" approach happened to work for
+    pytest repos; but django's ``runtests.py`` (and other non-pytest runners)
+    reject that format and select **zero** tests -> false ``RESOLVED_NO``.
+
+    An empty result (e.g. the test_patch touched only data files) means "run the
+    whole suite" — which the official harness also does; the parser then extracts
+    the F2P/P2P statuses from the full output.  By construction every F2P/P2P test
+    lies within this selection (that is how the benchmark measured them).
+    """
+    repo = instance.get("repo", "")
+    # seq2seq repos use a fixed test file.
+    if repo == "swe-bench/humaneval":
+        return ["test.py"]
+    directives = _DIFF_PAT.findall(instance.get("test_patch") or "")
+    directives = [d for d in directives
+                  if not any(d.endswith(ext) for ext in _NON_TEST_EXTS)]
+    # Django: tests/foo/bar.py -> foo.bar (strip ext + "tests/" prefix, / -> .).
+    if repo == "django/django":
+        transformed = []
+        for d in directives:
+            if d.endswith(".py"):
+                d = d[: -len(".py")]
+            if d.startswith("tests/"):
+                d = d[len("tests/"):]
+            transformed.append(d.replace("/", "."))
+        directives = transformed
+    return directives
+
+
 def build_eval_command(spec_test_cmd: str, test_ids: list[str]) -> str:
-    """``<spec test_cmd> <quoted test ids>`` — the faithful SWE-bench eval line."""
+    """``<spec test_cmd> <quoted directives>`` — the faithful SWE-bench eval line.
+
+    ``test_ids`` are the :func:`eval_directives` (test files/modules), not
+    method-ids.  An empty list yields the bare ``spec_test_cmd`` (run the whole
+    suite), matching the official harness."""
     ids = " ".join(shlex.quote(t) for t in test_ids)
     return f"{spec_test_cmd} {ids}".strip()
 
@@ -109,7 +162,13 @@ def run_eval_in_container(
          "bash", "-ls"],
         check=False, timeout=timeout, input_bytes=script.encode(),
     )
-    log = (proc.stdout or b"").decode("utf-8", "replace")
+    # Combine stdout + stderr: pytest writes results to stdout, but unittest-based
+    # runners (django ``runtests.py``) write per-test results to STDERR. The
+    # official parsers consume the combined log, so capturing stdout alone loses
+    # every django result -> all F2P/P2P appear missing -> false RESOLVED_NO (#335).
+    out = (proc.stdout or b"").decode("utf-8", "replace")
+    err = (proc.stderr or b"").decode("utf-8", "replace")
+    log = out + err
     with open(log_dest, "w") as f:
         f.write(log)
     return log
@@ -137,9 +196,8 @@ def gold_patch_gate(
     if not apply_patch_in_container(handle, instance["test_patch"]):
         raise InContainerTestError("held-out test patch did not apply cleanly")
 
-    test_ids = _coerce_ids(instance.get("FAIL_TO_PASS")) + _coerce_ids(instance.get("PASS_TO_PASS"))
     log = run_eval_in_container(
-        handle, spec_test_cmd=spec_test_cmd, test_ids=test_ids,
+        handle, spec_test_cmd=spec_test_cmd, test_ids=eval_directives(instance),
         eval_env=eval_env, log_dest=log_dest, timeout=timeout,
     )
     return official_grade.grade(instance, log)
@@ -156,7 +214,7 @@ def grade_agent_run(
     timeout: float = 1800,
 ) -> dict:
     """Grade an arm: the agent has already edited ``/testbed``; apply the held-out
-    test patch, run the eval over FAIL_TO_PASS + PASS_TO_PASS, and grade.
+    test patch, run the eval over the test_patch's directives, and grade.
 
     The agent-side counterpart to :func:`gold_patch_gate` (no gold patch — the
     agent's own diff is the change under test).  When ``verify_no_leak`` (C4b),
@@ -169,19 +227,8 @@ def grade_agent_run(
     if not apply_patch_in_container(handle, instance["test_patch"]):
         raise InContainerTestError("held-out test patch did not apply cleanly")
 
-    test_ids = _coerce_ids(instance.get("FAIL_TO_PASS")) + _coerce_ids(instance.get("PASS_TO_PASS"))
     log = run_eval_in_container(
-        handle, spec_test_cmd=spec_test_cmd, test_ids=test_ids,
+        handle, spec_test_cmd=spec_test_cmd, test_ids=eval_directives(instance),
         eval_env=eval_env, log_dest=log_dest, timeout=timeout,
     )
     return official_grade.grade(instance, log)
-
-
-def _coerce_ids(v) -> list[str]:
-    import json
-    if isinstance(v, str):
-        try:
-            return json.loads(v)
-        except Exception:
-            return [v]
-    return list(v or [])

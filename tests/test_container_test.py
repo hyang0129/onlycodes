@@ -33,6 +33,59 @@ def test_build_eval_command_quotes_node_ids() -> None:
     assert "b.py::test_y" in cmd
 
 
+def test_build_eval_command_empty_directives_runs_whole_suite() -> None:
+    # no directives (test_patch touched only data files) -> bare test_cmd.
+    assert ct.build_eval_command("pytest -rA", []) == "pytest -rA"
+
+
+def test_eval_directives_pytest_file_passthrough() -> None:
+    inst = {"repo": "psf/requests",
+            "test_patch": "diff --git a/test_requests.py b/test_requests.py\n"
+                          "--- a/test_requests.py\n+++ b/test_requests.py\n@@ -1 +1 @@\n"}
+    # pytest repos: the test FILE is the directive (not the F2P/P2P method-ids).
+    assert ct.eval_directives(inst) == ["test_requests.py"]
+
+
+def test_eval_directives_django_transform() -> None:
+    inst = {"repo": "django/django",
+            "test_patch": "diff --git a/tests/auth_tests/test_validators.py "
+                          "b/tests/auth_tests/test_validators.py\n@@ -1 +1 @@\n"}
+    # tests/foo/bar.py -> foo.bar (django runtests label), the #335 fix.
+    assert ct.eval_directives(inst) == ["auth_tests.test_validators"]
+
+
+def test_eval_directives_filters_non_test_files_to_empty() -> None:
+    # django-10097's real shape: test_patch touches only data files -> [] -> full suite.
+    inst = {"repo": "django/django",
+            "test_patch": "diff --git a/tests/validators/invalid_urls.txt "
+                          "b/tests/validators/invalid_urls.txt\n@@ -1 +1 @@\n"
+                          "diff --git a/tests/validators/valid_urls.txt "
+                          "b/tests/validators/valid_urls.txt\n@@ -1 +1 @@\n"}
+    assert ct.eval_directives(inst) == []
+
+
+def test_eval_directives_humaneval_fixed() -> None:
+    assert ct.eval_directives({"repo": "swe-bench/humaneval", "test_patch": ""}) == ["test.py"]
+
+
+def test_gold_patch_gate_feeds_directives_not_method_ids(monkeypatch, tmp_path) -> None:
+    inst = {"repo": "django/django", "patch": "P", "version": "2.2",
+            "FAIL_TO_PASS": ["test_x (auth_tests.test_validators.T)"],
+            "PASS_TO_PASS": ["test_y (auth_tests.test_validators.T)"],
+            "test_patch": "diff --git a/tests/auth_tests/test_validators.py "
+                          "b/tests/auth_tests/test_validators.py\n@@ -1 +1 @@\n"}
+    seen = {}
+    monkeypatch.setattr(ct, "apply_patch_in_container", lambda h, p: True)
+    monkeypatch.setattr(ct, "run_eval_in_container",
+                        lambda h, **kw: seen.update(test_ids=kw["test_ids"]) or "log")
+    monkeypatch.setattr(ct.official_grade, "grade",
+                        lambda instance, log, **kw: {"resolution": "RESOLVED_FULL"})
+    ct.gold_patch_gate(container.ContainerHandle("i", "c", "s"), inst,
+                       spec_test_cmd="./tests/runtests.py", log_dest=str(tmp_path / "l"))
+    # directive (transformed file), NOT the unittest-format method-ids.
+    assert seen["test_ids"] == ["auth_tests.test_validators"]
+
+
 def test_patch_targets_parses_plus_paths() -> None:
     patch = (
         "diff --git a/src/m.py b/src/m.py\n--- a/src/m.py\n+++ b/src/m.py\n@@ -1 +1 @@\n"
@@ -79,6 +132,25 @@ def test_run_eval_writes_log_and_activates_testbed(monkeypatch, tmp_path) -> Non
     assert "activate" in captured["script"] and "testbed" in captured["script"]
     assert "export LANG=" in captured["script"]
     assert "pytest -rA a.py::test_x" in captured["script"]
+
+
+def test_run_eval_merges_stderr_for_unittest_runners(monkeypatch, tmp_path) -> None:
+    # django/unittest writes per-test results to stderr; the combined log must
+    # include them or the parser sees no results -> false RESOLVED_NO (#335).
+    def _fake(args, **kw):
+        return types.SimpleNamespace(
+            returncode=1, stdout=b"Creating test database...\n",
+            stderr=b"test_x (auth_tests.T) ... ok\nRan 1 test in 0.1s\n")
+    monkeypatch.setattr(container, "_docker", _fake)
+    dest = tmp_path / "eval.log"
+    log = ct.run_eval_in_container(
+        container.ContainerHandle("i", "c", "s"),
+        spec_test_cmd="./tests/runtests.py", test_ids=["auth_tests.test_x"],
+        eval_env={}, log_dest=str(dest),
+    )
+    assert "Creating test database" in log  # stdout
+    assert "test_x (auth_tests.T) ... ok" in log and "Ran 1 test" in log  # stderr
+    assert dest.read_text() == log
 
 
 def test_run_eval_large_id_list_stays_under_max_arg_strlen(monkeypatch, tmp_path) -> None:
