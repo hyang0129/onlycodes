@@ -215,6 +215,69 @@ def test_run_agent_gives_up_after_max_attempts(monkeypatch, tmp_path) -> None:
 
 
 # --------------------------------------------------------------------------
+# Hermetic: output capture + no-leak (C4b #324)
+# --------------------------------------------------------------------------
+
+_TEST_PATCH = (
+    "diff --git a/test_requests.py b/test_requests.py\n"
+    "--- a/test_requests.py\n"
+    "+++ b/test_requests.py\n"
+    "@@ -58,6 +58,13 @@ def test_basic_building(self):\n"
+    "+    def test_no_content_length(self):\n"
+    "+        get_req = requests.Request('GET', httpbin('get')).prepare()\n"
+    "+        self.assertTrue('Content-Length' not in get_req.headers)\n"
+    "+class ExtraTestCase(unittest.TestCase):\n"
+)
+
+
+def test_held_out_markers_from_patch_extracts_added_test_names() -> None:
+    markers = ca.held_out_markers_from_patch(_TEST_PATCH)
+    assert "test_no_content_length" in markers
+    assert "ExtraTestCase" in markers
+    # context/removed lines and the +++ header are not markers.
+    assert "test_basic_building" not in markers
+
+
+def test_extract_agent_diff_writes_host_file(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(container, "_docker",
+                        lambda args, **kw: types.SimpleNamespace(
+                            returncode=0, stdout=b"diff --git a/m.py b/m.py\n-x\n", stderr=b""))
+    dest = tmp_path / "model.patch"
+    out = ca.extract_agent_diff(ContainerHandle("i", "c", "s"), str(dest))
+    assert "diff --git a/m.py" in out
+    assert dest.read_text() == out  # host file written, agent can't reach host fs
+
+
+def test_assert_no_leak_passes_when_clean(monkeypatch) -> None:
+    # find -> nothing; grep -> nothing.
+    monkeypatch.setattr(container, "_docker",
+                        lambda args, **kw: types.SimpleNamespace(
+                            returncode=0, stdout=b"", stderr=b""))
+    ca.assert_no_leak(ContainerHandle("i", "c", "s"), test_patch=_TEST_PATCH)  # no raise
+
+
+def test_assert_no_leak_raises_on_forbidden_filename(monkeypatch) -> None:
+    def _fake(args, **kw):
+        # the find script (bash -c ... scan) returns a grader file.
+        if "bash" in args and any("find" in a for a in args):
+            return types.SimpleNamespace(returncode=0, stdout=b"/testbed/grader/hidden.py\n", stderr=b"")
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+    monkeypatch.setattr(container, "_docker", _fake)
+    with pytest.raises(ca.ContainerLeakError, match="hidden.py"):
+        ca.assert_no_leak(ContainerHandle("i", "c", "s"))
+
+
+def test_assert_no_leak_raises_on_held_out_marker(monkeypatch) -> None:
+    def _fake(args, **kw):
+        if "grep" in " ".join(a for a in args if isinstance(a, str)):
+            return types.SimpleNamespace(returncode=0, stdout=b"/testbed/test_requests.py\n", stderr=b"")
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+    monkeypatch.setattr(container, "_docker", _fake)
+    with pytest.raises(ca.ContainerLeakError, match="held-out marker"):
+        ca.assert_no_leak(ContainerHandle("i", "c", "s"), test_patch=_TEST_PATCH)
+
+
+# --------------------------------------------------------------------------
 # Integration scaffolding
 # --------------------------------------------------------------------------
 
@@ -403,3 +466,38 @@ def test_baseline_turn_keeps_native_tools(staged_arm, tmp_path) -> None:
     }
     # baseline arm has native tools available and used at least one.
     assert used and used & {"Read", "Bash", "Glob", "Grep"}, f"tools used: {used}"
+
+
+# --------------------------------------------------------------------------
+# Integration (no cost — no agent turn): output capture + no-leak (C4b #324)
+# --------------------------------------------------------------------------
+
+@requires_docker
+def test_extract_diff_and_no_leak_on_clean_container(staged_arm, tmp_path) -> None:
+    # A freshly staged container (no agent edits yet): the model diff is empty,
+    # and the held-out test markers are absent from /testbed.
+    dest = tmp_path / "model.patch"
+    diff = ca.extract_agent_diff(staged_arm, str(dest))
+    assert diff == "" and dest.read_text() == "", "pristine /testbed should have empty diff"
+    # No-leak passes: requests-1142's held-out test name isn't in base /testbed.
+    ca.assert_no_leak(staged_arm, test_patch=_TEST_PATCH)
+
+
+@requires_docker
+def test_assert_no_leak_catches_a_real_in_container_leak(staged_arm) -> None:
+    # Simulate the held-out test leaking into /testbed; the scan must catch it.
+    container._docker(
+        ["exec", "-u", ca.AGENT_USER, staged_arm.container_id, "bash", "-c",
+         "echo 'def test_no_content_length(self): pass' > /testbed/leaked_test.py"],
+        check=True,
+    )
+    with pytest.raises(ca.ContainerLeakError, match="held-out marker"):
+        ca.assert_no_leak(staged_arm, test_patch=_TEST_PATCH)
+    # And a forbidden filename is caught too.
+    container._docker(
+        ["exec", staged_arm.container_id, "bash", "-c",
+         "mkdir -p /testbed/grader && touch /testbed/grader/hidden.py"],
+        check=True,
+    )
+    with pytest.raises(ca.ContainerLeakError, match="hidden.py"):
+        ca.assert_no_leak(staged_arm)
