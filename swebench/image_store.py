@@ -68,11 +68,17 @@ def _load_usage() -> dict[str, float]:
 
 
 def _stamp_usage(instance_id: str, *, now: float) -> None:
-    p = _usage_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    usage = _load_usage()
-    usage[instance_id] = now
-    p.write_text(json.dumps(usage))
+    # Best-effort: LRU usage tracking must never crash a run if the cache dir
+    # isn't writable (falls back to losing recency info, i.e. FIFO-ish prune).
+    try:
+        p = _usage_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        usage = _load_usage()
+        usage[instance_id] = now
+        p.write_text(json.dumps(usage))
+    except OSError as e:
+        logging.warning("image_store: could not record image usage (%s); "
+                        "LRU prune will lack recency info", e)
 
 
 # --------------------------------------------------------------------------
@@ -177,7 +183,12 @@ def pull_pinned(
         _pull_with_backoff(ref, retries=retries, timeout=timeout)
     if record and newly_resolved:
         record_digest(instance_id, digest)
-    return {"instance_id": instance_id, "ref": ref, "digest": digest}
+    # Architecture for the run record (acceptance: digest + arch). Present after
+    # pull; fall back to the x86_64 the image name encodes.
+    proc = container._docker(
+        ["image", "inspect", ref, "--format", "{{.Architecture}}"], check=False)
+    arch = container._decode(proc) if proc.returncode == 0 else "amd64"
+    return {"instance_id": instance_id, "ref": ref, "digest": digest, "arch": arch or "amd64"}
 
 
 def _pull_with_backoff(ref: str, *, retries: int, timeout: float | None,

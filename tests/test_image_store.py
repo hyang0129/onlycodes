@@ -132,11 +132,13 @@ def test_pull_with_backoff_non_ratelimit_raises_immediately(monkeypatch) -> None
 def test_pull_pinned_uses_manifest_digest_and_skips_present(monkeypatch) -> None:
     monkeypatch.setattr(ims, "load_digest_manifest", lambda: {"psf__requests-1142": _DIGEST})
     monkeypatch.setattr(container, "image_present", lambda ref: True)
+    monkeypatch.setattr(container, "_docker", lambda a, **k: _proc(0, b"amd64\n"))  # arch lookup
     pulled = []
     monkeypatch.setattr(ims, "_pull_with_backoff", lambda ref, **k: pulled.append(ref))
     info = ims.pull_pinned("psf__requests-1142")
     assert info["digest"] == _DIGEST
     assert info["ref"].endswith(f"@{_DIGEST}")
+    assert info["arch"] == "amd64"
     assert pulled == []  # already present -> no pull
 
 

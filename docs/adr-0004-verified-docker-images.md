@@ -140,9 +140,21 @@ Decomposed into child issues on #314:
   - *Pull-by-digest* — `resolve_remote_digest` (`buildx imagetools inspect`, **no pull**)
     pins `:latest`→`repo@sha256:…`; digests vendored in
     `swebench/data/verified_image_digests.json` (backfill: `scripts/resolve_image_digests.py`).
-  - *Measured disk* — marginal **~4–6 GB per same-repo image** (conda env layer shared only
-    within repo+version; first image of a repo is full, e.g. matplotlib 11.2 GB). Full set is
-    hundreds of GB → ~1 TB on disk; **can't be held at once**.
+  - *Measured disk + layer profile* (profiled 2026-06-06, requests/matplotlib/django/sympy,
+    10 django + 10 sympy pulled to verify dedup). Each image = ~15 content layers in three tiers:
+    | tier | layer | size | shared scope |
+    |---|---|---|---|
+    | base | ubuntu + apt + miniconda | ~1.5 GB | **all images** (every repo) |
+    | env | `setup_env.sh` (conda env) | django ~1.2 GB · mpl 1.7–3.8 GB | **same repo+version** |
+    | instance | `setup_repo.sh` (/testbed + build) | **django ~0.32 GB · sympy ~0.3 GB · mpl ~2.65 GB** | **unique per instance** |
+    Sharing is real and large: **10 django images added only ~3.6 GB** (vs 39.6 GB nominal, ~91%
+    saved); each additional same-version instance is **~0.2–0.3 GB** (just its thin instance layer).
+    matplotlib is the heavy outlier — its env bakes a full GUI/render stack (PyQt5 + wxPython + Qt
+    runtime) and its repo layer carries image-comparison baselines, so it is 2–3× a typical image.
+    **Grounded full-500 deduped cache ≈ ~400 GB** (base once + ~100 GB of per-repo-version envs +
+    ~290 GB of per-instance layers) — firmly **sub-TB**, dominated by matplotlib + the env spread,
+    *not* the django/sympy bulk. A single pass never needs the whole cache; the 150 GB cap holds
+    hundreds of django/sympy or ~15–20 matplotlib at once.
   - *Disk policy* — **default cap 150 GB** (`ONLYCODES_IMAGE_CAP_GB`); `ensure_image` pulls on
     demand and `prune_to_cap` LRU-evicts prepared snapshots + base images (after reclaiming
     dangling images/stopped containers) to stay under cap. `group_by_repo_version` clusters a
