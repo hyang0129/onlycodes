@@ -1130,6 +1130,18 @@ def run_command(
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
 
+    # The image runtime's in-container agent staging is Claude-specific (C4);
+    # the Codex surface on images is a follow-up (#325). Fail clearly rather than
+    # letting the image path try to stage a codex binary it can't drive.
+    if runtime == "image" and agent_surface != "claude_code":
+        click.echo(
+            f"ERROR: --runtime image currently supports only --agent-surface claude_code "
+            f"(got {agent_surface!r}). Codex-on-image is tracked in #325; "
+            f"use --runtime overlay for the codex surface.",
+            err=True,
+        )
+        raise SystemExit(1)
+
     # --- Image runtime: dispatch to the dedicated orchestrator (C5 #319) -------
     # Runs on the official prebuilt images (pull-by-digest + LRU + in-container
     # agent + official-parser grading). Deliberately separate from the overlay
