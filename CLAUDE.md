@@ -56,6 +56,18 @@ Shared infrastructure:
 
 **Full CLI reference:** see README.md. **Task schema:** see docs/SCHEMA_ARTIFACT.md.
 
+### SWE-bench runtime backend: image-only (ADR-0004, epic #314)
+
+`run` has two backends via `--runtime`: **`image` (default)** runs inside the official
+prebuilt SWE-bench Docker images (pull-by-digest → stripped snapshot → fresh container
+per arm → official-parser grading; modules `container*.py`, `image_*.py`, `official_grade.py`),
+and **`overlay` (DEPRECATED)** is the legacy host clone + OverlayFS + venv path
+(`cache.py`, `harness.py`, the overlay branch of `run.py`). All 500 Verified instances have
+published official images (100% coverage, verified 2026-06-07), so image is the supported
+path; overlay emits a deprecation warning and is **slated for removal** — do not collect
+benchmark numbers on it. The overlay invariants below remain documented only because the
+code still exists pending that cleanup.
+
 ---
 
 ## Module Map

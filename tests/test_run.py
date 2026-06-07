@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from swebench.run import _is_triple_complete, _parse_filter_ids
+from swebench.run import _is_triple_complete, _parse_filter_ids, run_command
 
 
 INSTANCE = "django__django-16379"
@@ -26,6 +26,17 @@ def _paths(tmp_path):
     jsonl = tmp_path / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
     test_txt = tmp_path / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
     return jsonl, test_txt
+
+
+# --- runtime backend default (image-only, ADR-0004 / #314) ------------------
+
+def test_runtime_defaults_to_image():
+    """Image is the default/supported backend (100% Verified image coverage);
+    overlay is the deprecated legacy fallback (#320)."""
+    opt = next(p for p in run_command.params if p.name == "runtime")
+    assert opt.default == "image"
+    # image listed first; overlay retained but deprecated.
+    assert list(opt.type.choices) == ["image", "overlay"]
 
 
 # --- missing files ----------------------------------------------------------

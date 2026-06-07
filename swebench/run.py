@@ -1050,17 +1050,17 @@ def _run_image_runtime(
 @click.option(
     "--runtime",
     "runtime",
-    type=click.Choice(["overlay", "image"]),
-    default="overlay",
+    type=click.Choice(["image", "overlay"]),
+    default="image",
     show_default=True,
     help=(
-        "Environment backend. 'overlay' (default): clone + cache + per-arm "
-        "fuse-overlayfs on the host (the established path). 'image': run inside "
-        "the official prebuilt SWE-bench Docker images, resetting per arm from a "
-        "stripped snapshot container (ADR-0004, epic #314). The 'image' runtime "
-        "container layer is C3 (#317); pull/disk policy is C3b (#323) and agent + "
-        "test execution are C4/C5 (#318/#319), so selecting it today reports "
-        "readiness and exits rather than running a full arm."
+        "Environment backend. 'image' (default): run inside the official prebuilt "
+        "SWE-bench Docker images, resetting per arm from a stripped snapshot "
+        "container, graded by the official parsers (ADR-0004, epic #314). All 500 "
+        "Verified instances have published images (100% coverage), so this is the "
+        "supported path. 'overlay' (DEPRECATED): the legacy clone + cache + per-arm "
+        "fuse-overlayfs host build; kept only as a general-purpose fallback for "
+        "instances without a published image and slated for removal."
     ),
 )
 def run_command(
@@ -1130,6 +1130,18 @@ def run_command(
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
 
+    # The image runtime's in-container agent staging is Claude-specific (C4);
+    # the Codex surface on images is a follow-up (#325). Fail clearly rather than
+    # letting the image path try to stage a codex binary it can't drive.
+    if runtime == "image" and agent_surface != "claude_code":
+        click.echo(
+            f"ERROR: --runtime image currently supports only --agent-surface claude_code "
+            f"(got {agent_surface!r}). Codex-on-image is tracked in #325; "
+            f"use --runtime overlay for the codex surface.",
+            err=True,
+        )
+        raise SystemExit(1)
+
     # --- Image runtime: dispatch to the dedicated orchestrator (C5 #319) -------
     # Runs on the official prebuilt images (pull-by-digest + LRU + in-container
     # agent + official-parser grading). Deliberately separate from the overlay
@@ -1141,6 +1153,17 @@ def run_command(
             num_runs=num_runs, max_wall_seconds=max_wall_seconds,
         )
         return
+
+    # Overlay is deprecated (ADR-0004 / epic #314): all 500 Verified instances have
+    # published official images, so the image runtime is the supported path. The
+    # overlay/conda backend is kept only as a general-purpose fallback and is slated
+    # for removal — warn loudly so nobody collects benchmark numbers on it by accident.
+    click.echo(
+        "WARNING: --runtime overlay is DEPRECATED. The image runtime (default) is the "
+        "supported backend for SWE-bench Verified (100% official-image coverage); "
+        "overlay is a legacy fallback slated for removal. See ADR-0004 / #314.",
+        err=True,
+    )
 
     # Codex exec-server pre-flight: only needed for arms that use the MCP exec-server.
     # baseline and bash_only run on Codex's native shell/apply_patch surface

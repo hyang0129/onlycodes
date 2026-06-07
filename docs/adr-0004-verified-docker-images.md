@@ -1,10 +1,30 @@
 # ADR 0004 — Run SWE-bench Verified from Official Prebuilt Docker Images
 
-**Status:** Accepted. C2 de-risk spike complete — **GO** (`docs/spike-c2-docker-images.md`,
-#316). C3 reset strategy decided (see below).
+**Status:** Accepted. C1–C5 complete; C6 in progress. C2 de-risk spike — **GO**
+(`docs/spike-c2-docker-images.md`, #316). C3 reset strategy decided (see below).
+**Amended 2026-06-07 → image-only** (see "Update" below).
 **Date:** 2026-06-04.
 **Tracking issue:** [#314](https://github.com/hyang0129/onlycodes/issues/314).
-**Supersedes:** the *build half* of [#311](https://github.com/hyang0129/onlycodes/issues/311) / PR [#313](https://github.com/hyang0129/onlycodes/pull/313) (conda-native build) for Verified. Conda is retained as a fallback.
+**Supersedes:** the *build half* of [#311](https://github.com/hyang0129/onlycodes/issues/311) / PR [#313](https://github.com/hyang0129/onlycodes/pull/313) (conda-native build) for Verified. Conda/overlay is **deprecated** (see Update).
+
+## Update (2026-06-07) — image-only; conda/overlay deprecated
+
+The original plan kept a **dual-backend** `image-if-published-else-conda` selection rule
+and a C6 image-vs-conda parity table. A coverage check across **all 500** Verified
+instances (Docker Hub repo API) returned **500/500 published, 0 missing** — so the
+`else-conda` branch never fires for Verified. Combined with the C5 gold gate giving
+*absolute* fidelity against the official parsers (a stronger check than any conda
+comparison), the conda/overlay path is **dead code for the benchmark** (overlay is
+SWE-bench-only; artifact mode uses its own materialize path).
+
+**Revised decision:** the harness is **image-only** for Verified. `run.py` defaults to
+`--runtime image`; `--runtime overlay` is retained but emits a deprecation warning and is
+slated for removal in a separate cleanup. Consequences: the C6 **parity table is dropped**
+(nothing faithful to compare against), the standalone **conda gold gate (#322) is
+unnecessary**, and the selection rule reduces to "image, else error loudly" (digest
+pinning, #319, covers reproducibility; availability is the only residual risk). C5's
+gold-fidelity sample stands at 12/12 RESOLVED_FULL across 7 repos. The lone empty-directive
+instance in all of Verified is django-10097 (1/500; full-suite isolation residual, #337).
 
 ## Context
 
@@ -232,7 +252,8 @@ kill-switch, not an irreversible migration.
 
 - [x] C2 spike confirms a real pull + in-container agent turn + parsed test (go/no-go).
 - [x] Container runtime with in-container git-strip and fresh-container per-arm reset (C3).
-- [ ] Both arms run in-container with correct tool restriction + transcript capture (C4).
-- [ ] Official-parser grading + gold-patch fidelity gate + digest pinning (C5).
-- [ ] Image-vs-conda parity table + image-else-conda selection rule + docs updated (C6).
+- [x] Both arms run in-container with correct tool restriction + transcript capture (C4/C4b).
+- [x] Official-parser grading + gold-patch fidelity gate + digest pinning (C5).
+- [ ] ~~Image-vs-conda parity table + image-else-conda selection rule~~ → **image-only**
+  (100% image coverage; see Update 2026-06-07): image default + overlay deprecated + docs (C6).
 - [ ] This ADR's status flipped once the spike confirms (or rolled back per Reversibility).
