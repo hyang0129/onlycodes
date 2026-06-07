@@ -1,6 +1,18 @@
 {
+ "astropy__astropy-12907": "sha256:f3f63bb87d581c0e7b47f900dd82165b71040e1758d3c29e915e2b18da9baf63",
+ "astropy__astropy-7671": "sha256:e00a59320ce112a0d3c2a2925f08cd15697d3f8731cd32543fb83e3395b2bf61",
+ "django__django-10097": "sha256:148894532806828ddd882c6617387910c1be8d064e2496fbe7ec046a30eff6fb",
  "matplotlib__matplotlib-20826": "sha256:6e34ae7f0c917617fe48b1d29bf8f07cd9ca48b471df62c8c8d407de3368737d",
  "matplotlib__matplotlib-20859": "sha256:e74c8dcf1966a38f12c006153569fd813144bf8afa2eece4912dd37a0c5ce10c",
  "matplotlib__matplotlib-22865": "sha256:4bb5781835eaff37b779787ccfed5e8baef26abbd3c6af187caef594bdc3b882",
- "psf__requests-1142": "sha256:9b0b13a4a762e809a60424f8fd9ba40b45f87874de87479a771e4e673f937d59"
+ "pallets__flask-5014": "sha256:ffa7af7191f8aca58cc00db4582c7b0cb1aab91d395dc470baeac8cd7a5758ee",
+ "psf__requests-1142": "sha256:9b0b13a4a762e809a60424f8fd9ba40b45f87874de87479a771e4e673f937d59",
+ "pytest-dev__pytest-10051": "sha256:46de1ca632c3caa994438bb74a500fe78f9aa05c1cc7e8becba34f98d785fd7c",
+ "pytest-dev__pytest-5809": "sha256:96831af3073043bdb3f3729f4613c7f7cfd480e7ce4f6707e76c82e30b394f4d",
+ "scikit-learn__scikit-learn-10297": "sha256:3fff87093463f36cf764abeeda281d89458c7f085b0b066b417c877c090ca960",
+ "scikit-learn__scikit-learn-14141": "sha256:75ecdf2838a072cdff7c2b665fdb6dec3d3c4df3c840a31d2d5cdb780dcf649e",
+ "sphinx-doc__sphinx-10449": "sha256:900475eb956cbab258112fb6a9a2180b8de7d90801f6a591effab96b51ef4681",
+ "sphinx-doc__sphinx-8595": "sha256:fac2c1ff31f3513c741b0864bcb34696aa59fe57f50165e6d0d1870e56a2caf7",
+ "sympy__sympy-11618": "sha256:12f3a6f64bb8ca17304839d3d5ca69b00e1e8d0b9034b72bb773b374e80d4307",
+ "sympy__sympy-20916": "sha256:3992aa2c707b3fd459130bbfe0cc2abd6d756a4f38c9aa5ed409abdafc9e4bf4"
 }
