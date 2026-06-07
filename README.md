@@ -72,7 +72,9 @@ python -m swebench run --arms bash_only          # bash_only arm only
 python -m swebench run --arms both               # baseline+onlycode (excludes bash_only)
 python -m swebench run --filter django__django-16379
 python -m swebench run --runs 3                  # multiple runs per arm
-python -m swebench run --no-cache                # skip OverlayFS cache
+python -m swebench run --runtime image           # default: official prebuilt Docker images
+python -m swebench run --runtime overlay         # DEPRECATED legacy host OverlayFS path
+python -m swebench run --no-cache                # (overlay only) skip OverlayFS cache
 
 # Analyze results
 python -m swebench analyze summary
@@ -106,6 +108,11 @@ This resolves `node`, the bundle path, and the repo root automatically. Re-run
 after any container rebuild or workspace move.
 
 ### OverlayFS Cache
+
+> **DEPRECATED (ADR-0004 / #314).** The OverlayFS cache belongs to the legacy `--runtime overlay`
+> backend. The default `--runtime image` backend runs on the official prebuilt Docker images
+> (100% Verified coverage) and does not use this cache. Overlay is kept only as a general-purpose
+> fallback and is slated for removal.
 
 For large-scale or repeated runs, the harness supports an OverlayFS-backed instance cache that skips clone + venv setup on subsequent runs.
 
