@@ -51,7 +51,8 @@ The main evaluation harness. Problem instances are fetched from HuggingFace SWE-
 
 | Set | Path | Size | Description |
 |---|---|---|---|
-| `swebench-verified-mini` | `problems/swe/swebench-verified-mini/` | 50 | SWE-bench Verified Mini (25 django + 25 sphinx) |
+| `swebench-verified` | `problems/swe/swebench-verified/` | 500 | SWE-bench Verified spine (#308); the buildable subset (`sets/verified-buildable.txt`) feeds the #299 spine |
+| `swebench-verified-mini` | `problems/swe/swebench-verified-mini/` | 50 | **DEPRECATED** — subset of `swebench-verified`; excluded from `swebench run` discovery (would double-run the same ids). Kept on disk for KDD-workshop reproducibility. |
 | `swebench-datasci-mini` | `problems/swe/swebench-datasci-mini/` | 50 | Data-science library instances |
 | `swebench-datasci-5` | `problems/swe/swebench-datasci-5/` | 5 | Small data-science smoke set |
 | `adhoc` | `problems/swe/adhoc/` | varies | One-offs added without `--set` |

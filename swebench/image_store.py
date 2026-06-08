@@ -24,6 +24,7 @@ Shells out to the ``docker`` CLI (consistent with :mod:`swebench.container`).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
