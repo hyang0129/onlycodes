@@ -86,7 +86,22 @@ def _read_test_patch(problem: Problem, root: Path) -> str:
     return p.read_text() if p.is_file() else ""
 
 
-def _extract_cost_turns(transcript_path: str) -> tuple[float | None, int | None]:
+def _extract_cost_turns(transcript_path: str, *, agent_surface: str = "claude_code",
+                        codex_model: str | None = None) -> tuple[float | None, int | None]:
+    """(cost_usd, num_turns) from the transcript. Codex uses the runner's
+    token-based estimator (its ``--json`` shape differs from Claude's); its cost
+    needs a ``meta`` line naming the model to hit the price table, which the raw
+    ``codex exec`` stdout lacks — so we prepend one before estimating."""
+    if agent_surface == "codex_cli":
+        from swebench.runner import CodexRunner
+        try:
+            lines = Path(transcript_path).read_text().splitlines()
+            meta = json.dumps({"type": "meta", "model": codex_model or "gpt-5.5"})
+            primed = transcript_path + ".priced.jsonl"
+            Path(primed).write_text(meta + "\n" + "\n".join(lines) + "\n")
+            return CodexRunner().extract_metadata(Path(primed))
+        except Exception:  # noqa: BLE001 — cost is best-effort
+            return (None, None)
     cost = turns = None
     try:
         for line in Path(transcript_path).read_text().splitlines():
@@ -114,6 +129,7 @@ def run_one_arm(
     eval_env: dict,
     results_dir: str,
     agent_surface: str = "claude_code",
+    codex_model: str | None = None,
     wall_timeout: int = 1800,
     _now=None,
 ) -> str:
@@ -122,10 +138,11 @@ def run_one_arm(
     transcript = os.path.join(tempfile.mkdtemp(prefix="img-arm-"), "transcript.jsonl")
     verdict, resolution, cost, turns = "ERROR", None, None, None
     try:
-        container_agent.stage_arm(handle)
+        container_agent.stage_arm(handle, surface=agent_surface, arm=arm, model=codex_model)
         rc = container_agent.run_agent(
             handle, arm=arm, prompt=_build_prompt(problem, arm),
             result_path=transcript, wall_timeout=wall_timeout,
+            surface=agent_surface, model=codex_model,
         )
         log_dest = os.path.join(os.path.dirname(transcript), "eval.txt")
         grade = container_test.grade_agent_run(
@@ -134,7 +151,8 @@ def run_one_arm(
         )
         resolution = grade.get("resolution")
         verdict = "PASS" if official_grade.is_resolved(grade) else "FAIL"
-        cost, turns = _extract_cost_turns(transcript)
+        cost, turns = _extract_cost_turns(transcript, agent_surface=agent_surface,
+                                          codex_model=codex_model)
         logging.info("image_run %s %s run%d: rc=%s resolution=%s -> %s",
                      problem.instance_id, arm, run_idx, rc, resolution, verdict)
     finally:
@@ -177,6 +195,8 @@ def run_image_arms(
     num_runs: int,
     results_dir: str,
     agent_binary: str,
+    agent_surface: str = "claude_code",
+    codex_model: str | None = None,
     cap_gb: float | None = None,
     wall_timeout: int = 1800,
     echo=print,
@@ -184,7 +204,11 @@ def run_image_arms(
     """Run ``arms`` over ``problems`` on the image runtime. Returns
     ``(instance_id, arm, verdict)`` triples."""
     image_store.registry_login()
-    container_agent.ensure_agent_runtime(agent_binary)
+    # Populate the shared runtime volume for the chosen surface (#325).
+    if agent_surface == "codex_cli":
+        container_agent.ensure_codex_runtime()
+    else:
+        container_agent.ensure_agent_runtime(agent_binary)
     root = Path(os.environ.get("ONLYCODES_REPO_ROOT", ".")).resolve()
 
     order = {iid: i for i, iid in enumerate(
@@ -215,6 +239,7 @@ def run_image_arms(
                     digest_info=digest_info, grading_instance=gi,
                     spec_test_cmd=spec["test_cmd"], eval_env=eval_env,
                     results_dir=results_dir, wall_timeout=wall_timeout,
+                    agent_surface=agent_surface, codex_model=codex_model,
                 )
                 echo(f"  [{arm} run {run_idx}] {verdict}")
                 results.append((problem.instance_id, arm, verdict))

@@ -51,7 +51,7 @@ from pathlib import Path
 
 from swebench import container
 from swebench.container import ContainerHandle
-from swebench.runner import ClaudeRunner
+from swebench.runner import ClaudeRunner, DEFAULT_CODEX_MODEL, _apply_arm_directive, _write_codex_config
 
 
 # --------------------------------------------------------------------------
@@ -73,9 +73,27 @@ RESULT_IN_CONTAINER = f"{CFG_DIR}/transcript.jsonl"
 
 #: Pinned model — mirrors ``ClaudeRunner.invoke`` on the host path.
 MODEL = "claude-sonnet-4-6"
+#: Codex default model (mirrors ``runner.DEFAULT_CODEX_MODEL``).
+CODEX_MODEL = DEFAULT_CODEX_MODEL
 
 #: The SWE-bench image's project conda env (repo installed editable here).
 TESTBED_ENV = "/opt/miniconda3/envs/testbed"
+
+#: PATH for the in-container codebox kernel — testbed conda env first so executed
+#: code imports the package under test (shared by the Claude mcp-config and the
+#: Codex config.toml MCP env).
+_TESTBED_PATH = (
+    f"{TESTBED_ENV}/bin:/opt/miniconda3/bin:"
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+)
+
+# --- Codex surface (#325): native static-musl binary staged in the RO volume ---
+CODEX_VENDOR_DIR = f"{AGENT_MOUNT}/codex"          # vendor dir on the runtime volume
+CODEX_BIN = f"{CODEX_VENDOR_DIR}/bin/codex"        # native binary (no node needed for codex itself)
+CODEX_PATH_DIR = f"{CODEX_VENDOR_DIR}/codex-path"  # bundled rg etc. — must be on PATH
+CODEX_HOME_IN_CFG = f"{CFG_DIR}/codex_home"        # per-arm CODEX_HOME (auth.json + config.toml)
+#: The platform triple whose vendor dir we stage (x86_64 images).
+_CODEX_TARGET = "x86_64-unknown-linux-musl"
 
 #: MCP init timeout (ms).  The exec-server's persistent python kernel cold-starts
 #: slower under the in-container conda env than Claude Code's default MCP timeout,
@@ -206,6 +224,75 @@ def ensure_agent_runtime(
     return RUNTIME_VOLUME
 
 
+def _find_codex_vendor() -> str:
+    """Resolve the host codex install's platform vendor dir (#325).
+
+    ``codex`` is an npm node shim that dispatches to a static-musl native binary
+    under ``@openai/codex-linux-x64/vendor/<target>``; that whole dir (binary +
+    bundled ``rg``/``bwrap``) is what we stage. Returns its absolute path.
+    """
+    codex = shutil.which("codex")
+    if not codex:
+        raise AgentRuntimeError(
+            "host `codex` not found on PATH — install with `npm install -g @openai/codex` "
+            "(needs sudo; the global prefix is root-owned)."
+        )
+    # which -> .../@openai/codex/bin/codex.js ; pkg root is two dirs up.
+    pkg_root = os.path.dirname(os.path.dirname(os.path.realpath(codex)))
+    vendor = os.path.join(
+        pkg_root, "node_modules", "@openai", "codex-linux-x64", "vendor", _CODEX_TARGET
+    )
+    if not os.path.isdir(vendor):
+        raise AgentRuntimeError(
+            f"codex platform vendor dir not found at {vendor} — reinstall codex."
+        )
+    return vendor
+
+
+def ensure_codex_runtime(
+    codex_vendor: str | None = None,
+    *,
+    helper_image: str = "busybox:latest",
+    force: bool = False,
+) -> str:
+    """Populate the shared runtime volume with ``node`` + the codex vendor dir (#325).
+
+    Idempotent on the presence of the staged codex binary (independent of the
+    Claude sentinel, so both surfaces can coexist in the one volume). ``node`` is
+    (re)staged too so the codebox MCP bundle works even if the Claude path never
+    populated the volume. Returns the volume name.
+    """
+    if not force and _volume_exists(RUNTIME_VOLUME):
+        probe = container._docker(
+            ["run", "--rm", "-v", f"{RUNTIME_VOLUME}:{AGENT_MOUNT}:ro",
+             helper_image, "test", "-f", CODEX_BIN],
+            check=False,
+        )
+        if probe.returncode == 0:
+            return RUNTIME_VOLUME
+
+    vendor = codex_vendor or _find_codex_vendor()
+    node = _find_node()
+    container.pull_image(helper_image)
+    container._docker(["volume", "create", RUNTIME_VOLUME], check=False)
+
+    helper = ""
+    try:
+        helper = container._decode(container._docker(
+            ["run", "-d", "-v", f"{RUNTIME_VOLUME}:/stage", helper_image, "sleep", "86400"]
+        ))
+        container._docker(["cp", node, f"{helper}:/stage/node"])
+        container._docker(["exec", helper, "chmod", "0755", "/stage/node"])
+        container._docker(["exec", helper, "mkdir", "-p", "/stage/codex"])
+        # copy vendor *contents* into /stage/codex
+        container._docker(["cp", f"{vendor}/.", f"{helper}:/stage/codex"])
+        container._docker(["exec", helper, "chmod", "-R", "a+rX", "/stage/codex"])
+    finally:
+        if helper:
+            container._rm_force(helper)
+    return RUNTIME_VOLUME
+
+
 # --------------------------------------------------------------------------
 # Per-arm staging: exec-server bundle + mcp-config + credentials -> /opt/cfg
 # --------------------------------------------------------------------------
@@ -214,10 +301,7 @@ def _incontainer_mcp_config(*, persistent_kernel: bool = True) -> dict:
     # Prepend the testbed env's bin so the exec-server's python kernel runs in the
     # *project* conda env (where the repo is installed editable) — not the base
     # env — so executed code can import the package under test.
-    path = (
-        f"{TESTBED_ENV}/bin:/opt/miniconda3/bin:"
-        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    )
+    path = _TESTBED_PATH
     return {
         "mcpServers": {
             "codebox": {
@@ -234,21 +318,8 @@ def _incontainer_mcp_config(*, persistent_kernel: bool = True) -> dict:
     }
 
 
-def stage_arm(
-    handle: ContainerHandle,
-    *,
-    creds_src: str | None = None,
-    persistent_kernel: bool = True,
-) -> None:
-    """Stage the per-arm config into ``/opt/cfg`` of a running arm container.
-
-    Copies the exec-server bundle + helpers, writes the in-container
-    ``mcp-config.json``, and ``docker cp``'s the Claude credentials
-    (``.credentials.json`` + ``.claude.json``) from ``creds_src`` (default
-    ``~/.claude``).  Everything is chowned to the agent user.  None of this is
-    ever committed — arm containers are torn down, not snapshotted.
-    """
-    creds_src = creds_src or os.path.expanduser("~/.claude")
+def _stage_exec_server(cid: str) -> None:
+    """Copy the full exec-server file set into ``/opt/cfg/exec_server`` (both surfaces)."""
     dist = _exec_server_dist()
     for fname in _EXEC_SERVER_FILES:
         if not (dist / fname).is_file():
@@ -256,11 +327,35 @@ def stage_arm(
                 f"exec-server file missing: {dist / fname} — run `npm run build` "
                 "in exec_server/ first."
             )
-
-    cid = handle.container_id
     container._docker(["exec", cid, "mkdir", "-p", f"{CFG_DIR}/exec_server"])
     for fname in _EXEC_SERVER_FILES:
         container._docker(["cp", str(dist / fname), f"{cid}:{CFG_DIR}/exec_server/{fname}"])
+
+
+def stage_arm(
+    handle: ContainerHandle,
+    *,
+    surface: str = "claude_code",
+    arm: str = "onlycode",
+    model: str | None = None,
+    creds_src: str | None = None,
+    persistent_kernel: bool = True,
+) -> None:
+    """Stage the per-arm config into ``/opt/cfg`` of a running arm container.
+
+    Surface-aware (#325): the Claude path writes ``mcp-config.json`` + Claude
+    credentials; the Codex path writes a ``CODEX_HOME`` (auth.json + config.toml).
+    Both stage the exec-server bundle + helpers and chown ``/opt/cfg`` to the
+    agent user.  Nothing is ever committed — arm containers are torn down.
+    """
+    if surface == "codex_cli":
+        _stage_arm_codex(handle, arm=arm, model=model, creds_src=creds_src,
+                         persistent_kernel=persistent_kernel)
+        return
+
+    creds_src = creds_src or os.path.expanduser("~/.claude")
+    cid = handle.container_id
+    _stage_exec_server(cid)
 
     # In-container mcp-config.
     tmp = tempfile.mkdtemp(prefix="arm-cfg-")
@@ -281,6 +376,100 @@ def stage_arm(
     container._docker(["exec", cid, "chown", "-R", f"{AGENT_USER}:{AGENT_USER}", CFG_DIR])
 
 
+#: Minimum access-token life required at stage time. The codex auth is copied
+#: into the container and discarded; if it expires mid-run codex refreshes there
+#: and writes the rotated (one-time) token to the throwaway copy, leaving the host
+#: token dead and breaking every subsequent run. ChatGPT access tokens last ~10
+#: days, so a fresh ``codex login`` clears this by a wide margin; we just refuse
+#: to start with a token that won't outlive the run.
+_CODEX_TOKEN_MIN_REMAINING_SEC = 3600
+
+
+def _assert_codex_token_fresh(auth_path: str, *, _now: float | None = None) -> None:
+    """Raise if the codex access token is expired / expiring within the margin.
+
+    Fails loudly so a stale token (needing an in-container refresh that would
+    consume the one-time refresh token and break the rest of a sweep) surfaces as
+    a clear 're-login' error instead. API-key auth (no ``tokens`` block) is
+    exempt. Decoding is best-effort — an undecodable token is allowed through
+    rather than blocking on a parser quirk."""
+    import base64
+    import time as _time
+    try:
+        data = json.loads(Path(auth_path).read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if data.get("OPENAI_API_KEY"):
+        return  # API key never expires/rotates
+    tok = (data.get("tokens") or {}).get("access_token")
+    if not tok or tok.count(".") < 2:
+        return
+    try:
+        payload = tok.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        exp = json.loads(base64.urlsafe_b64decode(payload)).get("exp")
+    except Exception:  # noqa: BLE001 — undecodable token: don't block
+        return
+    if exp is None:
+        return
+    now = _now if _now is not None else _time.time()
+    if exp <= now + _CODEX_TOKEN_MIN_REMAINING_SEC:
+        raise AgentRuntimeError(
+            f"codex access token at {auth_path} expires too soon "
+            f"({int((exp - now) / 60)} min left) — run `codex login` to refresh. "
+            "Staging a near-expiry OAuth token risks an in-container refresh that "
+            "consumes the one-time refresh token and breaks subsequent runs."
+        )
+
+
+def _stage_arm_codex(
+    handle: ContainerHandle,
+    *,
+    arm: str,
+    model: str | None,
+    creds_src: str | None,
+    persistent_kernel: bool,
+) -> None:
+    """Codex staging: exec-server set + a ``CODEX_HOME`` (auth.json + config.toml).
+
+    ``config.toml`` reuses ``runner._write_codex_config`` (single-sourced
+    tool-restriction profile) but with in-container paths — the codebox MCP
+    ``command`` is the staged node and its env carries the testbed ``PATH`` so the
+    kernel runs in the project conda env.
+    """
+    creds_src = creds_src or os.path.expanduser("~/.codex")
+    cid = handle.container_id
+    _stage_exec_server(cid)
+    container._docker(["exec", cid, "mkdir", "-p", CODEX_HOME_IN_CFG])
+
+    auth = os.path.join(creds_src, "auth.json")
+    if not os.path.isfile(auth):
+        raise AgentRuntimeError(
+            f"codex auth not found at {auth} — Codex CLI requires a valid auth token."
+        )
+    _assert_codex_token_fresh(auth)
+
+    tmp = tempfile.mkdtemp(prefix="arm-codex-")
+    try:
+        _write_codex_config(
+            tmp,
+            bundle_path=BUNDLE_IN_CFG,
+            cwd="/testbed",
+            persistent_kernel="1" if persistent_kernel else "0",
+            arm=arm,
+            model=model or CODEX_MODEL,
+            mcp_command=NODE_BIN,
+            mcp_env_extra={"PATH": _TESTBED_PATH},
+        )
+        container._docker(["cp", os.path.join(tmp, "config.toml"),
+                           f"{cid}:{CODEX_HOME_IN_CFG}/config.toml"])
+        container._docker(["cp", auth, f"{cid}:{CODEX_HOME_IN_CFG}/auth.json"])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    container._docker(["exec", cid, "chown", "-R", f"{AGENT_USER}:{AGENT_USER}", CFG_DIR])
+
+
 # --------------------------------------------------------------------------
 # Invocation
 # --------------------------------------------------------------------------
@@ -290,27 +479,50 @@ def build_agent_argv(
     *,
     prompt: str,
     system_prompt: str,
-    model: str = MODEL,
+    model: str | None = None,
     wall_timeout: int = 3600,
+    surface: str = "claude_code",
 ) -> list[str]:
-    """The in-container claude argv for an arm (no docker wrapper).
+    """The in-container agent argv for an arm (no docker wrapper).
 
-    Tool flags come from ``ClaudeRunner.build_tools_flags`` (single-sourced with
-    the host path); only the mcp-config path is in-container.  A ``timeout``
-    prefix bounds wall time *inside* the container so the agent is killed even if
-    the host ``docker exec`` client is interrupted.
+    Surface-aware (#325). Claude: tool flags from ``ClaudeRunner.build_tools_flags``
+    (single-sourced with the host path); only the mcp-config path is in-container.
+    Codex: ``codex exec`` against the native binary (restriction lives in
+    config.toml from :func:`_stage_arm_codex`). A ``timeout`` prefix bounds wall
+    time *inside* the container so the agent is killed even if the host
+    ``docker exec`` client is interrupted.
     """
+    if surface == "codex_cli":
+        return _build_codex_argv(arm, prompt=prompt, model=model or CODEX_MODEL,
+                                 wall_timeout=wall_timeout)
     tools_flags = ClaudeRunner().build_tools_flags(arm, MCP_CONFIG_IN_CFG)
     argv = [
         CLAUDE_BIN,
         "-p", prompt,
-        "--model", model,
+        "--model", model or MODEL,
         "--system-prompt", system_prompt,
         *tools_flags,
         "--dangerously-skip-permissions",
         "--no-session-persistence",
         "--output-format", "stream-json",
         "--verbose",
+    ]
+    if wall_timeout and wall_timeout > 0:
+        argv = ["timeout", f"{wall_timeout}s", *argv]
+    return argv
+
+
+def _build_codex_argv(arm: str, *, prompt: str, model: str, wall_timeout: int) -> list[str]:
+    """``codex exec`` argv (native binary). Restriction is in config.toml; the soft
+    arm directive is prepended to the prompt (codex can't hard-disable apply_patch)."""
+    effective_prompt = _apply_arm_directive(prompt, arm)
+    argv = [
+        CODEX_BIN, "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--json",
+        "-m", model,
+        "-C", "/testbed",
+        effective_prompt,
     ]
     if wall_timeout and wall_timeout > 0:
         argv = ["timeout", f"{wall_timeout}s", *argv]
@@ -328,22 +540,34 @@ def _codebox_was_used(result_path: str) -> bool:
         text = Path(result_path).read_text()
     except OSError:
         return False
-    # Cheap + robust: the tool name appears in the assistant's tool_use blocks.
-    return "mcp__codebox__" in text
+    # Claude stream-json names the tool ``mcp__codebox__*``; Codex ``--json``
+    # emits ``mcp_tool_call`` items with ``"server":"codebox"``. Match either.
+    return "mcp__codebox__" in text or '"server":"codebox"' in text or '"server": "codebox"' in text
 
 
 def _invoke_once(
     handle: ContainerHandle, agent_argv: list[str], result_path: str,
-    host_timeout: int | None,
+    host_timeout: int | None, *, surface: str = "claude_code",
 ) -> int:
+    if surface == "codex_cli":
+        env_flags = [
+            "-e", f"CODEX_HOME={CODEX_HOME_IN_CFG}",
+            "-e", f"HOME={AGENT_HOME}",
+            # codex-path (rg) + staged node (codebox MCP) + testbed env on PATH.
+            "-e", f"PATH={CODEX_PATH_DIR}:{AGENT_MOUNT}:{_TESTBED_PATH}",
+        ]
+    else:
+        env_flags = [
+            "-e", f"CLAUDE_CONFIG_DIR={CFG_DIR}",
+            "-e", f"HOME={AGENT_HOME}",
+            "-e", "FORCE_PROMPT_CACHING_5M=1",
+            "-e", f"MCP_TIMEOUT={MCP_TIMEOUT_MS}",
+        ]
     docker_argv = [
         container._docker_bin(), "exec",
         "-u", AGENT_USER,
         "-w", "/testbed",
-        "-e", f"CLAUDE_CONFIG_DIR={CFG_DIR}",
-        "-e", f"HOME={AGENT_HOME}",
-        "-e", "FORCE_PROMPT_CACHING_5M=1",
-        "-e", f"MCP_TIMEOUT={MCP_TIMEOUT_MS}",
+        *env_flags,
         handle.container_id,
         *agent_argv,
     ]
@@ -369,10 +593,11 @@ def run_agent(
     prompt: str,
     system_prompt: str = "You are a helpful assistant.",
     result_path: str,
-    model: str = MODEL,
+    model: str | None = None,
     wall_timeout: int = 3600,
     mcp_required: bool | None = None,
     max_attempts: int = 4,
+    surface: str = "claude_code",
 ) -> int:
     """Run one Claude turn inside the arm container, streaming the JSONL
     transcript to ``result_path`` on the host.
@@ -399,13 +624,13 @@ def run_agent(
         mcp_required = arm in _MCP_REQUIRED_ARMS
     agent_argv = build_agent_argv(
         arm, prompt=prompt, system_prompt=system_prompt,
-        model=model, wall_timeout=wall_timeout,
+        model=model, wall_timeout=wall_timeout, surface=surface,
     )
     host_timeout = (wall_timeout + 120) if wall_timeout and wall_timeout > 0 else None
 
     rc = 0
     for attempt in range(1, max_attempts + 1):
-        rc = _invoke_once(handle, agent_argv, result_path, host_timeout)
+        rc = _invoke_once(handle, agent_argv, result_path, host_timeout, surface=surface)
         if not mcp_required or _codebox_was_used(result_path):
             return rc
         if attempt < max_attempts:
