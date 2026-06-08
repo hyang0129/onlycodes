@@ -171,28 +171,6 @@ def test_codex_run_onlycode_preflight_invoked(runner, monkeypatch, tmp_path):
     )
 
 
-def test_codex_run_image_runtime_rejected(runner, monkeypatch, tmp_path):
-    """codex_cli + --runtime image must error clearly (codex-on-image is #325),
-    not fall into the Claude-only image path."""
-    monkeypatch.setattr("swebench.runner.CodexRunner.find_binary", lambda self: "/usr/bin/codex")
-    monkeypatch.setattr("swebench.runner.CodexRunner.verify_auth", lambda self: None)
-    monkeypatch.setattr("swebench.runner.CodexRunner.get_version", lambda self, _: "test")
-    _make_minimal_swe_problem(tmp_path / "problems" / "swe")
-    monkeypatch.setattr("swebench.run.repo_root", lambda: tmp_path)
-
-    result = runner.invoke(
-        cli,
-        ["run", "--agent-surface", "codex_cli", "--arms", "onlycode",
-         "--runtime", "image", "--output-dir", str(tmp_path / "out")],
-        catch_exceptions=False,
-    )
-    assert result.exit_code != 0
-    out = result.output or ""
-    assert "claude_code" in out and "#325" in out, (
-        f"Expected a clear codex-on-image rejection mentioning #325, got:\n{out!r}"
-    )
-
-
 def test_codex_run_onlycode_preflight_ok_proceeds_past_preflight(runner, monkeypatch, tmp_path):
     """codex_cli + onlycode arm proceeds past preflight when it succeeds.
 

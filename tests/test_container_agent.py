@@ -162,13 +162,128 @@ def test_stage_arm_raises_if_exec_server_unbuilt(monkeypatch, tmp_path) -> None:
         ca.stage_arm(ContainerHandle("i", "c", "s"))
 
 
+# --- Codex surface (#325) ---------------------------------------------------
+
+def test_build_agent_argv_codex_onlycode() -> None:
+    argv = ca.build_agent_argv(
+        "onlycode", prompt="fix the bug", system_prompt="x",
+        surface="codex_cli", model="gpt-5.5", wall_timeout=900,
+    )
+    assert argv[:2] == ["timeout", "900s"]
+    assert argv[2] == ca.CODEX_BIN and argv[3] == "exec"
+    assert "--dangerously-bypass-approvals-and-sandbox" in argv and "--json" in argv
+    assert argv[argv.index("-m") + 1] == "gpt-5.5"
+    assert argv[argv.index("-C") + 1] == "/testbed"
+    # the soft tool-restriction directive is prepended to the prompt (last arg)
+    assert "execute_code" in argv[-1] and "fix the bug" in argv[-1]
+
+
+def test_codebox_was_used_detects_codex_and_claude(tmp_path) -> None:
+    codex = tmp_path / "codex.jsonl"
+    codex.write_text('{"type":"item.started","item":{"type":"mcp_tool_call","server":"codebox","tool":"execute_code"}}\n')
+    claude = tmp_path / "claude.jsonl"
+    claude.write_text('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__codebox__execute_code"}]}}\n')
+    none = tmp_path / "none.jsonl"
+    none.write_text('{"type":"item.completed","item":{"type":"command_execution"}}\n')
+    assert ca._codebox_was_used(str(codex)) is True
+    assert ca._codebox_was_used(str(claude)) is True
+    assert ca._codebox_was_used(str(none)) is False
+
+
+def test_stage_arm_codex_writes_codex_home_and_chowns(monkeypatch, tmp_path) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(container, "_docker",
+                        lambda args, **kw: calls.append(args) or types.SimpleNamespace(
+                            returncode=0, stdout=b"", stderr=b""))
+    dist = tmp_path / "dist"; dist.mkdir()
+    for fname in ca._EXEC_SERVER_FILES:
+        (dist / fname).write_text("x")
+    monkeypatch.setattr(ca, "_exec_server_dist", lambda: dist)
+    creds = tmp_path / "codex"; creds.mkdir()
+    (creds / "auth.json").write_text("{}")
+
+    ca.stage_arm(ContainerHandle("i", "cidZ", "snap"), surface="codex_cli",
+                 arm="onlycode", model="gpt-5.5", creds_src=str(creds))
+
+    joined = [" ".join(a) for a in calls]
+    assert any("exec-server.bundle.mjs" in s for s in joined)            # bundle staged
+    assert any(f"{ca.CODEX_HOME_IN_CFG}/config.toml" in s for s in joined)  # config written
+    assert any(f"{ca.CODEX_HOME_IN_CFG}/auth.json" in s for s in joined)    # auth cp'd
+    assert calls[-1] == ["exec", "cidZ", "chown", "-R",
+                         f"{ca.AGENT_USER}:{ca.AGENT_USER}", ca.CFG_DIR]
+
+
+def test_stage_arm_codex_raises_without_auth(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(container, "_docker",
+                        lambda args, **kw: types.SimpleNamespace(returncode=0, stdout=b"", stderr=b""))
+    dist = tmp_path / "dist"; dist.mkdir()
+    for fname in ca._EXEC_SERVER_FILES:
+        (dist / fname).write_text("x")
+    monkeypatch.setattr(ca, "_exec_server_dist", lambda: dist)
+    with pytest.raises(ca.AgentRuntimeError, match="codex auth not found"):
+        ca.stage_arm(ContainerHandle("i", "c", "s"), surface="codex_cli",
+                     arm="onlycode", creds_src=str(tmp_path / "empty"))
+
+
+def test_find_codex_vendor_resolves_platform_dir(monkeypatch, tmp_path) -> None:
+    # mimic the npm layout: .../@openai/codex/bin/codex.js -> vendor/<target>
+    pkg = tmp_path / "lib" / "node_modules" / "@openai" / "codex"
+    (pkg / "bin").mkdir(parents=True)
+    shim = pkg / "bin" / "codex.js"; shim.write_text("//shim")
+    vendor = pkg / "node_modules" / "@openai" / "codex-linux-x64" / "vendor" / ca._CODEX_TARGET
+    vendor.mkdir(parents=True)
+    monkeypatch.setattr(ca.shutil, "which", lambda _: str(shim))
+    assert ca._find_codex_vendor() == str(vendor)
+
+
+def test_find_codex_vendor_raises_if_codex_absent(monkeypatch) -> None:
+    monkeypatch.setattr(ca.shutil, "which", lambda _: None)
+    with pytest.raises(ca.AgentRuntimeError, match="host `codex` not found"):
+        ca._find_codex_vendor()
+
+
+def _fake_codex_auth(tmp_path, exp_offset_sec: float | None, *, api_key=False):
+    import base64, json as _json, time
+    if api_key:
+        body = {"OPENAI_API_KEY": "sk-x", "tokens": None}
+    else:
+        claims = {"exp": int(time.time() + exp_offset_sec)} if exp_offset_sec is not None else {}
+        payload = base64.urlsafe_b64encode(_json.dumps(claims).encode()).rstrip(b"=").decode()
+        body = {"auth_mode": "chatgpt", "tokens": {"access_token": f"h.{payload}.sig"}}
+    p = tmp_path / "auth.json"; p.write_text(_json.dumps(body))
+    return str(p)
+
+
+def test_assert_codex_token_fresh_accepts_long_lived(tmp_path) -> None:
+    ca._assert_codex_token_fresh(_fake_codex_auth(tmp_path, 10 * 86400))  # 10 days -> ok
+
+
+def test_assert_codex_token_fresh_rejects_near_expiry(tmp_path) -> None:
+    with pytest.raises(ca.AgentRuntimeError, match="codex login"):
+        ca._assert_codex_token_fresh(_fake_codex_auth(tmp_path, 600))  # 10 min left -> reject
+
+
+def test_assert_codex_token_fresh_exempts_api_key(tmp_path) -> None:
+    ca._assert_codex_token_fresh(_fake_codex_auth(tmp_path, None, api_key=True))  # no raise
+
+
+def test_ensure_codex_runtime_idempotent_when_codex_present(monkeypatch) -> None:
+    monkeypatch.setattr(ca, "_volume_exists", lambda name: True)
+    monkeypatch.setattr(container, "_docker",
+                        lambda args, **kw: types.SimpleNamespace(returncode=0, stdout=b"", stderr=b""))
+    # codex bin present in volume -> returns without re-staging (no _find_codex_vendor needed)
+    monkeypatch.setattr(ca, "_find_codex_vendor",
+                        lambda: (_ for _ in ()).throw(AssertionError("should not re-stage")))
+    assert ca.ensure_codex_runtime() == ca.RUNTIME_VOLUME
+
+
 def test_run_agent_retries_code_only_until_codebox_connects(monkeypatch, tmp_path) -> None:
     # Simulate the MCP startup race: first two invocations produce a transcript
     # with no codebox use; the third connects.
     result = tmp_path / "r.jsonl"
     calls = {"n": 0}
 
-    def _fake_invoke(handle, argv, path, host_timeout):
+    def _fake_invoke(handle, argv, path, host_timeout, **kw):
         calls["n"] += 1
         if calls["n"] < 3:
             Path(path).write_text('{"type":"assistant"}\n')  # no codebox tool
@@ -188,7 +303,7 @@ def test_run_agent_baseline_never_retries(monkeypatch, tmp_path) -> None:
     result = tmp_path / "b.jsonl"
     calls = {"n": 0}
 
-    def _fake_invoke(handle, argv, path, host_timeout):
+    def _fake_invoke(handle, argv, path, host_timeout, **kw):
         calls["n"] += 1
         Path(path).write_text('{"type":"assistant"}\n')  # no codebox — irrelevant for baseline
         return 0
@@ -203,7 +318,7 @@ def test_run_agent_gives_up_after_max_attempts(monkeypatch, tmp_path) -> None:
     result = tmp_path / "g.jsonl"
     calls = {"n": 0}
 
-    def _fake_invoke(handle, argv, path, host_timeout):
+    def _fake_invoke(handle, argv, path, host_timeout, **kw):
         calls["n"] += 1
         Path(path).write_text('{"type":"assistant"}\n')  # never connects
         return 0

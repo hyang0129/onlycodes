@@ -201,6 +201,23 @@ def test_write_codex_config_persistent_kernel_flag(tmp_path):
     assert 'ONLYCODES_PERSISTENT_KERNEL = "1"' in content
 
 
+def test_write_codex_config_incontainer_command_and_env(tmp_path):
+    """In-container image path (#325): codebox MCP command + extra env (PATH)."""
+    _write_codex_config(
+        str(tmp_path), "/opt/cfg/exec_server/exec-server.bundle.mjs", "/testbed", "1",
+        arm="code_only", mcp_command="/opt/agent/node",
+        mcp_env_extra={"PATH": "/opt/miniconda3/envs/testbed/bin:/usr/bin"},
+    )
+    content = (tmp_path / "config.toml").read_text()
+    assert 'command = "/opt/agent/node"' in content              # staged node, not "node"
+    assert 'PATH = "/opt/miniconda3/envs/testbed/bin:/usr/bin"' in content
+    assert 'args = ["/opt/cfg/exec_server/exec-server.bundle.mjs"]' in content
+    # default host behaviour unchanged when params omitted
+    other = tmp_path / "host"; other.mkdir()
+    _write_codex_config(str(other), "/b.mjs", "/s", "1", arm="code_only")
+    assert 'command = "node"' in (other / "config.toml").read_text()
+
+
 # ---------------------------------------------------------------------------
 # CodexRunner — model pinning (Issue #253)
 # ---------------------------------------------------------------------------

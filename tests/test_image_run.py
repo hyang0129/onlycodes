@@ -98,6 +98,40 @@ def test_run_one_arm_pass_path(monkeypatch, tmp_path) -> None:
     assert meta["verdict"] == "PASS" and meta["total_cost_usd"] == 0.2
 
 
+def test_run_image_arms_codex_surface_uses_codex_runtime(monkeypatch, tmp_path) -> None:
+    calls = {}
+    monkeypatch.setattr(image_run.image_store, "registry_login", lambda: False)
+    monkeypatch.setattr(image_run.container_agent, "ensure_codex_runtime",
+                        lambda **k: calls.setdefault("codex_rt", True) or "vol")
+    monkeypatch.setattr(image_run.container_agent, "ensure_agent_runtime",
+                        lambda *a, **k: calls.setdefault("claude_rt", True))
+    monkeypatch.setattr(image_run, "run_one_arm",
+                        lambda *a, **k: (calls.update(surface=k["agent_surface"],
+                                                      model=k["codex_model"]), "PASS")[1])
+    monkeypatch.setattr(image_run.image_store, "ensure_image",
+                        lambda iid, **k: {"digest": "sha256:x", "arch": "amd64"})
+    monkeypatch.setattr(image_run.container, "prepare_instance",
+                        lambda iid, **k: PreparedImage(iid, "b", "s"))
+    monkeypatch.setattr(image_run.specs, "spec_for", lambda r, v: {"test_cmd": "pytest -rA"})
+    monkeypatch.setattr(image_run.specs, "eval_env", lambda s: {})
+
+    out = image_run.run_image_arms([_problem()], arms=["onlycode"], num_runs=1,
+                                   results_dir=str(tmp_path), agent_binary="codex",
+                                   agent_surface="codex_cli", codex_model="gpt-5.4",
+                                   echo=lambda *a: None)
+    assert out == [("psf__requests-1142", "onlycode", "PASS")]
+    assert calls.get("codex_rt") and "claude_rt" not in calls   # codex runtime, not claude
+    assert calls["surface"] == "codex_cli" and calls["model"] == "gpt-5.4"
+
+
+def test_extract_cost_turns_codex_counts_turns(tmp_path) -> None:
+    f = tmp_path / "t.jsonl"
+    f.write_text('{"type":"turn.started"}\n'
+                 '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5}}\n')
+    _cost, turns = image_run._extract_cost_turns(str(f), agent_surface="codex_cli", codex_model="gpt-5.5")
+    assert turns == 1
+
+
 def test_run_image_arms_skips_without_grading_data(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(image_run.image_store, "registry_login", lambda: False)
     monkeypatch.setattr(image_run.container_agent, "ensure_agent_runtime", lambda b, **k: "vol")

@@ -910,6 +910,8 @@ def _write_codex_config(
     model: str = DEFAULT_CODEX_MODEL,
     isolation_nonce: str | None = None,
     iso_server_path: str | None = None,
+    mcp_command: str = "node",
+    mcp_env_extra: dict[str, str] | None = None,
 ) -> None:
     """Write config.toml into cfg_dir for a Codex run.
 
@@ -978,14 +980,21 @@ def _write_codex_config(
     )
 
     if _arm_uses_codebox(arm):
+        # mcp_command/mcp_env_extra let the in-container image path (#325) point
+        # the codebox server at the staged node binary and inject the testbed
+        # PATH so the kernel uses the project conda env. Host path keeps the
+        # defaults ("node" on PATH, no extra env).
+        env_lines = f'ONLYCODES_PERSISTENT_KERNEL = "{_toml_str(persistent_kernel)}"\n'
+        for k, v in (mcp_env_extra or {}).items():
+            env_lines += f'{k} = "{_toml_str(v)}"\n'
         toml += (
             "\n"
             "[mcp_servers.codebox]\n"
-            'command = "node"\n'
+            f'command = "{_toml_str(mcp_command)}"\n'
             f'args = ["{_toml_str(bundle_path)}"]\n'
             "\n"
             "[mcp_servers.codebox.env]\n"
-            f'ONLYCODES_PERSISTENT_KERNEL = "{_toml_str(persistent_kernel)}"\n'
+            + env_lines +
             "\n"
             "[mcp_servers.codebox.options]\n"
             'enabled_tools = ["execute_code", "execute_code_and_wait"]\n'

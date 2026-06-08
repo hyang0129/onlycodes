@@ -858,6 +858,8 @@ def _run_image_runtime(
     agent_binary: str,
     num_runs: int,
     max_wall_seconds: int,
+    agent_surface: str = "claude_code",
+    codex_model: str | None = None,
 ) -> None:
     """Handle ``--runtime image`` (C5 #319): Docker preflight, then dispatch to
     the dedicated image-runtime orchestrator (``swebench.image_run``)."""
@@ -881,6 +883,7 @@ def _run_image_runtime(
     results = image_run.run_image_arms(
         problems, arms=arm_list, num_runs=num_runs,
         results_dir=results_dir, agent_binary=agent_binary,
+        agent_surface=agent_surface, codex_model=codex_model,
         wall_timeout=wall, echo=click.echo,
     )
     n_pass = sum(1 for _, _, v in results if v == "PASS")
@@ -1130,27 +1133,16 @@ def run_command(
     if arms in ("bash_only", "all"):
         arm_list.append("bash_only")
 
-    # The image runtime's in-container agent staging is Claude-specific (C4);
-    # the Codex surface on images is a follow-up (#325). Fail clearly rather than
-    # letting the image path try to stage a codex binary it can't drive.
-    if runtime == "image" and agent_surface != "claude_code":
-        click.echo(
-            f"ERROR: --runtime image currently supports only --agent-surface claude_code "
-            f"(got {agent_surface!r}). Codex-on-image is tracked in #325; "
-            f"use --runtime overlay for the codex surface.",
-            err=True,
-        )
-        raise SystemExit(1)
-
     # --- Image runtime: dispatch to the dedicated orchestrator (C5 #319) -------
     # Runs on the official prebuilt images (pull-by-digest + LRU + in-container
-    # agent + official-parser grading). Deliberately separate from the overlay
-    # serial/parallel loop below.
+    # agent + official-parser grading), Claude or Codex surface (#325).
+    # Deliberately separate from the overlay serial/parallel loop below.
     if runtime == "image":
         _run_image_runtime(
             problems, arm_list,
             results_dir=str(results_dir), agent_binary=agent_binary,
             num_runs=num_runs, max_wall_seconds=max_wall_seconds,
+            agent_surface=agent_surface, codex_model=codex_model,
         )
         return
 
