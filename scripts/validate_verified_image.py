@@ -258,6 +258,23 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | 
 # Orchestration
 # --------------------------------------------------------------------------
 
+_TERMINAL_STATUSES = {"buildable", "not_resolved", "skipped"}
+
+
+def _load_terminal_rows(out_dir: Path) -> dict:
+    """Prior-run rows with a terminal status, keyed by instance_id (for --resume).
+    'error' rows are intentionally excluded so they get re-attempted."""
+    p = out_dir / "results.json"
+    if not p.is_file():
+        return {}
+    try:
+        rows = json.loads(p.read_text()).get("rows", [])
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {r["instance_id"]: r for r in rows
+            if r.get("status") in _TERMINAL_STATUSES and r.get("instance_id")}
+
+
 def run(args: argparse.Namespace) -> int:
     root = Path(__file__).resolve().parent.parent
     problems_dir = root / "problems" / args.set
@@ -287,11 +304,25 @@ def run(args: argparse.Namespace) -> int:
                                f"swebench-verified-image_{dt.datetime.utcnow():%Y%m%dT%H%M%SZ}")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resume: a full sweep is ~1.5-2 days under the free pull-rate cap and may be
+    # interrupted. Carry over instances already recorded with a TERMINAL status
+    # (buildable / not_resolved / skipped) from a prior run's results.json; re-run
+    # only 'error' (possibly transient) + anything never reached. --fresh ignores.
+    done = {} if args.fresh else _load_terminal_rows(out_dir)
+    if done:
+        log.info("Resuming: %d instances already gated (terminal) — re-running the rest.",
+                 len(done))
+
     log.info("Validating %d instances on the image runtime -> %s", len(problems), out_dir)
 
     rows: list[dict] = []
     for n, problem in enumerate(problems, 1):
         iid = problem.instance_id
+        if iid in done:                       # resume: reuse the prior terminal verdict
+            rows.append(done[iid])
+            _write_outputs(rows, out_dir, args, total_requested=len(ids))
+            continue
         # Pre-flight skips (recorded, not run).
         spec = specs.spec_for(problem.repo_slug, problem.version)
         if not problem.fail_to_pass:
@@ -380,6 +411,8 @@ def main() -> int:
     ap.add_argument("--cap-gb", type=float, default=None,
                     help="image disk cap in GB (default: image_store.image_cap_gb())")
     ap.add_argument("--timeout", type=float, default=1800, help="per-instance eval timeout (s)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="ignore a prior run's results.json in --out-dir (default: resume)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return run(args)

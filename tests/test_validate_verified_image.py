@@ -32,7 +32,7 @@ def args(tmp_path):
     return argparse.Namespace(
         set="swe/swebench-verified", from_file=None, ids=None, limit=0,
         buildable_out=str(tmp_path / "buildable.txt"),
-        out_dir=str(tmp_path / "out"), cap_gb=None, timeout=60,
+        out_dir=str(tmp_path / "out"), cap_gb=None, timeout=60, fresh=False,
     )
 
 
@@ -151,6 +151,38 @@ def test_is_rate_limit_error():
     assert vvi._is_rate_limit_error(ContainerError("... toomanyrequests ..."))
     assert vvi._is_rate_limit_error(Exception("pull exhausted retries (rate limited)"))
     assert not vvi._is_rate_limit_error(Exception("no such image"))
+
+
+def test_resume_skips_terminal_reattempts_error(monkeypatch, args):
+    """A prior run's terminal verdicts are carried over; only 'error' + unreached
+    instances are re-gated."""
+    problems = [_problem("psf__requests-1"), _problem("psf__requests-2"),
+                _problem("psf__requests-3")]
+    monkeypatch.setattr(vvi, "_load_problems", lambda ids, d: (problems, []))
+    args.ids = "psf__requests-1,psf__requests-2,psf__requests-3"
+    # seed a prior results.json: 1 buildable (terminal), 2 error (retry), 3 absent
+    out = Path(args.out_dir); out.mkdir(parents=True)
+    (out / "results.json").write_text(json.dumps({"rows": [
+        {"instance_id": "psf__requests-1", "status": "buildable", "resolution": "RESOLVED_FULL"},
+        {"instance_id": "psf__requests-2", "status": "error", "reason": "transient"},
+    ]}))
+    gated = []
+    _patch_common(monkeypatch, gold={p.instance_id: "P" for p in problems}, grades={
+        "psf__requests-2": {"resolution": "RESOLVED_FULL"},
+        "psf__requests-3": {"resolution": "RESOLVED_FULL"},
+    })
+    real_gate = vvi._gate_one
+    monkeypatch.setattr(vvi, "_gate_one",
+                        lambda problem, **kw: (gated.append(problem.instance_id),
+                                               real_gate(problem, **kw))[1])
+
+    assert vvi.run(args) == 0
+    # 1 was carried over (not gated); 2 (error) and 3 (unreached) were re-gated
+    assert set(gated) == {"psf__requests-2", "psf__requests-3"}
+    res = json.loads((out / "results.json").read_text())
+    status = {r["instance_id"]: r["status"] for r in res["rows"]}
+    assert status == {"psf__requests-1": "buildable", "psf__requests-2": "buildable",
+                      "psf__requests-3": "buildable"}
 
 
 def test_summary_reports_shortfall(monkeypatch, args):
