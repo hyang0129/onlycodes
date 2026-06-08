@@ -18,7 +18,7 @@ problem_statement: 'distance calculation wrong
 
 
   '
-added_at: '2026-06-03'
+added_at: '2026-06-08'
 hf_split: test
 version: '1.0'
 environment_setup_commit: 50b81f9f6be151014501ffac44e5dc6b2416938f

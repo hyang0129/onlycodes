@@ -1,0 +1,47 @@
+instance_id: django__django-13512
+repo: django/django
+base_commit: b79088306513d5ed76d31ac40ab3c15f858946ea
+test_cmd: python tests/runtests.py forms_tests.field_tests.test_jsonfield.JSONFieldTest.test_prepare_value admin_utils.tests.UtilsTests.test_json_display_for_field admin_utils.tests.UtilsTests.test_label_for_field --parallel=1
+patch_file: patches/django__django-13512_tests.patch
+problem_statement: "Admin doesn't display properly unicode chars in JSONFields.\nDescription\n\t \n\t\t(last modified by ZhaoQi99)\n\t \n>>> import json\n>>> print json.dumps('中国')\n\"\\u4e2d\\u56fd\"\njson.dumps use ASCII encoding by default when serializing Chinese.\nSo when we edit a JsonField which contains Chinese character in Django admin,it will appear in ASCII characters.\nI have try to fix this this problem in ​https://github.com/adamchainz/django-mysql/pull/714.And it works prefectly.\n"
+added_at: '2026-06-08'
+hf_split: test
+version: '3.2'
+environment_setup_commit: 65dfb06a1ab56c238cc80f5e1c31f61210c4577d
+fail_to_pass:
+- test_prepare_value (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_json_display_for_field (admin_utils.tests.UtilsTests)
+- test_label_for_field (admin_utils.tests.UtilsTests)
+pass_to_pass:
+- test_cyclic (admin_utils.tests.NestedObjectsTests)
+- test_non_added_parent (admin_utils.tests.NestedObjectsTests)
+- test_on_delete_do_nothing (admin_utils.tests.NestedObjectsTests)
+- test_queries (admin_utils.tests.NestedObjectsTests)
+- test_relation_on_abstract (admin_utils.tests.NestedObjectsTests)
+- test_siblings (admin_utils.tests.NestedObjectsTests)
+- test_unrelated_roots (admin_utils.tests.NestedObjectsTests)
+- test_converted_value (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_custom_encoder_decoder (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- The widget can be overridden with an attribute.
+- test_custom_widget_kwarg (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_formfield_disabled (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_has_changed (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_invalid (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_redisplay_wrong_input (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_valid (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_valid_empty (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_widget (forms_tests.field_tests.test_jsonfield.JSONFieldTest)
+- test_flatten (admin_utils.tests.UtilsTests)
+- test_flatten_fieldsets (admin_utils.tests.UtilsTests)
+- test_help_text_for_field (admin_utils.tests.UtilsTests)
+- test_label_for_field_form_argument (admin_utils.tests.UtilsTests)
+- test_label_for_property (admin_utils.tests.UtilsTests)
+- test_list_display_for_value (admin_utils.tests.UtilsTests)
+- test_list_display_for_value_boolean (admin_utils.tests.UtilsTests)
+- test_null_display_for_field (admin_utils.tests.UtilsTests)
+- test_number_formats_display_for_field (admin_utils.tests.UtilsTests)
+- test_number_formats_with_thousand_separator_display_for_field (admin_utils.tests.UtilsTests)
+- test_quote (admin_utils.tests.UtilsTests)
+- test_related_name (admin_utils.tests.UtilsTests)
+- test_safestring_in_field_label (admin_utils.tests.UtilsTests)
+- test_values_from_lookup_field (admin_utils.tests.UtilsTests)

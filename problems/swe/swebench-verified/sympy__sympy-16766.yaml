@@ -1,0 +1,20 @@
+instance_id: sympy__sympy-16766
+repo: sympy/sympy
+base_commit: b8fe457a02cc24b3470ff678d0099c350b7fef43
+test_cmd: python -m pytest test_PythonCodePrinter
+patch_file: patches/sympy__sympy-16766_tests.patch
+problem_statement: "PythonCodePrinter doesn't support Indexed \nI use `lambdify()` to generate some functions and save the code for further use. But the generated code for `Indexed` operation has some warnings which can be confirmed by following code;\r\n\r\n```\r\nfrom sympy import *\r\np = IndexedBase(\"p\")\r\n\r\npycode(p[0])\r\n```\r\nthe output is \r\n\r\n```\r\n  # Not supported in Python:\r\n  # Indexed\r\np[0]\r\n```\r\n\r\nWe should add following method to `PythonCodePrinter`:\r\n\r\n```\r\ndef _print_Indexed(self, expr):\r\n    base, *index = expr.args\r\n    return \"{}[{}]\".format(str(base), \", \".join([self._print(ind) for ind in index]))\r\n```\n"
+added_at: '2026-06-08'
+hf_split: test
+version: '1.5'
+environment_setup_commit: 70381f282f2d9d039da860e391fe51649df2779d
+fail_to_pass:
+- test_PythonCodePrinter
+pass_to_pass:
+- test_MpmathPrinter
+- test_NumPyPrinter
+- test_SciPyPrinter
+- test_pycode_reserved_words
+- test_printmethod
+- test_codegen_ast_nodes
+- test_issue_14283
