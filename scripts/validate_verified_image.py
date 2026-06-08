@@ -35,12 +35,16 @@ truncated.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import json
 import logging
 import os
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -114,6 +118,78 @@ def _load_gold_patches(ids: set[str]) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------
+# Docker Hub pull-rate pacing (free tier = 200 GET/6h)
+# --------------------------------------------------------------------------
+#
+# A full sweep is ~500 image pulls; the free authenticated tier allows 200
+# *counted* requests per rolling 6h window. A naive pull storm exhausts the
+# budget and image_store._pull_with_backoff gives up after ~7.5 min — which is
+# far shorter than the 6h window, so throttled instances would be mis-marked
+# "error" (non-buildable). Instead we pace: before each pull, probe the remaining
+# budget via a HEAD manifest request (HEAD is NOT counted, only GET is — verified
+# against the ratelimit-* headers) and sleep until the window refills. This keeps
+# us under 200/6h and guarantees no instance is mis-marked due to throttling.
+
+_RATE_PROBE_REPO = "swebench/sweb.eval.x86_64.psf_1776_requests-1142"
+_ACCEPT = ("application/vnd.docker.distribution.manifest.list.v2+json,"
+           "application/vnd.oci.image.index.v1+json,"
+           "application/vnd.docker.distribution.manifest.v2+json")
+
+
+def _dockerhub_pull_budget(repo: str = _RATE_PROBE_REPO) -> tuple[int, int] | None:
+    """Return ``(remaining, limit)`` of the Docker Hub pull budget via a free HEAD
+    manifest probe, or ``None`` if it can't be determined (no creds / parse miss /
+    account is unlimited — Pro/mirror omit the ratelimit headers)."""
+    user = os.environ.get("ONLYCODES_DOCKERHUB_USER", "")
+    token = os.environ.get("ONLYCODES_DOCKERHUB_TOKEN", "")
+    try:
+        scope = f"repository:{repo}:pull"
+        auth_url = f"https://auth.docker.io/token?service=registry.docker.io&scope={scope}"
+        headers = {}
+        if user and token:
+            headers["Authorization"] = "Basic " + base64.b64encode(
+                f"{user}:{token}".encode()).decode()
+        with urllib.request.urlopen(
+                urllib.request.Request(auth_url, headers=headers), timeout=30) as r:
+            bearer = json.load(r)["token"]
+        req = urllib.request.Request(
+            f"https://registry-1.docker.io/v2/{repo}/manifests/latest",
+            method="HEAD", headers={"Authorization": f"Bearer {bearer}", "Accept": _ACCEPT})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            rem = resp.headers.get("ratelimit-remaining")
+            lim = resp.headers.get("ratelimit-limit")
+        if rem is None or lim is None:
+            return None  # unlimited account / mirror: no headers
+        return int(rem.split(";")[0]), int(lim.split(";")[0])
+    except Exception:
+        return None
+
+
+def _await_pull_budget(*, min_remaining: int = 8, poll_s: int = 300,
+                       _sleep=time.sleep, _probe=_dockerhub_pull_budget) -> None:
+    """Block until the pull budget is at least ``min_remaining`` (or undeterminable).
+
+    No-op when the probe returns ``None`` (unlimited account / mirror / offline) —
+    image_store's own backoff still covers transient errors there.
+    """
+    while True:
+        budget = _probe()
+        if budget is None:
+            return
+        remaining, limit = budget
+        if remaining >= min_remaining:
+            return
+        log.warning("Docker Hub pull budget %d/%d — sleeping %ds for the 6h window to refill",
+                    remaining, limit, poll_s)
+        _sleep(poll_s)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "toomanyrequests" in msg or "rate limit" in msg or "rate limited" in msg
+
+
+# --------------------------------------------------------------------------
 # Per-instance gate
 # --------------------------------------------------------------------------
 
@@ -136,7 +212,20 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | 
     handle = None
     try:
         spec = specs.spec_for(problem.repo_slug, problem.version)
-        info = image_store.ensure_image(iid, cap_gb=cap_gb)
+        # Pace the pull under Docker Hub's rate limit. Rate-limit hits are NOT a
+        # fidelity verdict — wait out the window and retry the same instance so it
+        # is never mis-marked "error". Only non-rate-limit failures fall through.
+        while True:
+            _await_pull_budget()
+            try:
+                info = image_store.ensure_image(iid, cap_gb=cap_gb)
+                break
+            except Exception as exc:
+                if _is_rate_limit_error(exc):
+                    log.warning("%s: rate-limited mid-pull; awaiting window refill", iid)
+                    time.sleep(60)
+                    continue
+                raise
         row["digest"], row["pruned"] = info.get("digest"), info.get("pruned", [])
         prepared = container.prepare_instance(iid)
         handle = container.start_arm_container(prepared)

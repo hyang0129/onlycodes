@@ -42,6 +42,7 @@ def _patch_common(monkeypatch, *, gold, grades):
     ``grades`` maps instance_id -> a grade dict (or an Exception to raise).
     """
     monkeypatch.setattr(vvi.image_store, "registry_login", lambda: True)
+    monkeypatch.setattr(vvi, "_await_pull_budget", lambda **kw: None)  # no network probe in tests
     monkeypatch.setattr(vvi.image_store, "group_by_repo_version", lambda ids: list(ids))
     monkeypatch.setattr(vvi, "_load_gold_patches", lambda ids: dict(gold))
     monkeypatch.setattr(vvi.specs, "spec_for",
@@ -104,6 +105,52 @@ def test_preflight_skips_recorded_not_gated(monkeypatch, args):
     reasons = {r["instance_id"]: r.get("reason") for r in res["rows"]}
     assert "fail_to_pass" in reasons["psf__requests-2"]
     assert "gold patch" in reasons["psf__requests-3"]
+
+
+def test_await_pull_budget_sleeps_until_refill():
+    """Blocks while remaining < min, returns once it refills; no-op when probe is None."""
+    budgets = iter([(0, 200), (3, 200), (50, 200)])
+    slept = []
+    vvi._await_pull_budget(min_remaining=8, poll_s=300,
+                           _sleep=lambda s: slept.append(s),
+                           _probe=lambda: next(budgets))
+    assert slept == [300, 300]  # waited through 0/200 and 3/200, proceeded at 50/200
+
+    # undeterminable budget (unlimited account / mirror / offline) -> immediate return
+    vvi._await_pull_budget(_sleep=lambda s: (_ for _ in ()).throw(AssertionError("slept")),
+                           _probe=lambda: None)
+
+
+def test_rate_limit_pull_is_retried_not_marked_error(monkeypatch, args):
+    """A rate-limit ContainerError on pull must NOT mark the instance error — it
+    waits and retries the same instance until the pull succeeds."""
+    from swebench.container import ContainerError
+    p = _problem("psf__requests-1")
+    monkeypatch.setattr(vvi, "_load_problems", lambda ids, d: ([p], []))
+    args.ids = "psf__requests-1"
+    _patch_common(monkeypatch, gold={"psf__requests-1": "P"},
+                  grades={"psf__requests-1": {"resolution": "RESOLVED_FULL"}})
+    monkeypatch.setattr(vvi.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def flaky_ensure(iid, cap_gb=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ContainerError("pull foo failed: toomanyrequests: rate limited")
+        return {"digest": "sha256:x", "pruned": []}
+    monkeypatch.setattr(vvi.image_store, "ensure_image", flaky_ensure)
+
+    assert vvi.run(args) == 0
+    res = json.loads((Path(args.out_dir) / "results.json").read_text())
+    assert res["rows"][0]["status"] == "buildable"
+    assert calls["n"] == 2  # first call rate-limited, retried, second succeeded
+
+
+def test_is_rate_limit_error():
+    from swebench.container import ContainerError
+    assert vvi._is_rate_limit_error(ContainerError("... toomanyrequests ..."))
+    assert vvi._is_rate_limit_error(Exception("pull exhausted retries (rate limited)"))
+    assert not vvi._is_rate_limit_error(Exception("no such image"))
 
 
 def test_summary_reports_shortfall(monkeypatch, args):
