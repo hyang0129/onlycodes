@@ -25,7 +25,7 @@ import pytest
 
 from swebench import container, container_agent as ca
 from swebench.container import ContainerHandle
-from swebench.runner import BLOCKED_BUILTINS
+from swebench.runner import BLOCKED_BUILTINS, CODING_ALLOWLIST
 
 
 # --------------------------------------------------------------------------
@@ -79,13 +79,17 @@ def test_build_agent_argv_code_only_restricts_to_codebox() -> None:
     assert argv[argv.index("--model") + 1] == ca.MODEL
 
 
-def test_build_agent_argv_baseline_has_no_tool_restriction() -> None:
+def test_build_agent_argv_baseline_pinned_to_coding_allowlist() -> None:
     argv = ca.build_agent_argv(
         "baseline", prompt="p", system_prompt="s", wall_timeout=0)
     # No timeout prefix when wall_timeout == 0.
     assert argv[0] == ca.CLAUDE_BIN
-    # baseline => native tools; no restriction flags.
-    assert "--tools" not in argv and "--disallowedTools" not in argv
+    # baseline => native coding tools pinned to a canonical allowlist (#334),
+    # not the binary's full default surface.
+    assert argv[argv.index("--tools") + 1] == CODING_ALLOWLIST
+    disallowed = argv[argv.index("--disallowedTools") + 1]
+    assert "Task" in disallowed and "Workflow" in disallowed  # subagents/automation blocked
+    # No codebox MCP for baseline.
     assert "--mcp-config" not in argv
 
 

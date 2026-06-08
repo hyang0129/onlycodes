@@ -147,9 +147,14 @@ The cached venv at `instances/<id>/venv/` (formerly a shared mutable dir) is now
 
 `run_claude()` creates a temp config dir containing only `.credentials.json` + `.claude.json` and sets `CLAUDE_CONFIG_DIR` to it. Always uses `--dangerously-skip-permissions --no-session-persistence`. Never shares state between arms or runs.
 
-### Tool restriction for onlycode / code_only
+### Tool restriction for onlycode / code_only / baseline (Claude surface)
 
-The onlycode arm passes `--tools mcp__codebox__execute_code,mcp__codebox__list_tools` and `--disallowedTools` covering all built-in tools. This is implemented in `runner.py:ClaudeRunner.build_tools_flags`; check there before modifying tool lists.
+Both arms are pinned to an explicit `--tools` allowlist in `runner.py:ClaudeRunner.build_tools_flags` (single-sourced; used by the image, overlay, and artifact paths). Check there before modifying tool lists.
+
+- **onlycode / code_only** → `--tools mcp__codebox__execute_code,mcp__codebox__list_tools` + `--disallowedTools BLOCKED_BUILTINS`.
+- **baseline / tool_rich** → `--tools CODING_ALLOWLIST` (`Bash,Edit,Glob,Grep,Read,Write`) + `--disallowedTools` (BLOCKED_BUILTINS minus the allowlist). This pins the baseline to a canonical "native file-system coding" surface instead of the binary's full default set, which includes agentic-orchestration tools (subagents via `Task`, `Workflow`, `ScheduleWakeup`, `Cron*`, `Monitor`, `RemoteTrigger`, …) and omits `Glob`/`Grep`. Without the pin the baseline could fan out to subagents (not apples-to-apples vs. the code-only arm) and the surface drifted with the binary version (#334).
+
+`BLOCKED_BUILTINS` is the full known built-in surface and must enumerate every orchestration tool the binary ships; adding to it tightens both arms. **Methodology note:** baseline numbers collected before #334 (≤ 2026-06-07) ran on the unrestricted default surface (possible subagent use, no `Glob`/`Grep`) — flag this in any longitudinal comparison. The Codex surface is unaffected (it has no orchestration tools; tools are gated via `config.toml`, not CLI flags).
 
 ### patterns.json is append-only during runs
 

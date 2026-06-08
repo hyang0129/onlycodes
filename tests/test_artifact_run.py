@@ -20,7 +20,7 @@ from swebench.artifact_run import (
     run_artifact_arm,
     run_dir_for,
 )
-from swebench.runner import AgentRunner, ClaudeRunner, BLOCKED_BUILTINS
+from swebench.runner import AgentRunner, ClaudeRunner, BLOCKED_BUILTINS, CODING_ALLOWLIST
 
 
 def _make_fixture(task_dir: Path, grader_src: str, budget=(0, 0)) -> Task:
@@ -114,8 +114,13 @@ def test_build_tools_flags_code_only_includes_blocked_builtins():
         assert name in disallowed
 
 
-def test_build_tools_flags_tool_rich_empty():
-    assert ClaudeRunner().build_tools_flags("tool_rich", mcp_config_path="/tmp/mcp.json") == []
+def test_build_tools_flags_tool_rich_pinned_to_coding_allowlist():
+    # tool_rich is pinned to the canonical coding allowlist, not unrestricted (#334).
+    flags = ClaudeRunner().build_tools_flags("tool_rich", mcp_config_path="/tmp/mcp.json")
+    assert flags[flags.index("--tools") + 1] == CODING_ALLOWLIST
+    disallowed = flags[flags.index("--disallowedTools") + 1]
+    assert "Task" in disallowed and "Workflow" in disallowed
+    assert "--mcp-config" not in flags  # no codebox MCP for tool_rich
 
 
 def test_build_tools_flags_rejects_unknown_arm():
