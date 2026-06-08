@@ -81,15 +81,33 @@ def generate_isolation_nonce(instance_id: str, arm: str, run_idx: int) -> str:
 
 # Built-in Claude tools blocked for onlycode / code_only arms.
 # Canonical single source of truth — imported by run.py and artifact_run.py.
+#
+# This is the full known built-in surface of the ``claude`` binary. It also
+# seeds the *baseline* disallow list (everything here minus CODING_ALLOWLIST),
+# so any agentic-orchestration tool added to the binary must be mirrored here
+# to keep both arms reproducible across binary versions. ``Task`` (the subagent
+# spawner — distinct from the legacy ``Agent`` alias), ``Workflow`` and
+# ``ScheduleWakeup`` were observed in the binary's default surface (2026-06-06,
+# issue #334) but missing from this list; the onlycode allowlist masked the gap,
+# the unrestricted baseline did not.
 BLOCKED_BUILTINS = (
     "Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,"
     "Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,"
     "Glob,Grep,ListMcpResourcesTool,LSP,Monitor,NotebookEdit,"
     "PowerShell,PushNotification,Read,ReadMcpResourceTool,"
-    "RemoteTrigger,SendMessage,Skill,"
-    "TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
-    "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,Write"
+    "RemoteTrigger,ScheduleWakeup,SendMessage,Skill,"
+    "Task,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,"
+    "TeamCreate,TeamDelete,TodoWrite,ToolSearch,WebFetch,WebSearch,"
+    "Workflow,Write"
 )
+
+# Canonical "native file-system coding" tool surface for the baseline /
+# tool_rich arms. The baseline is pinned to exactly this allowlist (and
+# everything else in BLOCKED_BUILTINS is disallowed) so it is an apples-to-apples
+# "native tools vs code-only" contrast: no subagents (Task), no automation
+# (Cron*, Workflow, ScheduleWakeup, Monitor, RemoteTrigger), no web access —
+# but with Glob/Grep restored (the binary default omits them). See issue #334.
+CODING_ALLOWLIST = "Bash,Edit,Glob,Grep,Read,Write"
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +227,16 @@ class ClaudeRunner(AgentRunner):
 
     def build_tools_flags(self, arm: str, mcp_config_path: str | None) -> list[str]:
         if arm in ("tool_rich", "baseline"):
-            return []
+            # Pin to the canonical coding allowlist instead of inheriting the
+            # binary's full default surface (which includes subagents and
+            # automation tools, and omits Glob/Grep). #334. ``--tools`` acts as
+            # a true allowlist for this binary; the explicit ``--disallowedTools``
+            # is defense-in-depth against allowlist-semantics drift.
+            allow = set(CODING_ALLOWLIST.split(","))
+            blocked = ",".join(
+                t for t in BLOCKED_BUILTINS.split(",") if t.strip() not in allow
+            )
+            return ["--tools", CODING_ALLOWLIST, "--disallowedTools", blocked]
         if arm in ("code_only", "onlycode"):
             flags: list[str] = []
             if mcp_config_path:

@@ -12,6 +12,7 @@ import tomllib
 
 from swebench.runner import (
     BLOCKED_BUILTINS,
+    CODING_ALLOWLIST,
     ClaudeRunner,
     CodexRunner,
     _toml_str,
@@ -108,12 +109,41 @@ def test_harness_generate_mcp_config_missing_file_returns_input():
 # ClaudeRunner — build_tools_flags
 # ---------------------------------------------------------------------------
 
-def test_claude_tools_flags_baseline():
-    assert ClaudeRunner().build_tools_flags("baseline", None) == []
+def _baseline_disallowed(arm: str) -> str:
+    flags = ClaudeRunner().build_tools_flags(arm, None)
+    return flags[flags.index("--disallowedTools") + 1]
 
 
-def test_claude_tools_flags_tool_rich():
-    assert ClaudeRunner().build_tools_flags("tool_rich", None) == []
+@pytest.mark.parametrize("arm", ["baseline", "tool_rich"])
+def test_claude_tools_flags_baseline_pinned_to_coding_allowlist(arm):
+    """baseline/tool_rich is pinned to the canonical coding allowlist (#334),
+    not the binary's full default surface."""
+    flags = ClaudeRunner().build_tools_flags(arm, None)
+    assert flags[flags.index("--tools") + 1] == CODING_ALLOWLIST
+    allowed = set(CODING_ALLOWLIST.split(","))
+    # Canonical coding tools present, incl. Glob/Grep (binary default omits them).
+    assert {"Bash", "Edit", "Read", "Write", "Glob", "Grep"} <= allowed
+
+
+@pytest.mark.parametrize("arm", ["baseline", "tool_rich"])
+def test_claude_tools_flags_baseline_excludes_orchestration(arm):
+    """Subagents and automation tools must be disallowed for the baseline so it
+    is an apples-to-apples contrast with the code-only arm (#334)."""
+    disallowed = _baseline_disallowed(arm)
+    for tool in ("Task", "Agent", "Workflow", "ScheduleWakeup",
+                 "CronCreate", "Monitor", "RemoteTrigger", "WebFetch", "WebSearch"):
+        assert tool in disallowed, f"{tool} must be disallowed for {arm}"
+    # Allowlisted coding tools must NOT also appear in the disallow list.
+    for tool in CODING_ALLOWLIST.split(","):
+        assert tool not in disallowed.split(","), f"{tool} wrongly disallowed for {arm}"
+
+
+def test_blocked_builtins_covers_orchestration_surface():
+    """Regression for the #334 gap: BLOCKED_BUILTINS must enumerate the
+    agentic-orchestration tools observed in the binary's default surface."""
+    builtins = set(BLOCKED_BUILTINS.split(","))
+    for tool in ("Task", "Workflow", "ScheduleWakeup"):
+        assert tool in builtins, f"{tool} missing from BLOCKED_BUILTINS"
 
 
 def test_claude_tools_flags_onlycode_with_mcp():
