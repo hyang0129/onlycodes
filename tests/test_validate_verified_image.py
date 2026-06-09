@@ -32,7 +32,7 @@ def args(tmp_path):
     return argparse.Namespace(
         set="swe/swebench-verified", from_file=None, ids=None, limit=0,
         buildable_out=str(tmp_path / "buildable.txt"),
-        out_dir=str(tmp_path / "out"), cap_gb=None, timeout=60, fresh=False,
+        out_dir=str(tmp_path / "out"), timeout=60, fresh=False,
     )
 
 
@@ -49,7 +49,7 @@ def _patch_common(monkeypatch, *, gold, grades):
                         lambda repo, ver: {"test_cmd": "pytest -q"})
     monkeypatch.setattr(vvi.specs, "eval_env", lambda spec: {})
     monkeypatch.setattr(vvi.image_store, "ensure_image",
-                        lambda iid, cap_gb=None: {"digest": f"sha256:{iid}", "pruned": []})
+                        lambda iid: {"digest": f"sha256:{iid}", "pruned": []})
     monkeypatch.setattr(vvi.container, "prepare_instance", lambda iid, **kw: object())
     monkeypatch.setattr(vvi.container, "start_arm_container", lambda prepared: object())
     monkeypatch.setattr(vvi.container, "teardown", lambda h: None)
@@ -133,7 +133,7 @@ def test_rate_limit_pull_is_retried_not_marked_error(monkeypatch, args):
     monkeypatch.setattr(vvi.time, "sleep", lambda s: None)
     calls = {"n": 0}
 
-    def flaky_ensure(iid, cap_gb=None):
+    def flaky_ensure(iid):
         calls["n"] += 1
         if calls["n"] == 1:
             raise ContainerError("pull foo failed: toomanyrequests: rate limited")
@@ -144,6 +144,30 @@ def test_rate_limit_pull_is_retried_not_marked_error(monkeypatch, args):
     res = json.loads((Path(args.out_dir) / "results.json").read_text())
     assert res["rows"][0]["status"] == "buildable"
     assert calls["n"] == 2  # first call rate-limited, retried, second succeeded
+
+
+def test_disk_full_halts_sweep_not_marked_error(monkeypatch, args):
+    """DiskFullError (reuse-forever store full) must STOP the sweep, not record a
+    per-instance 'error' — already-gated rows are checkpointed for resume."""
+    problems = [_problem("psf__requests-1"), _problem("psf__requests-2")]
+    monkeypatch.setattr(vvi, "_load_problems", lambda ids, d: (problems, []))
+    args.ids = "psf__requests-1,psf__requests-2"
+    _patch_common(monkeypatch,
+                  gold={"psf__requests-1": "P", "psf__requests-2": "P"},
+                  grades={"psf__requests-1": {"resolution": "RESOLVED_FULL"}})
+
+    def ensure(iid):
+        if iid == "psf__requests-2":
+            raise vvi.image_store.DiskFullError("out of disk; add disk and resume")
+        return {"digest": f"sha256:{iid}", "pruned": []}
+    monkeypatch.setattr(vvi.image_store, "ensure_image", ensure)
+
+    with pytest.raises(SystemExit):
+        vvi.run(args)
+    res = json.loads((Path(args.out_dir) / "results.json").read_text())
+    statuses = {r["instance_id"]: r["status"] for r in res["rows"]}
+    assert statuses["psf__requests-1"] == "buildable"  # first instance checkpointed
+    assert "psf__requests-2" not in statuses           # halted, not marked error
 
 
 def test_is_rate_limit_error():

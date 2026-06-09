@@ -68,13 +68,13 @@ def test_image_disk_gb_parses_df(monkeypatch) -> None:
     assert round(ims.image_disk_gb(), 1) == 293.0
 
 
-def test_image_cap_gb_env(monkeypatch) -> None:
-    monkeypatch.delenv("ONLYCODES_IMAGE_CAP_GB", raising=False)
-    assert ims.image_cap_gb() == ims.DEFAULT_IMAGE_CAP_GB
-    monkeypatch.setenv("ONLYCODES_IMAGE_CAP_GB", "42.5")
-    assert ims.image_cap_gb() == 42.5
-    monkeypatch.setenv("ONLYCODES_IMAGE_CAP_GB", "nonsense")
-    assert ims.image_cap_gb() == ims.DEFAULT_IMAGE_CAP_GB
+def test_min_free_gb_env(monkeypatch) -> None:
+    monkeypatch.delenv("ONLYCODES_MIN_FREE_GB", raising=False)
+    assert ims.min_free_gb() == ims.DEFAULT_MIN_FREE_GB
+    monkeypatch.setenv("ONLYCODES_MIN_FREE_GB", "42.5")
+    assert ims.min_free_gb() == 42.5
+    monkeypatch.setenv("ONLYCODES_MIN_FREE_GB", "nonsense")
+    assert ims.min_free_gb() == ims.DEFAULT_MIN_FREE_GB
 
 
 def test_group_by_repo_version_clusters_same_repo() -> None:
@@ -143,73 +143,46 @@ def test_pull_pinned_uses_manifest_digest_and_skips_present(monkeypatch) -> None
 
 
 # --------------------------------------------------------------------------
-# Prune (LRU + protect)
+# Disk-full stop signal (no eviction — reuse forever)
 # --------------------------------------------------------------------------
 
-def test_prune_to_cap_evicts_lru_and_protects(monkeypatch) -> None:
-    # Three distinct instances; c is oldest-used but protected, a is next LRU.
-    monkeypatch.setattr(ims, "_our_images", lambda: [
-        ("swebench/sweb.eval.x86_64.a_1776_a-1:latest", "id1"),   # instance a__a-1, usage 100
-        ("swebench/sweb.eval.x86_64.b_1776_b-2:latest", "id2"),   # instance b__b-2, usage 999 (recent)
-        ("onlycodes/prepared:c__c-3", "id3"),                     # instance c__c-3, usage 50 (protected)
-    ])
-    monkeypatch.setattr(ims, "_load_usage",
-                        lambda: {"a__a-1": 100.0, "b__b-2": 999.0, "c__c-3": 50.0})
-    # over cap through the protected-skip + the a eviction, then under.
-    sizes = iter([150.0, 150.0, 150.0, 50.0, 50.0])
-    monkeypatch.setattr(ims, "image_disk_gb", lambda: next(sizes))
-    removed = []
-    def _fake(args, **kw):
-        if args[:2] == ["rmi", "-f"]:
-            removed.append(args[2])
-        return _proc(0)
-    monkeypatch.setattr(container, "_docker", _fake)
-
-    res = ims.prune_to_cap(100.0, protect=("c__c-3",))
-    # c is the most-LRU but protected; a (next LRU) is evicted; b (recent) untouched.
-    assert "swebench/sweb.eval.x86_64.a_1776_a-1:latest" in res["removed"]
-    assert "onlycodes/prepared:c__c-3" not in res["removed"]
-    assert "swebench/sweb.eval.x86_64.b_1776_b-2:latest" not in res["removed"]
-
-
-def test_prune_to_cap_noop_when_under_cap(monkeypatch) -> None:
-    monkeypatch.setattr(container, "_docker", lambda a, **k: _proc(0))
-    monkeypatch.setattr(ims, "image_disk_gb", lambda: 10.0)
-    res = ims.prune_to_cap(100.0)
-    assert res["removed"] == []
+def test_pull_with_backoff_raises_diskfull_on_no_space(monkeypatch) -> None:
+    monkeypatch.setattr(
+        container, "_docker",
+        lambda a, **k: _proc(1, b"", b"write /var/lib/docker/...: no space left on device"))
+    with pytest.raises(ims.DiskFullError):
+        ims._pull_with_backoff("repo@sha256:x", retries=2, timeout=1, _sleep=lambda s: None)
 
 
 # --------------------------------------------------------------------------
-# ensure_image orchestration
+# ensure_image — pull + keep, stop when disk is low
 # --------------------------------------------------------------------------
 
-def test_ensure_image_stamps_prunes_and_pulls(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("SWEBENCH_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(ims, "image_disk_gb", lambda: 999.0)  # over cap
-    pruned = {"called": False}
-    def _fake_prune(cap, *, protect=(), _now=None):
-        pruned["called"] = True
-        pruned["protect"] = protect
-        return {"removed": ["x"], "disk_gb_after": 10.0}
-    monkeypatch.setattr(ims, "prune_to_cap", _fake_prune)
+def test_ensure_image_pulls_and_keeps(monkeypatch) -> None:
+    # Plenty of free disk -> pull, never evict.
+    monkeypatch.setattr(ims, "free_disk_gb", lambda: 500.0)
     monkeypatch.setattr(ims, "pull_pinned",
                         lambda iid: {"instance_id": iid, "ref": "r", "digest": _DIGEST})
-    info = ims.ensure_image("psf__requests-1142", cap_gb=150.0, _now=1234.0)
-    assert pruned["called"] and pruned["protect"] == ("psf__requests-1142",)
-    assert info["pruned"] == ["x"] and info["digest"] == _DIGEST
-    # usage was stamped for the instance.
-    assert ims._load_usage().get("psf__requests-1142") == 1234.0
+    info = ims.ensure_image("psf__requests-1142")
+    assert info["digest"] == _DIGEST
 
 
-def test_ensure_image_skips_prune_under_cap(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("SWEBENCH_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(ims, "image_disk_gb", lambda: 10.0)  # under cap
-    monkeypatch.setattr(ims, "prune_to_cap",
-                        lambda *a, **k: pytest.fail("should not prune under cap"))
+def test_ensure_image_raises_when_disk_low(monkeypatch) -> None:
+    # Below the safety margin -> stop and ask for disk, do not pull.
+    monkeypatch.setattr(ims, "free_disk_gb", lambda: 2.0)
+    monkeypatch.setattr(ims, "min_free_gb", lambda: 15.0)
+    monkeypatch.setattr(ims, "pull_pinned",
+                        lambda iid: pytest.fail("should not pull when disk is low"))
+    with pytest.raises(ims.DiskFullError):
+        ims.ensure_image("psf__requests-1142")
+
+
+def test_ensure_image_pulls_when_free_disk_unknown(monkeypatch) -> None:
+    # free_disk_gb() == None (can't measure) -> don't block; rely on pull-failure.
+    monkeypatch.setattr(ims, "free_disk_gb", lambda: None)
     monkeypatch.setattr(ims, "pull_pinned",
                         lambda iid: {"instance_id": iid, "ref": "r", "digest": _DIGEST})
-    info = ims.ensure_image("psf__requests-1142", cap_gb=150.0, _now=1.0)
-    assert info["pruned"] == []
+    assert ims.ensure_image("psf__requests-1142")["digest"] == _DIGEST
 
 
 # --------------------------------------------------------------------------

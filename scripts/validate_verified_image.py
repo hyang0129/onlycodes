@@ -26,10 +26,11 @@ Verified split.
 
 Auth (full pool): set ``ONLYCODES_DOCKERHUB_TOKEN`` (+ optional
 ``ONLYCODES_DOCKERHUB_USER``) first — anonymous Docker Hub throttles after ~150
-pulls. Disk: pulls are LRU-capped (``--cap-gb``) so the ~1 TB set never lands at
-once. Continue-on-error: one bad instance never aborts the pass — the report is
-the deliverable, and the shortfall (total - buildable) is logged, never silently
-truncated.
+pulls. Disk: images are pulled once and **kept for reuse** (no eviction — see
+``image_store``); if the docker store fills, the sweep stops and asks for more
+disk (resume reuses everything already pulled). Continue-on-error: one bad
+instance never aborts the pass — the report is the deliverable, and the
+shortfall (total - buildable) is logged, never silently truncated.
 """
 
 from __future__ import annotations
@@ -195,13 +196,16 @@ def _is_rate_limit_error(exc: Exception) -> bool:
 # Per-instance gate
 # --------------------------------------------------------------------------
 
-def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | None,
+def _gate_one(problem: Problem, *, gold_patch: str, root: Path,
               timeout: float) -> dict:
     """Pull -> prepare -> gold gate -> grade one instance. Returns a result row.
 
     ``status`` is one of: ``buildable`` (RESOLVED_FULL), ``not_resolved`` (image
     ran but gold did not flip cleanly -> fidelity drift), or ``error`` (pull /
-    prepare / apply / eval blew up). Never raises: the caller keeps going.
+    prepare / apply / eval blew up). Never raises *except* on
+    :class:`image_store.DiskFullError`, which propagates so the sweep halts and
+    asks for more disk (images are kept for reuse — resume picks up where it
+    stopped).
     """
     iid = problem.instance_id
     row: dict = {"instance_id": iid, "repo": problem.repo_slug, "version": problem.version,
@@ -220,7 +224,7 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | 
         while True:
             _await_pull_budget()
             try:
-                info = image_store.ensure_image(iid, cap_gb=cap_gb)
+                info = image_store.ensure_image(iid)
                 break
             except Exception as exc:
                 if _is_rate_limit_error(exc):
@@ -249,6 +253,8 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | 
             row["reason"] = "gold patch did not yield RESOLVED_FULL (fidelity drift)"
             row["grade"] = {k: grade.get(k) for k in
                             ("FAIL_TO_PASS", "PASS_TO_PASS", "FAIL_TO_FAIL", "PASS_TO_FAIL")}
+    except image_store.DiskFullError:
+        raise  # halt the sweep — add disk and resume; not a per-instance error
     except Exception as exc:  # continue-on-error: the report is the deliverable
         row["reason"] = f"{type(exc).__name__}: {exc}"
         log.warning("%s: %s", iid, row["reason"])
@@ -344,8 +350,17 @@ def run(args: argparse.Namespace) -> int:
         else:
             log.info("[%d/%d] %s (%s@%s)", n, len(problems), iid,
                      problem.repo_slug, problem.version)
-            rows.append(_gate_one(problem, gold_patch=gold[iid], root=root,
-                                  cap_gb=args.cap_gb, timeout=args.timeout))
+            try:
+                rows.append(_gate_one(problem, gold_patch=gold[iid], root=root,
+                                      timeout=args.timeout))
+            except image_store.DiskFullError as exc:
+                # Reuse-forever store is full: stop loudly, keep what's pulled.
+                _write_outputs(rows, out_dir, args, total_requested=len(ids))
+                log.error("STOPPED at [%d/%d] — out of disk: %s", n, len(problems), exc)
+                log.error("Gated %d/%d so far (all images kept for reuse). Free up or "
+                          "expand the docker disk, then re-run the same command to resume.",
+                          len(rows), len(problems))
+                raise SystemExit(2)
         _write_outputs(rows, out_dir, args, total_requested=len(ids))  # checkpoint each step
 
     _write_outputs(rows, out_dir, args, total_requested=len(ids))
@@ -415,8 +430,6 @@ def main() -> int:
     ap.add_argument("--buildable-out", default="sets/verified-buildable.txt",
                     help="committed buildable id-list (default: sets/verified-buildable.txt)")
     ap.add_argument("--out-dir", help="report dir (default: runs/validation/...<ts>)")
-    ap.add_argument("--cap-gb", type=float, default=None,
-                    help="image disk cap in GB (default: image_store.image_cap_gb())")
     ap.add_argument("--timeout", type=float, default=1800, help="per-instance eval timeout (s)")
     ap.add_argument("--fresh", action="store_true",
                     help="ignore a prior run's results.json in --out-dir (default: resume)")

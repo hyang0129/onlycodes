@@ -197,7 +197,6 @@ def run_image_arms(
     agent_binary: str,
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
-    cap_gb: float | None = None,
     wall_timeout: int = 1800,
     echo=print,
 ) -> list[tuple[str, str, str]]:
@@ -226,7 +225,7 @@ def run_image_arms(
             continue
 
         echo(f"--- Instance: {problem.instance_id} ({problem.repo_slug}@{problem.version}) ---")
-        digest_info = image_store.ensure_image(problem.instance_id, cap_gb=cap_gb)
+        digest_info = image_store.ensure_image(problem.instance_id)
         prepared = container.prepare_instance(
             problem.instance_id, post_strip_exec=container_agent.agent_user_setup_commands())
         gi = _grading_instance(problem, _read_test_patch(problem, root))
