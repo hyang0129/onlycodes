@@ -50,7 +50,7 @@ def _patch_common(monkeypatch, *, gold, grades):
     monkeypatch.setattr(vvi.specs, "eval_env", lambda spec: {})
     monkeypatch.setattr(vvi.image_store, "ensure_image",
                         lambda iid, cap_gb=None: {"digest": f"sha256:{iid}", "pruned": []})
-    monkeypatch.setattr(vvi.container, "prepare_instance", lambda iid: object())
+    monkeypatch.setattr(vvi.container, "prepare_instance", lambda iid, **kw: object())
     monkeypatch.setattr(vvi.container, "start_arm_container", lambda prepared: object())
     monkeypatch.setattr(vvi.container, "teardown", lambda h: None)
 

@@ -49,7 +49,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from swebench import container, container_test, image_store, official_grade, specs  # noqa: E402
+from swebench import (  # noqa: E402
+    container, container_agent, container_test, image_store, official_grade, specs,
+)
 from swebench.image_run import _grading_instance, _read_test_patch  # noqa: E402
 from swebench.models import Problem  # noqa: E402
 
@@ -227,7 +229,12 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path, cap_gb: float | 
                     continue
                 raise
         row["digest"], row["pruned"] = info.get("digest"), info.get("pruned", [])
-        prepared = container.prepare_instance(iid)
+        # Create the non-root `agent` user + chown /testbed into the snapshot,
+        # exactly as image_run.run_image_arms does. gold_patch_gate applies/evals
+        # as AGENT_USER; without this the snapshot has no such user and every
+        # apply fails with "unable to find user agent" (false-negative errors).
+        prepared = container.prepare_instance(
+            iid, post_strip_exec=container_agent.agent_user_setup_commands())
         handle = container.start_arm_container(prepared)
         log_dest = os.path.join(tempfile.mkdtemp(prefix="goldgate-"), "eval.txt")
         grade = container_test.gold_patch_gate(
