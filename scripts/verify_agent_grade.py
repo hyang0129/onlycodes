@@ -23,11 +23,12 @@ images reused (no pull). See docs/E2E_VERIFICATION_PLAN.md.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import logging
 import os
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import sys
@@ -130,6 +131,11 @@ def main():
     ap.add_argument("--out-dir", default="runs/validation/agent-grade-t0")
     ap.add_argument("--timeout", type=float, default=1800)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--parallel", type=int, default=1,
+                    help="instances to grade concurrently (default 1 = serial). "
+                         "Instances are independent; one thread per instance. On a "
+                         "SHARED host keep N small (~2-3): evals are CPU/RAM-heavy "
+                         "and oversubscription starves co-tenants (#349).")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -161,14 +167,48 @@ def main():
     log.info("Tier 0 (%s): %d instances -> %s (%d already done)",
              args.mode, len(problems), out, len(done))
 
-    rows = list(prior)  # carry over so resume doesn't drop earlier verdicts
-    for n, p in enumerate(problems, 1):
-        if p.instance_id in done:
-            continue
-        log.info("[%d/%d] %s (%s)", n, len(problems), p.instance_id, args.mode)
-        rows.append(_grade_one(p, mode=args.mode, gold_patch=gold.get(p.instance_id, ""),
-                               timeout=args.timeout))
-        _write(rows, out, args.mode)
+    rows = list(prior)            # carry over so resume doesn't drop earlier verdicts
+    todo = [p for p in problems if p.instance_id not in done]
+    n_par = max(1, args.parallel)
+    if n_par > 1:
+        log.info("Parallel: %d workers (one instance each; prepare/eval are "
+                 "per-instance so partitioning avoids the prepare race)", n_par)
+    lock = threading.Lock()       # guards rows + the results-file write
+    stop = threading.Event()      # set on DiskFullError -> drain, submit no more
+    prog = {"n": len(done)}
+
+    def _do(p):
+        """Grade one instance and checkpoint under the lock. Thread-safe because
+        instances are disjoint (own image/container) — only the results write is
+        shared. Returns True unless skipped due to a disk-full stop."""
+        if stop.is_set():
+            return False
+        try:
+            row = _grade_one(p, mode=args.mode, gold_patch=gold.get(p.instance_id, ""),
+                             timeout=args.timeout)
+        except image_store.DiskFullError as e:
+            stop.set()
+            log.error("DiskFull — stopping new work: %s", e)
+            return False
+        with lock:
+            rows.append(row)
+            prog["n"] += 1
+            _write(rows, out, args.mode)
+            log.info("[%d/%d] %s (%s) -> %s", prog["n"], len(problems),
+                     p.instance_id, args.mode, row.get("verdict") or row["status"])
+        return True
+
+    if n_par == 1:
+        for p in todo:
+            if stop.is_set():
+                break
+            _do(p)
+    else:
+        with ThreadPoolExecutor(max_workers=n_par) as ex:
+            futures = [ex.submit(_do, p) for p in todo]
+            for f in as_completed(futures):
+                f.result()        # surface unexpected (non-DiskFull) failures
+
     _write(rows, out, args.mode)
     from collections import Counter
     c = Counter(r["verdict"] for r in rows if r.get("verdict"))
