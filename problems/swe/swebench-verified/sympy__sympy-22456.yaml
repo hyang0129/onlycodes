@@ -1,0 +1,42 @@
+instance_id: sympy__sympy-22456
+repo: sympy/sympy
+base_commit: a3475b3f9ac662cd425157dd3bdb93ad7111c090
+test_cmd: python -m pytest test_String
+patch_file: patches/sympy__sympy-22456_tests.patch
+problem_statement: "Argument invariance of codegen.ast String\nCurrently, the `codegen.ast` `String` class does not support argument invariance like:\r\n`expr.func(*expr.args) == expr`, but instead uses the invariance `expr.func(**expr.kwargs()) == expr`.\r\nThe former should hold for any `Basic` subclass, which `String` is.\n"
+added_at: '2026-06-08'
+hf_split: test
+version: '1.10'
+environment_setup_commit: fd40404e72921b9e52a5f9582246e4a6cd96c431
+fail_to_pass:
+- test_String
+pass_to_pass:
+- test_Assignment
+- test_AugAssign
+- test_Assignment_printing
+- test_CodeBlock
+- test_CodeBlock_topological_sort
+- test_CodeBlock_free_symbols
+- test_CodeBlock_cse
+- test_CodeBlock_cse__issue_14118
+- test_For
+- test_none
+- test_Comment
+- test_Node
+- test_Type
+- test_Type__from_expr
+- test_Type__cast_check__integers
+- test_Attribute
+- test_Variable
+- test_Pointer
+- test_Declaration
+- test_IntBaseType
+- test_FloatType
+- test_Type__cast_check__floating_point
+- test_Type__cast_check__complex_floating_point
+- test_While
+- test_Scope
+- test_Print
+- test_FunctionPrototype_and_FunctionDefinition
+- test_Return
+- test_FunctionCall

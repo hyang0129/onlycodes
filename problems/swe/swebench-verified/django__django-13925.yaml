@@ -1,0 +1,38 @@
+instance_id: django__django-13925
+repo: django/django
+base_commit: 0c42cdf0d2422f4c080e93594d5d15381d6e955e
+test_cmd: python tests/runtests.py check_framework.test_model_checks.ModelDefaultAutoFieldTests.test_auto_created_inherited_pk check_framework.test_model_checks.ModelDefaultAutoFieldTests.test_explicit_inherited_pk --parallel=1
+patch_file: patches/django__django-13925_tests.patch
+problem_statement: "models.W042 is raised on inherited manually specified primary key.\nDescription\n\t\nI have models which inherit from other models, and they should inherit the primary key. This works fine with Django 3.1. However, if I install Django 3.2 alpha, when I run make_migrations I get the following error messages:\nSystem check identified some issues:\nWARNINGS:\naccounts.ReservedUsername: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the SpeedyCoreAccountsConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\naccounts.User: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the SpeedyCoreAccountsConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nblocks.Block: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\ncontact_by_form.Feedback: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the SpeedyCoreContactByFormConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\ncore_messages.ReadMark: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the SpeedyCoreMessagesConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nfriendship.Block: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nfriendship.Follow: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nfriendship.Friend: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nfriendship.FriendshipRequest: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nlikes.UserLike: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nuploads.Image: (models.W042) Auto-created primary key used when not defining a primary key type, by default 'django.db.models.AutoField'.\n\t\tHINT: Configure the DEFAULT_AUTO_FIELD setting or the AppConfig.default_auto_field attribute to point to a subclass of AutoField, e.g. 'django.db.models.BigAutoField'.\nThese models should not use auto-created primary keys! I already defined the primary key in the ancestor of the model. For example class Entity which class User inherits from. It looks to me like a bug in Django 3.2 alpha.\n"
+added_at: '2026-06-08'
+hf_split: test
+version: '4.0'
+environment_setup_commit: 475cffd1d64c690cdad16ede4d5e81985738ceb4
+fail_to_pass:
+- test_auto_created_inherited_pk (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_explicit_inherited_pk (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+pass_to_pass:
+- test_app_default_auto_field (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_auto_created_inherited_parent_link (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_auto_created_pk (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_default_auto_field_setting (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_explicit_inherited_parent_link (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_explicit_pk (check_framework.test_model_checks.ModelDefaultAutoFieldTests)
+- test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests)
+- test_collision_across_apps (check_framework.test_model_checks.IndexNameTests)
+- test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests)
+- test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests)
+- test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests)
+- test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests)
+- test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests)
+- test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests)
+- test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests)
+- test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests)
+- test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests)
+- test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests)
+- test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests)
+- test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests)
+- test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests)
+- test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests)
+- test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests)
+- test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests)

@@ -818,6 +818,23 @@ def _cleanup_stale_overlays(
                 break
 
 
+# Sets kept on disk but excluded from `swebench run` discovery. swebench-verified-mini's
+# 50 ids are a strict subset of the Verified-500 spine (problems/swe/swebench-verified/)
+# with identical instance_ids; since discovery globs by id, leaving mini in scope would
+# double-run those 50 per arm/seed and corrupt the spine denominator + cost (#299). It is
+# DEPRECATED FROM THE SPINE, NOT DELETED — the files stay for KDD-workshop reproducibility
+# (the submitted workshop paper predates the 500 spine). To run a deprecated set on purpose,
+# point `--filter @<ids>` at its ids (the canonical copy is matched too).
+DEPRECATED_PROBLEM_SETS = {"swebench-verified-mini"}
+
+
+def _discover_problem_yamls(problems_dir: Path) -> list[Path]:
+    """All ``*.yaml`` under ``problems_dir``, minus any path component naming a
+    set in :data:`DEPRECATED_PROBLEM_SETS`. Sorted for deterministic ordering."""
+    return [f for f in sorted(problems_dir.rglob("*.yaml"))
+            if not (set(f.relative_to(problems_dir).parts) & DEPRECATED_PROBLEM_SETS)]
+
+
 def _parse_filter_ids(filter_spec: str) -> set[str]:
     """Resolve a ``--filter`` value into a set of instance IDs.
 
@@ -1108,8 +1125,14 @@ def run_command(
         raise SystemExit(1)
 
     # Load problems (recurse into subfolders so curated sets in e.g.
-    # problems/swe/swebench-verified-mini/ and problems/swe/adhoc/ are all picked up).
-    yaml_files = sorted(problems_dir.rglob("*.yaml"))
+    # problems/swe/adhoc/ are picked up), EXCLUDING deprecated sets (see
+    # _discover_problem_yamls / DEPRECATED_PROBLEM_SETS).
+    yaml_files = _discover_problem_yamls(problems_dir)
+    n_excluded = len(sorted(problems_dir.rglob("*.yaml"))) - len(yaml_files)
+    if n_excluded:
+        click.echo(f"NOTE: excluding {n_excluded} YAML(s) in deprecated set(s) "
+                   f"{sorted(DEPRECATED_PROBLEM_SETS)} from the run "
+                   "(subset of the Verified-500 spine; kept on disk, not run).", err=True)
     if not yaml_files:
         click.echo("ERROR: No problem files found in problems/swe/. Run 'python -m swebench add' first.", err=True)
         raise SystemExit(1)

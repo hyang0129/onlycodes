@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from swebench.run import _is_triple_complete, _parse_filter_ids, run_command
+from swebench.run import (
+    DEPRECATED_PROBLEM_SETS,
+    _discover_problem_yamls,
+    _is_triple_complete,
+    _parse_filter_ids,
+    run_command,
+)
 
 
 INSTANCE = "django__django-16379"
@@ -26,6 +32,35 @@ def _paths(tmp_path):
     jsonl = tmp_path / f"{INSTANCE}_{ARM}_run{RUN_IDX}.jsonl"
     test_txt = tmp_path / f"{INSTANCE}_{ARM}_run{RUN_IDX}_test.txt"
     return jsonl, test_txt
+
+
+# --- problem discovery excludes deprecated sets (#308: mini ⊂ spine) --------
+
+
+def test_discover_excludes_deprecated_mini_set(tmp_path):
+    """swebench-verified-mini ids duplicate the spine; discovery must skip them."""
+    swe = tmp_path
+    (swe / "swebench-verified").mkdir(parents=True)
+    (swe / "swebench-verified" / "django__django-10097.yaml").write_text("x: 1\n")
+    (swe / "adhoc").mkdir(parents=True)
+    (swe / "adhoc" / "one__off-1.yaml").write_text("x: 1\n")
+    # mini holds a DUPLICATE of a spine id — the double-run hazard.
+    (swe / "swebench-verified-mini").mkdir(parents=True)
+    (swe / "swebench-verified-mini" / "django__django-10097.yaml").write_text("x: 1\n")
+
+    found = {p.relative_to(swe).as_posix() for p in _discover_problem_yamls(swe)}
+    assert found == {
+        "swebench-verified/django__django-10097.yaml",
+        "adhoc/one__off-1.yaml",
+    }
+    assert "swebench-verified-mini" in DEPRECATED_PROBLEM_SETS
+
+
+def test_discover_keeps_everything_when_no_deprecated_dirs(tmp_path):
+    (tmp_path / "swebench-verified").mkdir(parents=True)
+    (tmp_path / "swebench-verified" / "a__b-1.yaml").write_text("x: 1\n")
+    found = _discover_problem_yamls(tmp_path)
+    assert [p.name for p in found] == ["a__b-1.yaml"]
 
 
 # --- runtime backend default (image-only, ADR-0004 / #314) ------------------

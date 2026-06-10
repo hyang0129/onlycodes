@@ -8,7 +8,7 @@ problem_statement: 'Add joblib in show_versions
   joblib should be added to the dependencies listed in show_versions or added to the issue template when sklearn version is > 0.20.
 
   '
-added_at: '2026-06-06'
+added_at: '2026-06-08'
 hf_split: test
 version: '0.22'
 environment_setup_commit: 7e85a6d1f038bbb932b36f18d75df6be937ed00d

@@ -12,11 +12,14 @@ present locally.  This module gets it there and keeps the disk bounded:
   (the documented scale-up; see the C3b ADR note).  Pulls retry on
   ``toomanyrequests`` with backoff.
 * **Disk** — measured marginal cost is ~4–6 GB per *same-repo* image (the conda
-  env layer is shared only within repo+version), so the full set is hundreds of
-  GB → ~1 TB and **can't be held at once**.  :func:`ensure_image` pulls on demand
-  and :func:`prune_to_cap` LRU-evicts to a cap (default 150 GB).  Pair with
-  :func:`group_by_repo_version` so a repo's shared layer is reused before it's
-  evicted.
+  env layer is shared only within repo+version).  **No eviction:** every image is
+  kept for reuse across the whole sweep, because re-pulling against the Docker
+  Hub rate limit (200/6 h) is the scarce resource, not disk — a rotating cache
+  would just convert abundant disk into scarce pulls.  :func:`ensure_image` pulls
+  on demand (skipping images already present) and, if the store runs out of
+  space, raises :class:`DiskFullError` so the caller **stops and asks for more
+  disk** rather than evicting; resume reuses everything already pulled.  Pair
+  with :func:`group_by_repo_version` so a repo's shared layer is pulled once.
 
 Shells out to the ``docker`` CLI (consistent with :mod:`swebench.container`).
 """
@@ -26,59 +29,36 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 
 from swebench import container
 from swebench.container import ContainerError, official_image_for
 
-#: Default on-disk cap for the image store. Tight on purpose (holds one–two
-#: repo-groups hot), forcing repo-grouped scheduling. Override with
-#: ``ONLYCODES_IMAGE_CAP_GB``.
-DEFAULT_IMAGE_CAP_GB = 150.0
+#: Stop and ask for more disk when free space on docker's backing store drops
+#: below this margin (GB). One eval image + its prepared snapshot is ~4–6 GB;
+#: keep headroom so a pull can't wedge the daemon by filling the disk mid-write.
+#: Override with ``ONLYCODES_MIN_FREE_GB``.
+DEFAULT_MIN_FREE_GB = 15.0
 
 _DIGEST_MANIFEST = Path(__file__).resolve().parent / "data" / "verified_image_digests.json"
 
 
-def image_cap_gb() -> float:
-    raw = os.environ.get("ONLYCODES_IMAGE_CAP_GB")
+class DiskFullError(ContainerError):
+    """Docker's image store is out of space (or under the safety margin).
+
+    Raised instead of evicting: the sweep keeps every image for reuse, so the
+    fix is to add disk and resume (already-pulled images are reused, no
+    re-pull). See the module docstring's *Disk* note."""
+
+
+def min_free_gb() -> float:
+    raw = os.environ.get("ONLYCODES_MIN_FREE_GB")
     try:
-        return float(raw) if raw else DEFAULT_IMAGE_CAP_GB
+        return float(raw) if raw else DEFAULT_MIN_FREE_GB
     except ValueError:
-        return DEFAULT_IMAGE_CAP_GB
-
-
-# --------------------------------------------------------------------------
-# Usage log (for LRU) — runtime cache, not committed
-# --------------------------------------------------------------------------
-
-def _usage_path() -> Path:
-    root = os.environ.get("SWEBENCH_CACHE_ROOT", "/workspaces/.swebench-cache")
-    return Path(root) / "image_usage.json"
-
-
-def _load_usage() -> dict[str, float]:
-    p = _usage_path()
-    if p.is_file():
-        try:
-            return json.loads(p.read_text())
-        except (OSError, json.JSONDecodeError):
-            return {}
-    return {}
-
-
-def _stamp_usage(instance_id: str, *, now: float) -> None:
-    # Best-effort: LRU usage tracking must never crash a run if the cache dir
-    # isn't writable (falls back to losing recency info, i.e. FIFO-ish prune).
-    try:
-        p = _usage_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        usage = _load_usage()
-        usage[instance_id] = now
-        p.write_text(json.dumps(usage))
-    except OSError as e:
-        logging.warning("image_store: could not record image usage (%s); "
-                        "LRU prune will lack recency info", e)
+        return DEFAULT_MIN_FREE_GB
 
 
 # --------------------------------------------------------------------------
@@ -199,7 +179,12 @@ def _pull_with_backoff(ref: str, *, retries: int, timeout: float | None,
         if proc.returncode == 0:
             return
         err = (proc.stderr or b"").decode("utf-8", "replace")
-        if "toomanyrequests" in err.lower() or "rate limit" in err.lower():
+        low = err.lower()
+        if "no space left on device" in low or "disk quota exceeded" in low:
+            raise DiskFullError(
+                f"pull {ref!r} failed: out of disk. Images are kept for reuse, "
+                f"not evicted — add disk and resume. ({err.strip()[:200]})")
+        if "toomanyrequests" in low or "rate limit" in low:
             if attempt < retries:
                 _sleep(delay)
                 delay *= 2
@@ -209,7 +194,7 @@ def _pull_with_backoff(ref: str, *, retries: int, timeout: float | None,
 
 
 # --------------------------------------------------------------------------
-# Disk accounting + prune (LRU)
+# Disk accounting (telemetry + the out-of-space stop signal)
 # --------------------------------------------------------------------------
 
 _SIZE_RE = re.compile(r"([0-9.]+)\s*([KMGT]?i?B)", re.IGNORECASE)
@@ -235,85 +220,48 @@ def image_disk_gb() -> float:
     return 0.0
 
 
-def _our_images() -> list[tuple[str, str]]:
-    """(repository, image_id) for swebench eval images + our prepared snapshots."""
-    proc = container._docker(
-        ["images", "--format", "{{.Repository}}|{{.ID}}", "--no-trunc"], check=False)
-    out = []
-    for line in container._decode(proc).splitlines():
-        repo, _, iid = line.partition("|")
-        if "sweb.eval" in repo or repo.startswith("onlycodes/prepared"):
-            out.append((repo, iid))
-    return out
+def free_disk_gb(path: str | None = None) -> float | None:
+    """Best-effort free space (GB) on the filesystem backing docker's image store.
 
+    Returns ``None`` if it can't be determined.  Default target is ``/`` (under
+    Docker Desktop the container's root overlay shares the daemon's backing VM
+    disk, so this tracks it roughly); override with ``ONLYCODES_DOCKER_ROOT``.
 
-def _instance_of_repo(repo: str) -> str | None:
-    if repo.startswith("onlycodes/prepared:"):
-        return repo.split(":", 1)[1]
-    m = re.search(r"sweb\.eval\.x86_64\.(.+)", repo)
-    if m:
-        return m.group(1).rsplit(":", 1)[0].replace(container._NAMESPACE_TOKEN, "__")
-    return None
-
-
-def prune_to_cap(cap_gb: float, *, protect: tuple[str, ...] = (), _now=None) -> dict:
-    """Evict images LRU until image disk is under ``cap_gb``.
-
-    Order: dangling images + stopped containers first (free reclaimable space —
-    the daemon routinely carries tens of GB here), then our images (prepared
-    snapshots and base eval images) by least-recently-used instance, skipping any
-    instance in ``protect``.  Returns ``{"removed": [...], "disk_gb_after": ...}``.
+    This is an **early-warning** signal only — under Docker Desktop the store
+    lives in a host-side VM disk the container can't always measure accurately.
+    The authoritative out-of-space signal is a failed pull (``no space left on
+    device``), handled in :func:`_pull_with_backoff`.
     """
-    removed: list[str] = []
-    # Cheap reclaim first: stopped containers + dangling images.
-    container._docker(["container", "prune", "-f"], check=False)
-    container._docker(["image", "prune", "-f"], check=False)
-    if image_disk_gb() <= cap_gb:
-        return {"removed": removed, "disk_gb_after": image_disk_gb()}
-
-    usage = _load_usage()
-    protect_set = set(protect)
-    # LRU order: oldest-used (or never-used = -inf) first.
-    images = _our_images()
-
-    def _key(item: tuple[str, str]) -> float:
-        inst = _instance_of_repo(item[0])
-        return usage.get(inst, float("-inf")) if inst else float("-inf")
-
-    for repo, _iid in sorted(images, key=_key):
-        if image_disk_gb() <= cap_gb:
-            break
-        inst = _instance_of_repo(repo)
-        if inst and inst in protect_set:
-            continue
-        if container._docker(["rmi", "-f", repo], check=False).returncode == 0:
-            removed.append(repo)
-    return {"removed": removed, "disk_gb_after": image_disk_gb()}
+    target = path or os.environ.get("ONLYCODES_DOCKER_ROOT") or "/"
+    try:
+        return shutil.disk_usage(target).free / 1e9
+    except OSError:
+        return None
 
 
 # --------------------------------------------------------------------------
 # Orchestration entry for the run loop
 # --------------------------------------------------------------------------
 
-def ensure_image(instance_id: str, *, cap_gb: float | None = None, _now=None) -> dict:
-    """Make the instance image present (pinned by digest), keeping disk under the
-    cap.  Stamps LRU usage, prunes if over cap (protecting this instance), then
-    pulls.  Returns :func:`pull_pinned`'s dict plus ``"pruned"``.
+def ensure_image(instance_id: str) -> dict:
+    """Make the instance image present locally (pinned by digest) and **keep it**.
+
+    No eviction: every image is retained for reuse across the whole sweep — see
+    the module docstring's *Disk* note.  :func:`pull_pinned` skips the pull when
+    the image is already present.  If docker's store is out of space (or under
+    the :func:`min_free_gb` safety margin), raises :class:`DiskFullError` so the
+    caller stops and asks for more disk; resume reuses everything already pulled.
 
     This is the single entry the image-runtime arm loop calls before
     :func:`container.prepare_instance`.
     """
-    cap = cap_gb if cap_gb is not None else image_cap_gb()
-    now = _now if _now is not None else time.time()
-    _stamp_usage(instance_id, now=now)
-
-    pruned: dict = {"removed": []}
-    if image_disk_gb() > cap:
-        pruned = prune_to_cap(cap, protect=(instance_id,), _now=now)
-
-    info = pull_pinned(instance_id)
-    info["pruned"] = pruned["removed"]
-    return info
+    free = free_disk_gb()
+    if free is not None and free < min_free_gb():
+        raise DiskFullError(
+            f"only {free:.1f} GB free on docker's store (< {min_free_gb():.0f} GB "
+            f"safety margin); images are kept for reuse, not evicted. "
+            f"Add disk and resume.")
+    return pull_pinned(instance_id)
 
 
 # --------------------------------------------------------------------------

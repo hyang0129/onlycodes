@@ -1,0 +1,37 @@
+instance_id: django__django-11141
+repo: django/django
+base_commit: 5d9cf79baf07fc4aed7ad1b06990532a65378155
+test_cmd: python tests/runtests.py Migration directories without an __init__.py file are loaded. --parallel=1
+patch_file: patches/django__django-11141_tests.patch
+problem_statement: "Allow migrations directories without __init__.py files\nDescription\n\t \n\t\t(last modified by Tim Graham)\n\t \nBackground: In python 3 a package with no __init__.py is implicitly a namespace package, so it has no __file__ attribute. \nThe migrate command currently checks for existence of a __file__ attribute on the migrations package. This check was introduced in #21015, because the __file__ attribute was used in migration file discovery. \nHowever, in #23406 migration file discovery was changed to use pkgutil.iter_modules (), instead of direct filesystem access. pkgutil. iter_modules() uses the package's __path__ list, which exists on implicit namespace packages.\nAs a result, the __file__ check is no longer needed, and in fact prevents migrate from working on namespace packages (implicit or otherwise). \nRelated work: #29091\n"
+added_at: '2026-06-08'
+hf_split: test
+version: '3.1'
+environment_setup_commit: 0668164b4ac93a5be79f5b87fae83c657124d9ab
+fail_to_pass:
+- Migration directories without an __init__.py file are loaded.
+pass_to_pass:
+- test_apply (migrations.test_loader.RecorderTests)
+- test_invalid (migrations.test_loader.PycLoaderTests)
+- test_valid (migrations.test_loader.PycLoaderTests)
+- test_check_consistent_history (migrations.test_loader.LoaderTests)
+- test_check_consistent_history_squashed (migrations.test_loader.LoaderTests)
+- test_explicit_missing_module (migrations.test_loader.LoaderTests)
+- test_first (migrations.test_loader.LoaderTests)
+- Files prefixed with underscore, tilde, or dot aren't loaded.
+- test_load (migrations.test_loader.LoaderTests)
+- test_load_empty_dir (migrations.test_loader.LoaderTests)
+- test_load_import_error (migrations.test_loader.LoaderTests)
+- test_load_module_file (migrations.test_loader.LoaderTests)
+- test_load_unmigrated_dependency (migrations.test_loader.LoaderTests)
+- Tests loading a squashed migration
+- Tests loading a complex set of squashed migrations
+- test_loading_squashed_complex_multi_apps (migrations.test_loader.LoaderTests)
+- test_loading_squashed_complex_multi_apps_partially_applied (migrations.test_loader.LoaderTests)
+- Tests loading a complex but erroneous set of squashed migrations
+- Tests loading a squashed migration with a new migration referencing it
+- test_marked_as_migrated (migrations.test_loader.LoaderTests)
+- test_marked_as_unmigrated (migrations.test_loader.LoaderTests)
+- Tests prefix name matching
+- test_plan_handles_repeated_migrations (migrations.test_loader.LoaderTests)
+- test_run_before (migrations.test_loader.LoaderTests)

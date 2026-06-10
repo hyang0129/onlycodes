@@ -125,6 +125,37 @@ def build_eval_command(spec_test_cmd: str, test_ids: list[str]) -> str:
     return f"{spec_test_cmd} {ids}".strip()
 
 
+def _activate(testbed_env: str) -> str:
+    """Shell snippet that activates the testbed conda env (two ways, for image
+    layout drift)."""
+    return (f"source {testbed_env}/bin/activate 2>/dev/null || "
+            f"source /opt/miniconda3/bin/activate {testbed_env.rsplit('/', 1)[-1]}\n")
+
+
+def reinstall_in_container(
+    handle: ContainerHandle,
+    install_cmd: str,
+    *,
+    testbed_env: str = TESTBED_ENV,
+    timeout: float = 1800,
+) -> None:
+    """Run the spec's ``install`` step (e.g. ``pip install -e .[test]``) in the
+    testbed env, **as root**.
+
+    This is the official eval_script's install step, which we otherwise skip.
+    Skipping it diverges from a faithful SWE-bench eval: it regenerates package
+    metadata and installs declared deps that may be missing from the published
+    image (e.g. pylint's ``appdirs``) — without it the gold patch can fail to
+    resolve a faithfully-resolvable instance (#308). Run as root because it
+    writes to the root-owned conda ``site-packages``; failures are non-fatal
+    (the eval that follows surfaces any real breakage)."""
+    script = f"{_activate(testbed_env)}cd /testbed\n{install_cmd}\n"
+    container._docker(
+        ["exec", "-i", handle.container_id, "bash", "-ls"],   # default user = root
+        check=False, timeout=timeout, input_bytes=script.encode(),
+    )
+
+
 def run_eval_in_container(
     handle: ContainerHandle,
     *,
@@ -134,21 +165,25 @@ def run_eval_in_container(
     log_dest: str,
     testbed_env: str = TESTBED_ENV,
     timeout: float = 1800,
+    install_cmd: str | None = None,
 ) -> str:
     """Run the eval command in the testbed conda env, capturing the combined log
     to the host file ``log_dest`` (returns the log text).
 
     Runs as the agent user, cwd ``/testbed``, with the testbed env activated and
-    the spec's ``eval_env`` (locale pins etc.) exported.  The log is what
+    the spec's ``eval_env`` (locale pins etc.) exported.  When ``install_cmd`` is
+    given, the official eval_script's install step runs first (as root, via
+    :func:`reinstall_in_container`) for a faithful eval.  The log is what
     :func:`swebench.official_grade.grade` parses.
     """
+    if install_cmd:
+        reinstall_in_container(handle, install_cmd, testbed_env=testbed_env, timeout=timeout)
     exports = "".join(
         f"export {k}={shlex.quote(v)}\n" for k, v in (eval_env or {}).items()
     )
     cmd = build_eval_command(spec_test_cmd, test_ids)
     script = (
-        f"source {testbed_env}/bin/activate 2>/dev/null || "
-        f"source /opt/miniconda3/bin/activate {testbed_env.rsplit('/', 1)[-1]}\n"
+        f"{_activate(testbed_env)}"
         f"{exports}cd /testbed\n{cmd}\n"
     )
     # Feed the script over stdin (``bash -ls``), NOT as a ``-lc`` argv element.
@@ -182,6 +217,7 @@ def gold_patch_gate(
     eval_env: dict[str, str] | None = None,
     log_dest: str,
     timeout: float = 1800,
+    install_cmd: str | None = None,
 ) -> dict:
     """Fidelity gate (#322 on the image path): apply the **gold** patch + the
     held-out test patch to a pristine ``/testbed``, run the eval, and grade.
@@ -189,7 +225,8 @@ def gold_patch_gate(
     A faithful image returns ``RESOLVED_FULL`` (gold flips FAIL_TO_PASS->pass and
     PASS_TO_PASS stay green).  Anything else means the image env drifted from the
     benchmark — surfaced via the returned grade (caller asserts/loud-logs).
-    Returns the :func:`official_grade.grade` result.
+    Pass ``install_cmd`` (the spec's install step) for a faithful eval. Returns
+    the :func:`official_grade.grade` result.
     """
     if not apply_patch_in_container(handle, instance["patch"]):
         raise InContainerTestError("gold patch did not apply cleanly in-container")
@@ -198,7 +235,7 @@ def gold_patch_gate(
 
     log = run_eval_in_container(
         handle, spec_test_cmd=spec_test_cmd, test_ids=eval_directives(instance),
-        eval_env=eval_env, log_dest=log_dest, timeout=timeout,
+        eval_env=eval_env, log_dest=log_dest, timeout=timeout, install_cmd=install_cmd,
     )
     return official_grade.grade(instance, log)
 
@@ -212,6 +249,7 @@ def grade_agent_run(
     log_dest: str,
     verify_no_leak: bool = True,
     timeout: float = 1800,
+    install_cmd: str | None = None,
 ) -> dict:
     """Grade an arm: the agent has already edited ``/testbed``; apply the held-out
     test patch, run the eval over the test_patch's directives, and grade.
@@ -229,6 +267,6 @@ def grade_agent_run(
 
     log = run_eval_in_container(
         handle, spec_test_cmd=spec_test_cmd, test_ids=eval_directives(instance),
-        eval_env=eval_env, log_dest=log_dest, timeout=timeout,
+        eval_env=eval_env, log_dest=log_dest, timeout=timeout, install_cmd=install_cmd,
     )
     return official_grade.grade(instance, log)

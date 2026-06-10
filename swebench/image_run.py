@@ -131,6 +131,7 @@ def run_one_arm(
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
     wall_timeout: int = 1800,
+    install_cmd: str | None = None,
     _now=None,
 ) -> str:
     """Run + grade one (arm, run) in a fresh container; write the record. Returns the verdict."""
@@ -147,7 +148,7 @@ def run_one_arm(
         log_dest = os.path.join(os.path.dirname(transcript), "eval.txt")
         grade = container_test.grade_agent_run(
             handle, grading_instance, spec_test_cmd=spec_test_cmd,
-            eval_env=eval_env, log_dest=log_dest,
+            eval_env=eval_env, log_dest=log_dest, install_cmd=install_cmd,
         )
         resolution = grade.get("resolution")
         verdict = "PASS" if official_grade.is_resolved(grade) else "FAIL"
@@ -197,7 +198,6 @@ def run_image_arms(
     agent_binary: str,
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
-    cap_gb: float | None = None,
     wall_timeout: int = 1800,
     echo=print,
 ) -> list[tuple[str, str, str]]:
@@ -226,7 +226,7 @@ def run_image_arms(
             continue
 
         echo(f"--- Instance: {problem.instance_id} ({problem.repo_slug}@{problem.version}) ---")
-        digest_info = image_store.ensure_image(problem.instance_id, cap_gb=cap_gb)
+        digest_info = image_store.ensure_image(problem.instance_id)
         prepared = container.prepare_instance(
             problem.instance_id, post_strip_exec=container_agent.agent_user_setup_commands())
         gi = _grading_instance(problem, _read_test_patch(problem, root))
@@ -240,6 +240,7 @@ def run_image_arms(
                     spec_test_cmd=spec["test_cmd"], eval_env=eval_env,
                     results_dir=results_dir, wall_timeout=wall_timeout,
                     agent_surface=agent_surface, codex_model=codex_model,
+                    install_cmd=spec.get("install"),
                 )
                 echo(f"  [{arm} run {run_idx}] {verdict}")
                 results.append((problem.instance_id, arm, verdict))
