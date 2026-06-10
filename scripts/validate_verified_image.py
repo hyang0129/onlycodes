@@ -239,20 +239,35 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path,
         # apply fails with "unable to find user agent" (false-negative errors).
         prepared = container.prepare_instance(
             iid, post_strip_exec=container_agent.agent_user_setup_commands())
-        handle = container.start_arm_container(prepared)
-        log_dest = os.path.join(tempfile.mkdtemp(prefix="goldgate-"), "eval.txt")
-        grade = container_test.gold_patch_gate(
-            handle, instance, spec_test_cmd=spec["test_cmd"],
-            eval_env=specs.eval_env(spec), log_dest=log_dest, timeout=timeout,
-        )
-        row["resolution"] = grade.get("resolution")
-        if official_grade.is_resolved(grade):
-            row["status"] = "buildable"
-        else:
+        # RESOLVED_NO can be a flaky eval (a transient test failure under load),
+        # not true drift — and a not_resolved verdict is TERMINAL on resume, so a
+        # single false negative would freeze the instance forever. Retry the gate
+        # in a fresh container; trust not_resolved only after it repeats (#308).
+        for attempt in range(1, GATE_RETRIES + 1):
+            handle = container.start_arm_container(prepared)
+            try:
+                log_dest = os.path.join(tempfile.mkdtemp(prefix="goldgate-"), "eval.txt")
+                grade = container_test.gold_patch_gate(
+                    handle, instance, spec_test_cmd=spec["test_cmd"],
+                    eval_env=specs.eval_env(spec), log_dest=log_dest, timeout=timeout,
+                    install_cmd=spec.get("install"),
+                )
+            finally:
+                container.teardown(handle)
+                handle = None
+            row["resolution"] = grade.get("resolution")
+            if official_grade.is_resolved(grade):
+                row["status"] = "buildable"
+                break
             row["status"] = "not_resolved"
-            row["reason"] = "gold patch did not yield RESOLVED_FULL (fidelity drift)"
-            row["grade"] = {k: grade.get(k) for k in
-                            ("FAIL_TO_PASS", "PASS_TO_PASS", "FAIL_TO_FAIL", "PASS_TO_FAIL")}
+            row["reason"] = (f"gold patch did not yield RESOLVED_FULL after "
+                             f"{attempt}/{GATE_RETRIES} attempt(s) (fidelity drift)")
+            # `grade` carries the official breakdown under "report" (not at top
+            # level — the old code read absent keys and recorded all-null).
+            row["grade"] = grade.get("report")
+            if attempt < GATE_RETRIES:
+                log.warning("%s: RESOLVED_NO (attempt %d/%d) — retrying", iid, attempt,
+                            GATE_RETRIES)
     except image_store.DiskFullError:
         raise  # halt the sweep — add disk and resume; not a per-instance error
     except Exception as exc:  # continue-on-error: the report is the deliverable
@@ -273,10 +288,16 @@ def _gate_one(problem: Problem, *, gold_patch: str, root: Path,
 
 _TERMINAL_STATUSES = {"buildable", "not_resolved", "skipped"}
 
+#: Re-run the gold gate up to this many times before trusting a RESOLVED_NO.
+#: Guards against a flaky eval freezing an instance as not_resolved (terminal).
+GATE_RETRIES = 3
 
-def _load_terminal_rows(out_dir: Path) -> dict:
+
+def _load_terminal_rows(out_dir: Path, *, retry_not_resolved: bool = False) -> dict:
     """Prior-run rows with a terminal status, keyed by instance_id (for --resume).
-    'error' rows are intentionally excluded so they get re-attempted."""
+    'error' rows are intentionally excluded so they get re-attempted; with
+    ``retry_not_resolved`` 'not_resolved' rows are excluded too (re-gate them, in
+    case the original verdict was a flake recorded before gate-level retry)."""
     p = out_dir / "results.json"
     if not p.is_file():
         return {}
@@ -284,8 +305,9 @@ def _load_terminal_rows(out_dir: Path) -> dict:
         rows = json.loads(p.read_text()).get("rows", [])
     except (OSError, json.JSONDecodeError):
         return {}
+    terminal = _TERMINAL_STATUSES - ({"not_resolved"} if retry_not_resolved else set())
     return {r["instance_id"]: r for r in rows
-            if r.get("status") in _TERMINAL_STATUSES and r.get("instance_id")}
+            if r.get("status") in terminal and r.get("instance_id")}
 
 
 def run(args: argparse.Namespace) -> int:
@@ -322,10 +344,13 @@ def run(args: argparse.Namespace) -> int:
     # interrupted. Carry over instances already recorded with a TERMINAL status
     # (buildable / not_resolved / skipped) from a prior run's results.json; re-run
     # only 'error' (possibly transient) + anything never reached. --fresh ignores.
-    done = {} if args.fresh else _load_terminal_rows(out_dir)
+    done = {} if args.fresh else _load_terminal_rows(
+        out_dir, retry_not_resolved=getattr(args, "retry_not_resolved", False))
     if done:
         log.info("Resuming: %d instances already gated (terminal) — re-running the rest.",
                  len(done))
+    if getattr(args, "retry_not_resolved", False):
+        log.info("--retry-not-resolved: prior not_resolved verdicts will be re-gated.")
 
     log.info("Validating %d instances on the image runtime -> %s", len(problems), out_dir)
 
@@ -433,6 +458,9 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=1800, help="per-instance eval timeout (s)")
     ap.add_argument("--fresh", action="store_true",
                     help="ignore a prior run's results.json in --out-dir (default: resume)")
+    ap.add_argument("--retry-not-resolved", action="store_true",
+                    help="re-gate prior 'not_resolved' instances (recover flaky false "
+                         "negatives recorded before gate-level retry existed)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return run(args)
