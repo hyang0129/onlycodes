@@ -7,16 +7,23 @@ set -u
 cd /workspaces/hub_1/onlycodes
 set -a; . ./.env 2>/dev/null; set +a
 export ONLYCODES_MIN_FREE_GB=100
+PAR=${T0_PARALLEL:-1}          # instances graded concurrently (keep small on shared hosts)
 LOG=/tmp/t0_gold_496.log
 RESULTS=runs/validation/agent-grade-t0/results_gold.json
 TARGET=$(grep -vcE '^#|^\s*$' sets/verified-buildable.txt)
 
 done_count() {
+  # Count ALL processed instances (terminal + error), not just terminal: a
+  # deterministic error (e.g. ContainerLeakError) never becomes terminal, so
+  # counting terminal-only would loop forever re-running it. A daemon restart
+  # instead KILLS the run mid-pass (rows < target -> relaunch continues); a clean
+  # full pass reaches `target` rows and we stop, leaving any persistent errors for
+  # offline triage.
   python3 - "$RESULTS" <<'PY' 2>/dev/null || echo 0
 import json,sys
 try:
     d=json.load(open(sys.argv[1]))
-    print(sum(1 for r in d['rows'] if r.get('status') in ('ok','skipped','BRACKET_VIOLATION')))
+    print(len({r.get('instance_id') for r in d['rows'] if r.get('instance_id')}))
 except Exception: print(0)
 PY
 }
@@ -32,10 +39,10 @@ while true; do
   fi
   # 3) relaunch if the run isn't alive
   if ! pgrep -f "verify_agent_grade.py --mode gold" >/dev/null 2>&1; then
-    echo "watchdog: relaunching at $n/$TARGET $(date)"
+    echo "watchdog: relaunching at $n/$TARGET (parallel=$PAR) $(date)"
     nohup .venv/bin/python scripts/verify_agent_grade.py --mode gold \
       --from-file sets/verified-buildable.txt \
-      --out-dir runs/validation/agent-grade-t0 >> "$LOG" 2>&1 &
+      --out-dir runs/validation/agent-grade-t0 --parallel "$PAR" >> "$LOG" 2>&1 &
     sleep 30
   fi
   sleep 60
