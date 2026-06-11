@@ -47,7 +47,8 @@ ROOT = Path(os.environ.setdefault("ONLYCODES_REPO_ROOT",
 PROBLEMS = ROOT / "problems" / "swe" / "swebench-verified"
 
 
-def _grade_one(problem, *, mode: str, gold_patch: str, timeout: float) -> dict:
+def _grade_one(problem, *, mode: str, gold_patch: str, timeout: float,
+               verify_no_leak: bool = True) -> dict:
     """Run the agent-arm grading path with a simulated edit. Returns a row."""
     iid = problem.instance_id
     row = {"instance_id": iid, "repo": problem.repo_slug, "mode": mode,
@@ -79,7 +80,7 @@ def _grade_one(problem, *, mode: str, gold_patch: str, timeout: float) -> dict:
         grade = container_test.grade_agent_run(
             handle, instance, spec_test_cmd=spec["test_cmd"],
             eval_env=specs.eval_env(spec), log_dest=log_dest, timeout=timeout,
-            install_cmd=spec.get("install"), verify_no_leak=True,
+            install_cmd=spec.get("install"), verify_no_leak=verify_no_leak,
         )
         row["resolution"] = grade.get("resolution")
         resolved = official_grade.is_resolved(grade)
@@ -131,6 +132,10 @@ def main():
     ap.add_argument("--out-dir", default="runs/validation/agent-grade-t0")
     ap.add_argument("--timeout", type=float, default=1800)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--no-verify-leak", action="store_true",
+                    help="skip assert_no_leak (C4b). Use to isolate whether a "
+                         "ContainerLeakError is a real leak vs. the content-marker "
+                         "heuristic over-matching common test names (#351).")
     ap.add_argument("--parallel", type=int, default=1,
                     help="instances to grade concurrently (default 1 = serial). "
                          "Instances are independent; one thread per instance. On a "
@@ -185,7 +190,7 @@ def main():
             return False
         try:
             row = _grade_one(p, mode=args.mode, gold_patch=gold.get(p.instance_id, ""),
-                             timeout=args.timeout)
+                             timeout=args.timeout, verify_no_leak=not args.no_verify_leak)
         except image_store.DiskFullError as e:
             stop.set()
             log.error("DiskFull — stopping new work: %s", e)
