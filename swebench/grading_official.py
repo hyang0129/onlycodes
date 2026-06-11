@@ -11,7 +11,7 @@ Why a subprocess in an isolated venv:
 
 * The upstream ``swebench`` PyPI package collides with our own ``swebench/``
   package name, so it cannot be imported in-process (same constraint as
-  :mod:`swebench.official_grade`). We run ``run_evaluation`` under a pinned
+  ``scripts/extract_swebench_specs.py``). We run ``run_evaluation`` under a pinned
   ``swebench==<pin>`` venv from a **non-shadowing** cwd (a fresh temp dir, so the
   local ``swebench/`` package can't shadow the installed one), exchanging files
   (``predictions.jsonl`` in, ``report.json`` out).
@@ -40,9 +40,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-#: Pin must match ``scripts/extract_swebench_specs.py`` / ``official_grade`` (the
-#: specs vendored from the same release). A different upstream release can parse
-#: or grade differently, so it is pinned.
+#: Pin must match ``scripts/extract_swebench_specs.py`` (the specs vendored from
+#: the same release). A different upstream release can parse or grade
+#: differently, so it is pinned.
 PINNED_SWEBENCH = "swebench==4.1.0"
 
 #: Default model id written into predictions when not supplied. ``run_evaluation``
