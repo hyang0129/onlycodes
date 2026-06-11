@@ -901,7 +901,10 @@ def _run_image_runtime(
         problems, arms=arm_list, num_runs=num_runs,
         results_dir=results_dir, agent_binary=agent_binary,
         agent_surface=agent_surface, codex_model=codex_model,
-        wall_timeout=wall, echo=click.echo,
+        wall_timeout=wall,
+        # TODO(#354): wire a CLI flag for the verbatim grading-pass concurrency.
+        grading_max_workers=1,
+        echo=click.echo,
     )
     n_pass = sum(1 for _, _, v in results if v == "PASS")
     click.echo(f"\nImage runtime: {n_pass}/{len(results)} PASS across "
