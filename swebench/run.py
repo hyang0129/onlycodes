@@ -828,11 +828,27 @@ def _cleanup_stale_overlays(
 DEPRECATED_PROBLEM_SETS = {"swebench-verified-mini"}
 
 
+#: When the same instance_id (YAML stem) appears in more than one set, this set's
+#: copy wins — it is the canonical Verified-500 spine (correct version/spec/image).
+CANONICAL_PROBLEM_SET = "swebench-verified"
+
+
 def _discover_problem_yamls(problems_dir: Path) -> list[Path]:
-    """All ``*.yaml`` under ``problems_dir``, minus any path component naming a
-    set in :data:`DEPRECATED_PROBLEM_SETS`. Sorted for deterministic ordering."""
-    return [f for f in sorted(problems_dir.rglob("*.yaml"))
-            if not (set(f.relative_to(problems_dir).parts) & DEPRECATED_PROBLEM_SETS)]
+    """All ``*.yaml`` under ``problems_dir``, minus any path component naming a set
+    in :data:`DEPRECATED_PROBLEM_SETS`, **deduplicated by instance_id** (the YAML
+    stem). When an id exists in several sets — e.g. a ``swebench-datasci-mini`` copy
+    (38 unique + 12 that duplicate Verified) and the canonical ``swebench-verified``
+    copy — the Verified copy wins; otherwise discovery globs the id twice and the
+    run double-executes it per arm/seed (#354). Sorted for deterministic ordering."""
+    candidates = [f for f in sorted(problems_dir.rglob("*.yaml"))
+                  if not (set(f.relative_to(problems_dir).parts) & DEPRECATED_PROBLEM_SETS)]
+    by_id: dict[str, Path] = {}
+    for f in candidates:
+        prev = by_id.get(f.stem)
+        if prev is None or (CANONICAL_PROBLEM_SET in f.parts
+                            and CANONICAL_PROBLEM_SET not in prev.parts):
+            by_id[f.stem] = f
+    return sorted(by_id.values())
 
 
 def _parse_filter_ids(filter_spec: str) -> set[str]:

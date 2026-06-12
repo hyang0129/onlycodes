@@ -1,0 +1,14 @@
+# Tier-1 codex-smoke sample: 1 buildable instance per repo (#354 e2e).
+# 12 repos; flaky instances excluded for a clean smoke.
+astropy__astropy-12907
+django__django-10554
+matplotlib__matplotlib-13989
+mwaskom__seaborn-3069
+pallets__flask-5014
+psf__requests-1142
+pydata__xarray-2905
+pylint-dev__pylint-4551
+pytest-dev__pytest-10051
+scikit-learn__scikit-learn-10297
+sphinx-doc__sphinx-10323
+sympy__sympy-11618

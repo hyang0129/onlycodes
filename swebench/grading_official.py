@@ -287,6 +287,16 @@ def grade_predictions(
     )
 
     reports = _collect_reports(work, run_id, model_name, ids)
+    # An empty model_patch makes run_evaluation skip the instance (it lists the id
+    # under empty_patch_instances and writes no per-instance report.json). That is a
+    # legitimate *not resolved* — the agent produced no diff — NOT a grading error.
+    # Mark it resolved=False WITHOUT an "error" key so callers score it FAIL, not ERROR.
+    empty_ids = {p["instance_id"] for p in preds if not (p["model_patch"] or "").strip()}
+    for iid in empty_ids:
+        r = reports.get(iid)
+        if r is None or "error" in r:
+            reports[iid] = {"resolved": False, "patch_successfully_applied": False,
+                            "empty_patch": True}
     any_report = any("error" not in r for r in reports.values())
     if proc.returncode != 0 and not any_report:
         tail = (proc.stderr or proc.stdout or "")[-1500:]
