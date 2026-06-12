@@ -1,0 +1,6 @@
+# Known-flaky Verified instances (#354): gold resolves intermittently under verbatim
+# run_evaluation. KEPT in verified-buildable.txt — grade with retry-on-not-resolved.
+# Root causes + evidence: docs/VERIFIED_EXCLUSIONS.md.
+psf__requests-1921      # httpbin.org intermittent 503 (SWE-bench issue #484); 3/3 on a quiet host
+django__django-13089    # timing cache tests (test_touch/test_expiration) regress a different subset each run
+django__django-13344    # same flaky cache-timing signature
