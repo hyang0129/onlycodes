@@ -164,12 +164,16 @@ def run_one_arm(
     transcript = os.path.join(tempfile.mkdtemp(prefix="img-arm-"), "transcript.jsonl")
     model_patch = ""
     cost, turns = None, None
+    # ``codex_model`` is codex-specific (default "gpt-5.5"). Only pass it to the
+    # codex surface; for claude_code, model=None lets the runner use its pinned
+    # claude model (passing gpt-5.5 to claude is a 404). #354.
+    model = codex_model if agent_surface == "codex_cli" else None
     try:
-        container_agent.stage_arm(handle, surface=agent_surface, arm=arm, model=codex_model)
+        container_agent.stage_arm(handle, surface=agent_surface, arm=arm, model=model)
         rc = container_agent.run_agent(
             handle, arm=arm, prompt=_build_prompt(problem, arm),
             result_path=transcript, wall_timeout=wall_timeout,
-            surface=agent_surface, model=codex_model,
+            surface=agent_surface, model=model,
         )
         diff_dest = os.path.join(os.path.dirname(transcript), "model_patch.diff")
         # Empty-diff case (agent made no change) yields an empty string — fine.
