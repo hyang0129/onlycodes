@@ -1,23 +1,30 @@
-"""Image-runtime arm orchestrator (C5 #319 wiring).
+"""Image-runtime arm orchestrator (C5 #319 wiring; verbatim grading #354).
 
-Runs SWE-bench arms end-to-end on the **official prebuilt images**, tying the
-merged building blocks into one graded loop (dispatched from ``run.py`` when
-``--runtime image``):
+Runs SWE-bench arms end-to-end on the **official prebuilt images** in two
+decoupled passes (``docs/VERBATIM_GRADING_PLAN.md``):
 
-    image_store.ensure_image      # pull-by-digest + LRU prune to the disk cap
-    container.prepare_instance    # strip /testbed -> snapshot (+ agent user)
-    container.start_arm_container  # fresh container per (arm, run) from the snapshot
-    container_agent.stage_arm      # mount runtime volume + creds + exec-server
-    container_agent.run_agent      # one Claude turn in-container (restricted, net-iso)
-    container_test.grade_agent_run # no-leak -> apply test patch -> eval -> official grade
+**Agent pass (Concern A — our contribution).** For each (instance, arm, run):
 
-This is a **dedicated, serial** orchestrator — deliberately separate from the
-overlay path's serial/parallel loop in ``run.py`` (no surgery on that code).
+    image_store.ensure_image       # pull-by-digest + reuse-forever store
+    container.prepare_instance     # strip /testbed -> snapshot (+ agent user)
+    container.start_arm_container   # fresh container per (arm, run) from the snapshot
+    container_agent.stage_arm       # mount runtime volume + creds + exec-server
+    container_agent.run_agent       # one agent turn in-container (restricted, net-iso)
+    container_agent.extract_agent_diff  # capture the agent's diff = model_patch
+
+The partial record is written with ``verdict: "PENDING"``; no grading happens
+here, and the agent never shares a container with the held-out test.
+
+**Grading pass (Concern B — verbatim SWE-bench).** Per (arm, run), the captured
+``model_patch`` set is graded byte-for-byte through
+``grading_official.grade_predictions`` (official ``run_evaluation`` over the
+**unmodified** image). The verdict is merged back into each partial record.
+
+This is a **dedicated, serial** agent orchestrator — deliberately separate from
+the overlay path's serial/parallel loop in ``run.py`` (no surgery on that code).
 Instances are processed in repo+version-grouped order so the shared conda layer
-is reused before eviction (C3b).
-
-Scope: a working graded ``--runtime image`` arm. Parallelism, ``--resume`` for
-the image path, and the Codex surface are follow-ups.
+is reused before eviction (C3b). The grading pass parallelism is independent
+(``grading_max_workers``).
 """
 
 from __future__ import annotations
@@ -29,7 +36,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from swebench import container, container_agent, container_test, image_store, official_grade, specs
+from swebench import container, container_agent, grading_official, image_store, specs
 from swebench.container_agent import runtime_volume_spec
 from swebench.models import Problem
 
@@ -64,7 +71,14 @@ def _grading_instance(problem: Problem, test_patch_text: str) -> dict:
     """Build the SWE-bench instance dict the official grader needs from a Problem.
 
     The agent arm grades against the agent's own diff, so the gold ``patch`` is
-    not required (``make_test_spec`` builds without it — verified)."""
+    not required (``make_test_spec`` builds without it — verified).
+
+    .. note::
+       No longer used by the image runtime's grading path (verbatim grading
+       supplies test_patch/F2P/P2P from the official dataset, #354). Retained
+       because ``scripts/{diagnose_drift,verify_agent_grade,validate_verified_image}.py``
+       still import it (Phase 4 collapses those scripts).
+    """
     return {
         "instance_id": problem.instance_id,
         "repo": problem.repo_slug,
@@ -80,6 +94,12 @@ def _grading_instance(problem: Problem, test_patch_text: str) -> dict:
 
 
 def _read_test_patch(problem: Problem, root: Path) -> str:
+    """Read a problem's vendored test patch file (host-side).
+
+    .. note::
+       Like :func:`_grading_instance`, no longer used by the image runtime
+       itself; kept for the validation scripts (Phase 4).
+    """
     if not problem.patch_file:
         return ""
     p = root / problem.patch_file
@@ -124,20 +144,26 @@ def run_one_arm(
     run_idx: int,
     prepared: container.PreparedImage,
     digest_info: dict,
-    grading_instance: dict,
-    spec_test_cmd: str,
-    eval_env: dict,
     results_dir: str,
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
     wall_timeout: int = 1800,
-    install_cmd: str | None = None,
     _now=None,
-) -> str:
-    """Run + grade one (arm, run) in a fresh container; write the record. Returns the verdict."""
+) -> dict:
+    """Run one (arm, run) agent turn in a fresh container; write the PENDING record.
+
+    Agent pass only (Concern A): runs the agent, captures its diff
+    (``model_patch``) via :func:`container_agent.extract_agent_diff`, and writes a
+    partial record with ``verdict="PENDING"`` / ``resolution=None``. Grading is the
+    separate pass (:func:`run_image_arms`).
+
+    Returns a prediction dict ``{instance_id, arm, run_idx, model_patch,
+    record_path}`` the orchestrator uses to build the per-arm grading batch.
+    """
     handle = container.start_arm_container(prepared, volumes=[runtime_volume_spec()])
     transcript = os.path.join(tempfile.mkdtemp(prefix="img-arm-"), "transcript.jsonl")
-    verdict, resolution, cost, turns = "ERROR", None, None, None
+    model_patch = ""
+    cost, turns = None, None
     try:
         container_agent.stage_arm(handle, surface=agent_surface, arm=arm, model=codex_model)
         rc = container_agent.run_agent(
@@ -145,36 +171,40 @@ def run_one_arm(
             result_path=transcript, wall_timeout=wall_timeout,
             surface=agent_surface, model=codex_model,
         )
-        log_dest = os.path.join(os.path.dirname(transcript), "eval.txt")
-        grade = container_test.grade_agent_run(
-            handle, grading_instance, spec_test_cmd=spec_test_cmd,
-            eval_env=eval_env, log_dest=log_dest, install_cmd=install_cmd,
-        )
-        resolution = grade.get("resolution")
-        verdict = "PASS" if official_grade.is_resolved(grade) else "FAIL"
+        diff_dest = os.path.join(os.path.dirname(transcript), "model_patch.diff")
+        # Empty-diff case (agent made no change) yields an empty string — fine.
+        model_patch = container_agent.extract_agent_diff(handle, diff_dest)
         cost, turns = _extract_cost_turns(transcript, agent_surface=agent_surface,
                                           codex_model=codex_model)
-        logging.info("image_run %s %s run%d: rc=%s resolution=%s -> %s",
-                     problem.instance_id, arm, run_idx, rc, resolution, verdict)
+        logging.info("image_run %s %s run%d: rc=%s patch_bytes=%d (PENDING grade)",
+                     problem.instance_id, arm, run_idx, rc, len(model_patch))
     finally:
-        _write_record(
+        record_path = _write_record(
             results_dir, problem, arm, run_idx,
-            transcript=transcript, verdict=verdict, resolution=resolution,
-            digest_info=digest_info, cost=cost, turns=turns, agent_surface=agent_surface,
+            transcript=transcript, verdict="PENDING", resolution=None,
+            model_patch=model_patch, digest_info=digest_info, cost=cost, turns=turns,
+            agent_surface=agent_surface,
             now=_now if _now is not None else time.time(),
         )
         container.teardown(handle)
-    return verdict
+    return {
+        "instance_id": problem.instance_id, "arm": arm, "run_idx": run_idx,
+        "model_patch": model_patch, "record_path": record_path,
+    }
 
 
 def _write_record(results_dir, problem, arm, run_idx, *, transcript, verdict, resolution,
-                  digest_info, cost, turns, agent_surface, now) -> None:
-    """Write ``<instance>_<arm>_run<N>.jsonl``: meta line + agent transcript + verdict line."""
+                  model_patch, digest_info, cost, turns, agent_surface, now) -> str:
+    """Write ``<instance>_<arm>_run<N>.jsonl``: meta line + agent transcript + verdict line.
+
+    Returns the record path so the grading pass can finalize it in place.
+    """
     out = os.path.join(results_dir, f"{problem.instance_id}_{arm}_run{run_idx}.jsonl")
     meta = {
         "type": "meta", "instance_id": problem.instance_id, "arm": arm, "run": run_idx,
         "agent_surface": agent_surface, "runtime": "image",
         "image_digest": digest_info.get("digest"), "image_arch": digest_info.get("arch"),
+        "model_patch": model_patch,
         "resolution": resolution, "verdict": verdict,
         "total_cost_usd": cost, "num_turns": turns, "graded_utc": now,
     }
@@ -187,6 +217,49 @@ def _write_record(results_dir, problem, arm, run_idx, *, transcript, verdict, re
                     if line.strip():
                         f.write(line if line.endswith("\n") else line + "\n")
         f.write(json.dumps({"type": "verdict", "verdict": verdict, "resolution": resolution}) + "\n")
+    return out
+
+
+def _finalize_record(record_path: str, verdict: str, resolution) -> None:
+    """Merge the grading verdict into a PENDING record, in place.
+
+    Rewrites the meta line's ``verdict``/``resolution`` and replaces the trailing
+    verdict line, preserving the transcript lines in between. Final shape stays:
+    meta line (with ``model_patch``) -> transcript lines -> verdict line.
+    """
+    lines = Path(record_path).read_text().splitlines()
+    if not lines:
+        return
+    meta = json.loads(lines[0])
+    meta["verdict"] = verdict
+    meta["resolution"] = resolution
+    # Body = everything between the meta line and the trailing verdict line. The
+    # last line is the (PENDING) verdict line we replace; transcript is in between.
+    body = lines[1:]
+    if body and body[-1].lstrip().startswith("{"):
+        try:
+            if json.loads(body[-1]).get("type") == "verdict":
+                body = body[:-1]
+        except json.JSONDecodeError:
+            pass
+    with open(record_path, "w") as f:
+        f.write(json.dumps(meta) + "\n")
+        for line in body:
+            if line.strip():
+                f.write(line + "\n")
+        f.write(json.dumps({"type": "verdict", "verdict": verdict, "resolution": resolution}) + "\n")
+
+
+def _verdict_from_report(report: dict) -> tuple[str, str | None]:
+    """Map a ``grade_predictions`` per-instance report to (verdict, resolution).
+
+    ``{"resolved": True}`` -> PASS, error report -> ERROR, otherwise FAIL.
+    """
+    if report.get("error"):
+        return "ERROR", report.get("error")
+    if report.get("resolved"):
+        return "PASS", "RESOLVED_FULL"
+    return "FAIL", None
 
 
 def run_image_arms(
@@ -199,49 +272,77 @@ def run_image_arms(
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
     wall_timeout: int = 1800,
+    grading_max_workers: int = 1,
     echo=print,
 ) -> list[tuple[str, str, str]]:
-    """Run ``arms`` over ``problems`` on the image runtime. Returns
-    ``(instance_id, arm, verdict)`` triples."""
+    """Run ``arms`` over ``problems`` on the image runtime in two passes.
+
+    Pass 1 (agent): for each problem x arm x run, pull + prepare + run the agent,
+    capturing each ``model_patch`` into a PENDING record. Predictions are grouped
+    by ``(arm, run_idx)``.
+
+    Pass 2 (grading): per ``(arm, run_idx)`` group, grade the captured patches
+    verbatim via :func:`grading_official.grade_predictions` (official
+    ``run_evaluation``, ``grading_max_workers`` instances in parallel), then merge
+    each verdict back into its record via :func:`_finalize_record`.
+
+    Returns ``(instance_id, arm, verdict)`` triples.
+
+    .. todo:: wire ``grading_max_workers`` to a CLI flag (currently a default
+       threaded from ``run.py``).
+    """
     image_store.registry_login()
     # Populate the shared runtime volume for the chosen surface (#325).
     if agent_surface == "codex_cli":
         container_agent.ensure_codex_runtime()
     else:
         container_agent.ensure_agent_runtime(agent_binary)
-    root = Path(os.environ.get("ONLYCODES_REPO_ROOT", ".")).resolve()
 
     order = {iid: i for i, iid in enumerate(
         image_store.group_by_repo_version([p.instance_id for p in problems]))}
     problems = sorted(problems, key=lambda p: order.get(p.instance_id, 1 << 30))
 
-    results: list[tuple[str, str, str]] = []
+    # --- Pass 1: agent. Collect predictions grouped by (arm, run_idx). ---
+    # FAIL_TO_PASS / test_patch come from the official dataset at grade time, so
+    # we no longer skip on missing grading data — only on un-promptable instances.
+    predictions: dict[tuple[str, int], list[dict]] = {}
     for problem in problems:
-        if not problem.fail_to_pass:
-            echo(f"  SKIP {problem.instance_id}: no fail_to_pass (re-run `add` to backfill grading data)")
-            continue
-        spec = specs.spec_for(problem.repo_slug, problem.version)
-        if not spec or not spec.get("test_cmd"):
-            echo(f"  SKIP {problem.instance_id}: no spec test_cmd for {problem.repo_slug}@{problem.version}")
+        if not problem.problem_statement:
+            echo(f"  SKIP {problem.instance_id}: no problem_statement (cannot prompt the agent)")
             continue
 
         echo(f"--- Instance: {problem.instance_id} ({problem.repo_slug}@{problem.version}) ---")
         digest_info = image_store.ensure_image(problem.instance_id)
         prepared = container.prepare_instance(
             problem.instance_id, post_strip_exec=container_agent.agent_user_setup_commands())
-        gi = _grading_instance(problem, _read_test_patch(problem, root))
-        eval_env = specs.eval_env(spec)
 
         for arm in arms:
             for run_idx in range(num_runs):
-                verdict = run_one_arm(
+                pred = run_one_arm(
                     problem, arm=arm, run_idx=run_idx, prepared=prepared,
-                    digest_info=digest_info, grading_instance=gi,
-                    spec_test_cmd=spec["test_cmd"], eval_env=eval_env,
-                    results_dir=results_dir, wall_timeout=wall_timeout,
-                    agent_surface=agent_surface, codex_model=codex_model,
-                    install_cmd=spec.get("install"),
+                    digest_info=digest_info, results_dir=results_dir,
+                    wall_timeout=wall_timeout, agent_surface=agent_surface,
+                    codex_model=codex_model,
                 )
-                echo(f"  [{arm} run {run_idx}] {verdict}")
-                results.append((problem.instance_id, arm, verdict))
+                echo(f"  [{arm} run {run_idx}] agent done (PENDING grade)")
+                predictions.setdefault((arm, run_idx), []).append(pred)
+
+    # --- Pass 2: grade verbatim per (arm, run_idx), merge verdicts. ---
+    results: list[tuple[str, str, str]] = []
+    for (arm, run_idx), preds in predictions.items():
+        ids = [p["instance_id"] for p in preds]
+        run_id = f"img_{arm}_run{run_idx}_{os.getpid()}_{run_idx}"
+        echo(f"--- Grading {len(preds)} prediction(s): {arm} run {run_idx} ---")
+        reports = grading_official.grade_predictions(
+            [{"instance_id": p["instance_id"], "model_patch": p["model_patch"]} for p in preds],
+            run_id=run_id, model_name=arm, max_workers=grading_max_workers,
+            instance_ids=ids,
+        )
+        for pred in preds:
+            iid = pred["instance_id"]
+            report = reports.get(iid, {"resolved": False, "error": "no report returned"})
+            verdict, resolution = _verdict_from_report(report)
+            _finalize_record(pred["record_path"], verdict, resolution)
+            echo(f"  [{arm} run {run_idx}] {iid}: {verdict}")
+            results.append((iid, arm, verdict))
     return results

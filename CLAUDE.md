@@ -59,9 +59,14 @@ Shared infrastructure:
 ### SWE-bench runtime backend: image-only (ADR-0004, epic #314)
 
 `run` has two backends via `--runtime`: **`image` (default)** runs inside the official
-prebuilt SWE-bench Docker images (pull-by-digest → stripped snapshot → fresh container
-per arm → official-parser grading; modules `container*.py`, `image_*.py`, `official_grade.py`),
-and **`overlay` (DEPRECATED)** is the legacy host clone + OverlayFS + venv path
+prebuilt SWE-bench Docker images as a **two-pass** flow (ADR-0005): Pass 1 — agent pass —
+pull-by-digest → stripped *disposable* snapshot → fresh container per arm → capture the
+agent's `model_patch` (`container_agent.extract_agent_diff`); Pass 2 — grading pass —
+grade the captured patches **verbatim** through official `run_evaluation` on the
+**unmodified** image (`grading_official.grade_predictions`), reading `report.json` back.
+The seam between the passes is `predictions.jsonl` → `report.json`; onlycodes never modifies
+an eval image. Modules: `container*.py`, `image_*.py`, `grading_official.py`.
+**`overlay` (DEPRECATED)** is the legacy host clone + OverlayFS + venv path
 (`cache.py`, `harness.py`, the overlay branch of `run.py`). All 500 Verified instances have
 published official images (100% coverage, verified 2026-06-07), so image is the supported
 path; overlay emits a deprecation warning and is **slated for removal** — do not collect
@@ -77,8 +82,11 @@ code still exists pending that cleanup.
 | `cli.py` | Click group wiring only; no logic |
 | `models.py` | `Problem`, `ArmResult` — SWE-bench data classes |
 | `add.py` | HuggingFace fetch, repo validation, YAML write |
-| `run.py` | SWE-bench arm orchestration, overlay refresh, parallel scheduling |
-| `harness.py` | `clone_repo`, `setup_venv`, `strip_git_history`, `run_claude`, `run_tests`, `apply_test_patch` |
+| `run.py` | SWE-bench arm orchestration (dispatches image two-pass vs overlay), parallel scheduling |
+| `image_run.py` | Image-runtime two-pass orchestrator: agent pass (capture `model_patch`, verdict `PENDING`) → grading pass (`grading_official`, merge verdicts) |
+| `container_agent.py` | In-container agent run: `stage_arm`, `run_agent`, `extract_agent_diff` (the agent's `model_patch`), runtime-volume staging |
+| `grading_official.py` | Verbatim grading via official `run_evaluation`; predictions in → reports out (`grade_predictions` / `grade_one`); never touches the eval image |
+| `harness.py` | `clone_repo`, `setup_venv`, `strip_git_history`, `run_claude`, `run_tests`, `apply_test_patch` (overlay path, deprecated) |
 | `cache.py` | OverlayFS mount/unmount, lockfile verify, scrub |
 | `cache_cli.py` | `cache setup` / `cache clean` CLI |
 | `artifact_models.py` | `Task`, `ExecutionBudget`, `GradeResult`, `ArtifactArmResult` — disjoint from SWE-bench models |
@@ -102,12 +110,20 @@ code still exists pending that cleanup.
 
 Violating any of these breaks benchmark integrity or sandbox isolation.
 
-### Git history stripping is mandatory
+### Grading is verbatim (ADR-0005)
 
-`strip_git_history()` collapses the repo to a single orphan commit, then deletes all refs, packed-refs, reflogs, and runs `git gc --prune=now`. The agent must not recover the reference fix via `git log`.
+The agent harness (workspace) and grading (env) are **separate concerns** joined only by a file. The agent produces a `model_patch` in a **disposable, history-stripped** container; grading runs the official `python -m swebench.harness.run_evaluation` on the **unmodified** prebuilt image via `grading_official.grade_predictions`. **The seam is `predictions.jsonl` → `report.json`** — Concern A doesn't know how grading works; Concern B doesn't know how the patch was produced.
+
+- **onlycodes never modifies an eval image.** No in-container reinstall, no in-container eval, no log-parser grading in our code — `run_evaluation` is the grader, byte-for-byte SWE-bench.
+- The held-out test patch is applied **only** in the official grading container, never in the agent's container — so there is **nothing to leak-scan** agent-side (this is why the old in-container `assert_no_leak` is gone).
+- Image reuse: `run_evaluation` consumes our `image_store` cache (`--namespace swebench --cache_level instance`) — no re-pulls.
+
+### Git history stripping is mandatory (agent-workspace anti-cheat only)
+
+`strip_git_history()` collapses the agent's `/testbed` to a single orphan commit, then deletes all refs, packed-refs, reflogs, and runs `git gc --prune=now`. The agent must not recover the reference fix via `git log`. **This applies to the *agent's* disposable container only** — grading uses the pristine official image, which keeps full upstream history; the strip is anti-cheat for the workspace, not part of grading.
 
 - **`git_reset()` resets to `"HEAD"` (the orphan), not `base_commit`** — `base_commit` is unreachable after stripping.
-- Called in every non-cached setup path and in `_refresh_overlay()` between arms.
+- Image path: baked into the stripped snapshot once at prepare time (per-arm containers are fresh from it). Overlay path (deprecated): called in every non-cached setup path and in `_refresh_overlay()` between arms.
 - Uses fixed author date so re-stripping produces the same orphan SHA (idempotent).
 
 ### Overlay refresh, not git reset, between arms
