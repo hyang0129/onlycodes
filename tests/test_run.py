@@ -63,6 +63,25 @@ def test_discover_keeps_everything_when_no_deprecated_dirs(tmp_path):
     assert [p.name for p in found] == ["a__b-1.yaml"]
 
 
+def test_discover_dedups_by_id_prefers_verified(tmp_path):
+    """An id in BOTH a non-deprecated set (e.g. datasci-mini) and the canonical
+    Verified set must resolve to the Verified copy once — not double-run (#354)."""
+    swe = tmp_path
+    (swe / "swebench-verified").mkdir(parents=True)
+    (swe / "swebench-datasci-mini").mkdir(parents=True)
+    # shared id in both sets
+    (swe / "swebench-verified" / "mwaskom__seaborn-3069.yaml").write_text("v: ver\n")
+    (swe / "swebench-datasci-mini" / "mwaskom__seaborn-3069.yaml").write_text("v: mini\n")
+    # an id UNIQUE to datasci-mini must still be discovered
+    (swe / "swebench-datasci-mini" / "sympy__sympy-11232.yaml").write_text("v: mini\n")
+
+    found = {p.relative_to(swe).as_posix() for p in _discover_problem_yamls(swe)}
+    assert found == {
+        "swebench-verified/mwaskom__seaborn-3069.yaml",      # verified wins the dup
+        "swebench-datasci-mini/sympy__sympy-11232.yaml",     # unique kept
+    }
+
+
 # --- runtime backend default (image-only, ADR-0004 / #314) ------------------
 
 def test_runtime_defaults_to_image():

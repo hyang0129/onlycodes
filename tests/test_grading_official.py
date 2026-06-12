@@ -79,6 +79,37 @@ def test_collect_reports_flat_shape(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------
+# grade_predictions — empty-patch handling (FAIL, not ERROR)
+# --------------------------------------------------------------------------
+
+def test_grade_predictions_empty_patch_is_fail_not_error(monkeypatch) -> None:
+    """An empty model_patch => run_evaluation writes no report. That is a
+    legitimate not-resolved (agent produced no diff), NOT a grading error: the
+    report must lack an ``error`` key (so callers score FAIL), while a non-empty
+    patch with a genuinely missing report stays an error (#354)."""
+    monkeypatch.setattr(g, "ensure_official_venv", lambda **k: "/bin/true")
+
+    class _Proc:
+        returncode, stderr, stdout = 0, "", ""
+
+    monkeypatch.setattr(g.subprocess, "run", lambda *a, **k: _Proc())
+    # both ids come back report-less (run_evaluation skipped the empty one)
+    monkeypatch.setattr(
+        g, "_collect_reports",
+        lambda *a, **k: {i: {"resolved": False, "error": "no report.json"} for i in a[3]},
+    )
+    out = g.grade_predictions(
+        [{"instance_id": "x__y-1", "model_patch": "   "},          # empty/whitespace
+         {"instance_id": "x__y-2", "model_patch": "diff --git a b"}],  # real, but no report
+        run_id="t", instance_ids=["x__y-1", "x__y-2"],
+    )
+    assert out["x__y-1"] == {"resolved": False, "patch_successfully_applied": False,
+                             "empty_patch": True}
+    assert "error" not in out["x__y-1"]          # -> FAIL
+    assert "error" in out["x__y-2"]              # real patch, missing report -> ERROR
+
+
+# --------------------------------------------------------------------------
 # ensure_official_venv — readiness / atomic-build logic (no real venv)
 # --------------------------------------------------------------------------
 
