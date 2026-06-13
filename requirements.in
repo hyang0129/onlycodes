@@ -1,0 +1,23 @@
+# Top-level Python dependencies for onlycodes (human-edited source).
+#
+# DO NOT edit requirements.txt directly — it is a fully pinned, hash-locked
+# lockfile generated from this file. To change deps:
+#
+#     uv pip compile requirements.in -o requirements.txt --generate-hashes
+#
+# Versions below are pinned to the validated, known-good set (the environment
+# the graders, contrast_stats, and test suite are tested against — issue #350).
+# Bumping a major (esp. numpy/scikit-learn/datasets/pandas) requires re-running
+# the data_science graders + tests before regenerating the lockfile. The
+# lockfile (requirements.txt) additionally pins the full transitive tree with
+# sha256 hashes for supply-chain integrity.
+
+datasets==4.8.4      # HuggingFace streaming fetch (add command only)
+click==8.3.2         # CLI
+pyyaml==6.0.3        # YAML problem files
+tabulate==0.10.0     # analyze output table
+pytest==9.0.3        # test-only; unit tests under tests/
+networkx==3.6.1      # offline-only; required by tools/regenerate_chromatic_3.py
+scikit-learn==1.8.0  # data_science category graders (LinearRegression, train_test_split, metrics)
+numpy==1.26.4        # swebench.contrast_stats: paired bootstrap (#299); <2 — graders untested on numpy 2.x
+scipy==1.17.1        # swebench.contrast_stats: Wilcoxon signed-rank + exact-binomial McNemar (#299)

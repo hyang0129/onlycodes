@@ -108,6 +108,33 @@ python -m swebench mcp-config generate --out /path/to/mcp-config.json
 This resolves `node`, the bundle path, and the repo root automatically. Re-run
 after any container rebuild or workspace move.
 
+### Dependencies & supply-chain hygiene
+
+This repo pins both dependency trees so a single poisoned upstream release is
+not pulled silently (issue #350). Install deps the locked way:
+
+```bash
+# Node (exec-server) — ALWAYS `npm ci`, never bare `npm install`.
+# npm ci installs strictly from package-lock.json (114 integrity hashes),
+# fails on any drift, and never mutates the lockfile.
+npm ci
+
+# Python — install from the hash-locked lockfile.
+pip install --require-hashes -r requirements.txt
+```
+
+- `requirements.txt` is a fully pinned, **hash-locked** lockfile generated from
+  `requirements.in`. Don't edit it by hand. To change a dependency, edit
+  `requirements.in` and regenerate:
+  ```bash
+  uv pip compile requirements.in -o requirements.txt --generate-hashes
+  ```
+  (`pip-compile --generate-hashes` from pip-tools works too.) Bumping a major of
+  numpy / scikit-learn / datasets / pandas requires re-running the data_science
+  graders + tests first — the pins track the validated set.
+- Run `scripts/scan_supplychain_iocs.sh` to sweep the repo + environments for
+  the campaign's IOCs (see `docs/SECURITY_SUPPLYCHAIN.md`).
+
 ### OverlayFS Cache
 
 > **DEPRECATED (ADR-0004 / #314).** The OverlayFS cache belongs to the legacy `--runtime overlay`
