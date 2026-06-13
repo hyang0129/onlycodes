@@ -50,7 +50,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT))
 
-from swebench.contrast_stats import paired_cost_contrast  # noqa: E402
+from swebench.contrast_stats import (  # noqa: E402
+    paired_cost_contrast,
+    wilcoxon_pvalue as _wilcoxon_pvalue,
+)
 
 # Claude pricing constants (same as parse_run.py / cost_first_call_adjust.py).
 # The cache-floor adjustment gap = input_rate − cache_read_rate per token.
@@ -273,7 +276,8 @@ def calibration_check(
         (treatment − reference, with cache-floor-adjusted costs)
 
     This is distinct from the log-scale estimand used in the power analysis.
-    Gate passes if effect ∈ [+13.4%, +15.4%] and p ∈ [0.07, 0.17].
+    Gate passes if effect ∈ [+13.0%, +16.0%] and p ∈ [0.07, 0.20]
+    (the tolerance window applied in the code below).
     """
     ids = sorted(paired)
     deltas = [paired[iid][0] - paired[iid][1] for iid in ids]
@@ -446,17 +450,6 @@ def _bootstrap_pvalue(d: np.ndarray, n_boot: int, rng: np.random.Generator) -> f
     return min(1.0, 2.0 * min(p_left, p_right))
 
 
-def _wilcoxon_pvalue(d: np.ndarray) -> float | None:
-    """Two-sided Wilcoxon signed-rank p-value; None if undefined."""
-    nz = d[d != 0.0]
-    if len(nz) < 1:
-        return None
-    try:
-        return float(scipy_wilcoxon(nz).pvalue)
-    except Exception:
-        return None
-
-
 # ---------------------------------------------------------------------------
 # N* detection
 # ---------------------------------------------------------------------------
@@ -483,13 +476,14 @@ def go_nogo_recommendation(
     n_star_90: int | None,
     n_star_80: int | None,
     n_available: int,
+    n_max: int = 500,
 ) -> dict:
     """Produce a go/no-go recommendation for #299 (modification spine N).
 
     Three verdicts:
     - "powered_subset": N* ≤ n_available → run N* instances in the spine.
-    - "full_pool": N* ≤ 500 but exceeds n_available → run full available pool.
-    - "null_branch": N* > 500 → effect too small; plan TOST at full buildable pool.
+    - "full_pool": N* ≤ n_max but exceeds n_available → run full available pool.
+    - "null_branch": N* > n_max → effect too small; plan TOST at full buildable pool.
     """
     if n_star_90 is not None and n_star_90 <= n_available:
         return {
@@ -518,8 +512,8 @@ def go_nogo_recommendation(
     return {
         "verdict": "null_branch",
         "recommendation": (
-            "N* for 0.90 power exceeds the grid maximum (500). "
-            "The observed effect is too small to power under the current n=100 data. "
+            f"N* for 0.90 power exceeds the grid maximum ({n_max}). "
+            f"The observed effect is too small to power under the current n={n_available} data. "
             "Pre-register a minimum meaningful effect (±10% cost) and plan a TOST "
             "equivalence test at the full buildable pool. "
             "A CI excluding ±10% would be a clean null — retire the 'lone exception' framing."
@@ -563,7 +557,7 @@ def build_report(
         sys.exit("ERROR: zero valid paired log-differences after filtering.")
 
     mean_log = float(d.mean())
-    std_log = float(d.std(ddof=0))
+    std_log = float(d.std(ddof=1))  # sample std (conventional Cohen's dz)
     dz = mean_log / std_log if std_log > 0 else float("nan")
     pct_effect_log = 100.0 * (math.exp(mean_log) - 1.0)
 
@@ -594,7 +588,7 @@ def build_report(
 
     n_star_90 = find_n_star(curve, 0.90, "power_bootstrap")
     n_star_80 = find_n_star(curve, 0.80, "power_bootstrap")
-    rec = go_nogo_recommendation(n_star_90, n_star_80, n_paired)
+    rec = go_nogo_recommendation(n_star_90, n_star_80, n_paired, n_max=n_max)
 
     return {
         "treatment": treatment,
