@@ -20,10 +20,14 @@ here, and the agent never shares a container with the held-out test.
 ``grading_official.grade_predictions`` (official ``run_evaluation`` over the
 **unmodified** image). The verdict is merged back into each partial record.
 
-This is a **dedicated, serial** agent orchestrator — deliberately separate from
-the overlay path's serial/parallel loop in ``run.py`` (no surgery on that code).
-Instances are processed in repo+version-grouped order so the shared conda layer
-is reused before eviction (C3b). The grading pass parallelism is independent
+This is a **dedicated** agent orchestrator — deliberately separate from the
+overlay path's loop in ``run.py`` (no surgery on that code). The agent pass runs
+``agent_max_workers`` instances concurrently (``--parallel``); instances are
+disjoint (own image, snapshot, container, and output files), so the only shared
+state is the predictions dict (lock-guarded). Work is submitted in
+repo+version-grouped order so same-repo images are reused. The agent pass is
+API-bound (the agent turn blocks on the model API while the GIL is released), so
+threads give real parallelism. The grading pass parallelism is independent
 (``grading_max_workers``).
 """
 
@@ -33,7 +37,9 @@ import json
 import logging
 import os
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from swebench import container, container_agent, grading_official, image_store, specs
@@ -43,6 +49,27 @@ from swebench.models import Problem
 #: SWE-bench image canonical paths.
 _TESTBED = "/testbed"
 _TESTBED_PY = "/opt/miniconda3/envs/testbed/bin/python"
+
+#: Terminal verdicts that --resume treats as "done" (matches the overlay path's
+#: ``run._is_triple_complete``). ``PENDING`` (agent ran, grading interrupted),
+#: ``ERROR`` (grader/patch error), and a missing record are all re-run.
+_RESUME_TERMINAL = {"PASS", "FAIL", "env_fail"}
+
+
+def _record_verdict(results_dir: str, instance_id: str, arm: str, run_idx: int) -> str | None:
+    """Terminal verdict already recorded for a triple, or ``None`` if the record
+    is absent/unreadable/PENDING. The image record stores the verdict in its meta
+    line (first line), rewritten in place by :func:`_finalize_record` at grade time."""
+    path = Path(results_dir) / f"{instance_id}_{arm}_run{run_idx}.jsonl"
+    if not path.is_file():
+        return None
+    try:
+        with path.open() as f:
+            meta = json.loads(f.readline())
+    except (OSError, ValueError):
+        return None
+    v = meta.get("verdict")
+    return v if v in _RESUME_TERMINAL else None
 
 
 def _build_prompt(problem: Problem, arm: str) -> str:
@@ -276,14 +303,18 @@ def run_image_arms(
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
     wall_timeout: int = 1800,
+    agent_max_workers: int = 1,
     grading_max_workers: int = 1,
+    resume: bool = False,
     echo=print,
 ) -> list[tuple[str, str, str]]:
     """Run ``arms`` over ``problems`` on the image runtime in two passes.
 
     Pass 1 (agent): for each problem x arm x run, pull + prepare + run the agent,
     capturing each ``model_patch`` into a PENDING record. Predictions are grouped
-    by ``(arm, run_idx)``.
+    by ``(arm, run_idx)``. Runs ``agent_max_workers`` problems concurrently
+    (default 1 = serial); arms/runs within a problem stay serial (they share the
+    instance's prepared snapshot).
 
     Pass 2 (grading): per ``(arm, run_idx)`` group, grade the captured patches
     verbatim via :func:`grading_official.grade_predictions` (official
@@ -309,27 +340,79 @@ def run_image_arms(
     # --- Pass 1: agent. Collect predictions grouped by (arm, run_idx). ---
     # FAIL_TO_PASS / test_patch come from the official dataset at grade time, so
     # we no longer skip on missing grading data — only on un-promptable instances.
+    #
+    # Instances are independent (own image/snapshot/container/output files); the
+    # only shared state is ``predictions`` (lock-guarded). ``ensure_image`` raises
+    # ``DiskFullError`` when free space drops below the safety margin — on that we
+    # set ``stop_event`` so in-flight work drains and no new instance is started,
+    # then re-raise after the pool quiesces ("stop and add disk, then --resume").
     predictions: dict[tuple[str, int], list[dict]] = {}
-    for problem in problems:
+    pred_lock = threading.Lock()
+    stop_event = threading.Event()
+    disk_full: list[image_store.DiskFullError] = []
+
+    workers = max(1, agent_max_workers)
+    free = image_store.free_disk_gb()
+    echo(f"Agent pass: {len(problems)} instance(s) x {len(arms)} arm(s), "
+         f"parallel={workers}" + (f", {free:.0f} GB free" if free is not None else ""))
+
+    def _process_problem(problem: Problem) -> None:
+        if stop_event.is_set():
+            return
         if not problem.problem_statement:
             echo(f"  SKIP {problem.instance_id}: no problem_statement (cannot prompt the agent)")
-            continue
+            return
 
-        echo(f"--- Instance: {problem.instance_id} ({problem.repo_slug}@{problem.version}) ---")
-        digest_info = image_store.ensure_image(problem.instance_id)
-        prepared = container.prepare_instance(
-            problem.instance_id, post_strip_exec=container_agent.agent_user_setup_commands())
+        # --resume: only run (arm, run) triples without a terminal verdict, and
+        # skip the image pull + snapshot entirely when the whole instance is done.
+        if resume:
+            todo = [(arm, r) for arm in arms for r in range(num_runs)
+                    if _record_verdict(results_dir, problem.instance_id, arm, r) is None]
+            if not todo:
+                echo(f"  SKIP {problem.instance_id}: all triples already complete (--resume)")
+                return
+        else:
+            todo = [(arm, r) for arm in arms for r in range(num_runs)]
 
-        for arm in arms:
-            for run_idx in range(num_runs):
-                pred = run_one_arm(
-                    problem, arm=arm, run_idx=run_idx, prepared=prepared,
-                    digest_info=digest_info, results_dir=results_dir,
-                    wall_timeout=wall_timeout, agent_surface=agent_surface,
-                    codex_model=codex_model,
-                )
-                echo(f"  [{arm} run {run_idx}] agent done (PENDING grade)")
+        try:
+            echo(f"--- Instance: {problem.instance_id} ({problem.repo_slug}@{problem.version}) ---")
+            digest_info = image_store.ensure_image(problem.instance_id)
+            prepared = container.prepare_instance(
+                problem.instance_id,
+                post_strip_exec=container_agent.agent_user_setup_commands())
+        except image_store.DiskFullError as e:
+            disk_full.append(e)
+            stop_event.set()
+            echo(f"  DISK FULL at {problem.instance_id}: {e} "
+                 "— draining in-flight work, starting no new instances")
+            return
+
+        for arm, run_idx in todo:
+            pred = run_one_arm(
+                problem, arm=arm, run_idx=run_idx, prepared=prepared,
+                digest_info=digest_info, results_dir=results_dir,
+                wall_timeout=wall_timeout, agent_surface=agent_surface,
+                codex_model=codex_model,
+            )
+            echo(f"  [{problem.instance_id} {arm} run {run_idx}] agent done (PENDING grade)")
+            with pred_lock:
                 predictions.setdefault((arm, run_idx), []).append(pred)
+
+    if workers == 1:
+        for problem in problems:
+            if stop_event.is_set():
+                break
+            _process_problem(problem)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = [ex.submit(_process_problem, p) for p in problems]
+            for fut in as_completed(futures):
+                fut.result()  # surface unexpected (non-DiskFull) worker exceptions
+
+    if disk_full:
+        # Agent work already captured is on disk as PENDING records; add disk and
+        # re-run with --resume. Re-raise so the operator sees the hard stop.
+        raise disk_full[0]
 
     # --- Pass 2: grade verbatim per (arm, run_idx), merge verdicts. ---
     results: list[tuple[str, str, str]] = []

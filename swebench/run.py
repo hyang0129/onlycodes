@@ -893,9 +893,20 @@ def _run_image_runtime(
     max_wall_seconds: int,
     agent_surface: str = "claude_code",
     codex_model: str | None = None,
+    parallel: int = 1,
+    grading_parallel: int = 0,
+    resume: bool = True,
 ) -> None:
     """Handle ``--runtime image`` (C5 #319): Docker preflight, then dispatch to
-    the dedicated image-runtime orchestrator (``swebench.image_run``)."""
+    the dedicated image-runtime orchestrator (``swebench.image_run``).
+
+    ``parallel`` (= ``--parallel``) sets the agent-pass concurrency: that many
+    instances run their agent turns at once. Instances are disjoint, so this is a
+    near-linear speed-up for the API-bound agent pass until a rate-limit or disk
+    margin is hit. ``grading_parallel`` (= ``--grading-parallel``, 0 ⇒ follow
+    ``parallel``) sets the verbatim grading-pass concurrency — that pass runs the
+    official test suite per instance (CPU/IO-bound), so it is the other half of a
+    workable full-run wall-clock."""
     from swebench import container, image_run
 
     proc = container._docker(["version", "--format", "{{.Server.Version}}"], check=False)
@@ -913,13 +924,15 @@ def _run_image_runtime(
     # wall_timeout: max_wall_seconds==0 means unlimited; the orchestrator wants a
     # positive bound (in-container `timeout`), so fall back to 1800s when unset.
     wall = max_wall_seconds if max_wall_seconds and max_wall_seconds > 0 else 1800
+    grading_workers = grading_parallel if grading_parallel and grading_parallel > 0 else parallel
     results = image_run.run_image_arms(
         problems, arms=arm_list, num_runs=num_runs,
         results_dir=results_dir, agent_binary=agent_binary,
         agent_surface=agent_surface, codex_model=codex_model,
         wall_timeout=wall,
-        # TODO(#354): wire a CLI flag for the verbatim grading-pass concurrency.
-        grading_max_workers=1,
+        agent_max_workers=parallel,
+        grading_max_workers=grading_workers,
+        resume=resume,
         echo=click.echo,
     )
     n_pass = sum(1 for _, _, v in results if v == "PASS")
@@ -968,7 +981,16 @@ def _run_image_runtime(
     "parallel",
     type=int,
     default=1,
-    help="Max problems to run concurrently (default: 1 = serial).",
+    help="Max problems to run concurrently (default: 1 = serial). On the image "
+         "runtime this sets the agent-pass concurrency (API-bound).",
+)
+@click.option(
+    "--grading-parallel",
+    "grading_parallel",
+    type=int,
+    default=0,
+    help="Image runtime only: concurrency for the verbatim grading pass "
+         "(CPU/IO-bound test-suite runs). 0 (default) follows --parallel.",
 )
 @click.option(
     "--fail-fast",
@@ -1108,6 +1130,7 @@ def run_command(
     persistent_kernel: bool,
     num_runs: int,
     parallel: int,
+    grading_parallel: int,
     fail_fast: bool,
     use_cache: bool,
     shuffle_arms: bool,
@@ -1185,6 +1208,8 @@ def run_command(
             results_dir=str(results_dir), agent_binary=agent_binary,
             num_runs=num_runs, max_wall_seconds=max_wall_seconds,
             agent_surface=agent_surface, codex_model=codex_model,
+            parallel=parallel, grading_parallel=grading_parallel,
+            resume=resume,
         )
         return
 
