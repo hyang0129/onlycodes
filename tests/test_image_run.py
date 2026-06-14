@@ -264,3 +264,158 @@ def test_run_image_arms_skips_unpromptable(monkeypatch, tmp_path) -> None:
                                    results_dir=str(tmp_path), agent_binary="claude", echo=lambda *a: None)
     iids = {iid for iid, _, _ in out}
     assert iids == {"psf__requests-1142", "psf__requests-2222"}  # no-f2p kept; unpromptable dropped
+
+
+# ---------------------------------------------------------------------------
+# Parallel agent pass (--parallel on the image runtime)
+# ---------------------------------------------------------------------------
+
+
+def test_parallel_agent_pass_processes_all_instances(monkeypatch, tmp_path) -> None:
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": True} for p in preds})
+
+    problems = [_problem(instance_id=f"psf__requests-{i}") for i in range(8)]
+    out = image_run.run_image_arms(
+        problems, arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        agent_max_workers=4, echo=lambda *a: None,
+    )
+    # All 8 instances graded exactly once despite concurrent agent pass.
+    assert sorted(iid for iid, _, _ in out) == sorted(p.instance_id for p in problems)
+    assert len(out) == 8
+    # Each wrote its PENDING-then-finalized record.
+    assert len(list(tmp_path.glob("*_baseline_run0.jsonl"))) == 8
+
+
+def test_parallel_agent_pass_runs_concurrently(monkeypatch, tmp_path) -> None:
+    # Prove real concurrency: with a barrier of width W, W agent turns must be
+    # in-flight simultaneously or the barrier (and the test) times out.
+    import threading
+
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": True} for p in preds})
+
+    width = 4
+    barrier = threading.Barrier(width, timeout=10)
+    peak = {"n": 0}
+    live_lock = threading.Lock()
+    live = {"n": 0}
+
+    def _concurrent_run_agent(h, **kw):
+        with live_lock:
+            live["n"] += 1
+            peak["n"] = max(peak["n"], live["n"])
+        barrier.wait()  # blocks until `width` turns are simultaneously here
+        with live_lock:
+            live["n"] -= 1
+        Path(kw["result_path"]).write_text('{"type":"result","total_cost_usd":0.1,"num_turns":1}\n')
+        return 0
+
+    monkeypatch.setattr(image_run.container_agent, "run_agent", _concurrent_run_agent)
+
+    problems = [_problem(instance_id=f"psf__requests-{i}") for i in range(width)]
+    image_run.run_image_arms(
+        problems, arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        agent_max_workers=width, echo=lambda *a: None,
+    )
+    assert peak["n"] == width  # all `width` agent turns were in-flight at once
+
+
+def test_parallel_disk_full_stops_and_reraises(monkeypatch, tmp_path) -> None:
+    # ensure_image raises DiskFullError on the 3rd instance → stop event set,
+    # in-flight drains, DiskFullError re-raised. Not every instance is processed.
+    _stub_agent_pass(monkeypatch)
+    seen = []
+    seen_lock = __import__("threading").Lock()
+
+    real_calls = {"n": 0}
+
+    def _ensure(iid, **k):
+        with seen_lock:
+            real_calls["n"] += 1
+            n = real_calls["n"]
+        if n >= 3:
+            raise image_run.image_store.DiskFullError("only 2.0 GB free")
+        seen.append(iid)
+        return {"digest": "sha256:x", "arch": "amd64"}
+
+    monkeypatch.setattr(image_run.image_store, "ensure_image", _ensure)
+
+    problems = [_problem(instance_id=f"psf__requests-{i}") for i in range(10)]
+    with pytest.raises(image_run.image_store.DiskFullError):
+        image_run.run_image_arms(
+            problems, arms=["baseline"], num_runs=1,
+            results_dir=str(tmp_path), agent_binary="claude",
+            agent_max_workers=1, echo=lambda *a: None,
+        )
+    # Serial path stops at the disk-full instance; not all 10 are processed.
+    assert len(seen) < 10
+
+
+def test_resume_skips_completed_and_skips_pull(monkeypatch, tmp_path) -> None:
+    # A finished instance (terminal verdict in its record) must be skipped under
+    # --resume, including its image pull + prepare (no ensure_image call for it).
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": True} for p in preds})
+    ensured = []
+    monkeypatch.setattr(image_run.image_store, "ensure_image",
+                        lambda iid, **k: ensured.append(iid) or {"digest": "sha256:x", "arch": "amd64"})
+
+    done = _problem(instance_id="psf__requests-1")
+    todo = _problem(instance_id="psf__requests-2")
+    # Pre-write a finalized (PASS) record for the done instance.
+    (tmp_path / "psf__requests-1_baseline_run0.jsonl").write_text(
+        json.dumps({"type": "meta", "instance_id": "psf__requests-1", "arm": "baseline",
+                    "verdict": "PASS", "resolution": "RESOLVED_FULL"}) + "\n"
+        + json.dumps({"type": "verdict", "verdict": "PASS"}) + "\n")
+
+    out = image_run.run_image_arms(
+        [done, todo], arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        resume=True, echo=lambda *a: None,
+    )
+    assert out == [("psf__requests-2", "baseline", "PASS")]  # only the todo instance graded
+    assert ensured == ["psf__requests-2"]  # done instance never pulled/prepared
+
+
+def test_resume_reruns_pending_record(monkeypatch, tmp_path) -> None:
+    # A PENDING record (agent ran, grading was interrupted) is NOT terminal → re-run.
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": True} for p in preds})
+    (tmp_path / "psf__requests-1142_baseline_run0.jsonl").write_text(
+        json.dumps({"type": "meta", "verdict": "PENDING"}) + "\n")
+    out = image_run.run_image_arms(
+        [_problem()], arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        resume=True, echo=lambda *a: None,
+    )
+    assert out == [("psf__requests-1142", "baseline", "PASS")]  # re-run to completion
+
+
+def test_record_verdict_helper(tmp_path) -> None:
+    p = tmp_path / "x__x-1_baseline_run0.jsonl"
+    p.write_text(json.dumps({"type": "meta", "verdict": "FAIL"}) + "\n")
+    assert image_run._record_verdict(str(tmp_path), "x__x-1", "baseline", 0) == "FAIL"
+    # PENDING / missing → None (re-run).
+    p.write_text(json.dumps({"type": "meta", "verdict": "PENDING"}) + "\n")
+    assert image_run._record_verdict(str(tmp_path), "x__x-1", "baseline", 0) is None
+    assert image_run._record_verdict(str(tmp_path), "nope", "baseline", 0) is None
+
+
+def test_serial_path_unchanged_when_workers_one(monkeypatch, tmp_path) -> None:
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": True} for p in preds})
+    problems = [_problem(instance_id=f"psf__requests-{i}") for i in range(3)]
+    out = image_run.run_image_arms(
+        problems, arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        agent_max_workers=1, echo=lambda *a: None,
+    )
+    assert sorted(iid for iid, _, _ in out) == sorted(p.instance_id for p in problems)
