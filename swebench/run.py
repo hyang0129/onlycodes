@@ -896,6 +896,7 @@ def _run_image_runtime(
     parallel: int = 1,
     grading_parallel: int = 0,
     resume: bool = True,
+    halt_on_rate_limit: bool = True,
 ) -> None:
     """Handle ``--runtime image`` (C5 #319): Docker preflight, then dispatch to
     the dedicated image-runtime orchestrator (``swebench.image_run``).
@@ -925,16 +926,30 @@ def _run_image_runtime(
     # positive bound (in-container `timeout`), so fall back to 1800s when unset.
     wall = max_wall_seconds if max_wall_seconds and max_wall_seconds > 0 else 1800
     grading_workers = grading_parallel if grading_parallel and grading_parallel > 0 else parallel
-    results = image_run.run_image_arms(
-        problems, arms=arm_list, num_runs=num_runs,
-        results_dir=results_dir, agent_binary=agent_binary,
-        agent_surface=agent_surface, codex_model=codex_model,
-        wall_timeout=wall,
-        agent_max_workers=parallel,
-        grading_max_workers=grading_workers,
-        resume=resume,
-        echo=click.echo,
-    )
+    try:
+        results = image_run.run_image_arms(
+            problems, arms=arm_list, num_runs=num_runs,
+            results_dir=results_dir, agent_binary=agent_binary,
+            agent_surface=agent_surface, codex_model=codex_model,
+            wall_timeout=wall,
+            agent_max_workers=parallel,
+            grading_max_workers=grading_workers,
+            resume=resume,
+            halt_on_rate_limit=halt_on_rate_limit,
+            echo=click.echo,
+        )
+    except image_run.AccountLimitHalt as e:
+        # Backed off on an account rate-limit (429). Clean work was graded before
+        # the raise; the rate-limited instances are PENDING and resume-able.
+        click.echo(
+            f"\n⏸  PAUSED on account rate-limit (429). {e.n_done} clean run(s) graded; "
+            f"{e.n_limited} rate-limited instance(s) left for re-run.\n"
+            f"   Approve the resume once quota recovers (or maxmanager rotates):\n"
+            f"     python -m swebench run --runtime image --resume "
+            f"--output-dir {results_dir} ...  (same flags)",
+            err=True,
+        )
+        raise SystemExit(3)
     n_pass = sum(1 for _, _, v in results if v == "PASS")
     click.echo(f"\nImage runtime: {n_pass}/{len(results)} PASS across "
                f"{len({i for i, _, _ in results})} instances.")
@@ -991,6 +1006,15 @@ def _run_image_runtime(
     default=0,
     help="Image runtime only: concurrency for the verbatim grading pass "
          "(CPU/IO-bound test-suite runs). 0 (default) follows --parallel.",
+)
+@click.option(
+    "--halt-on-rate-limit/--no-halt-on-rate-limit",
+    "halt_on_rate_limit",
+    default=True,
+    help="Image runtime only: when an agent turn hits an account rate-limit "
+         "(HTTP 429 / quota), back off — grade the clean work, leave throttled "
+         "instances PENDING, and stop (exit 3) instead of burning quota into 429 "
+         "garbage. Re-run with --resume once quota recovers. Default on.",
 )
 @click.option(
     "--fail-fast",
@@ -1131,6 +1155,7 @@ def run_command(
     num_runs: int,
     parallel: int,
     grading_parallel: int,
+    halt_on_rate_limit: bool,
     fail_fast: bool,
     use_cache: bool,
     shuffle_arms: bool,
@@ -1209,7 +1234,7 @@ def run_command(
             num_runs=num_runs, max_wall_seconds=max_wall_seconds,
             agent_surface=agent_surface, codex_model=codex_model,
             parallel=parallel, grading_parallel=grading_parallel,
-            resume=resume,
+            resume=resume, halt_on_rate_limit=halt_on_rate_limit,
         )
         return
 
