@@ -408,6 +408,73 @@ def test_record_verdict_helper(tmp_path) -> None:
     assert image_run._record_verdict(str(tmp_path), "nope", "baseline", 0) is None
 
 
+def _rate_limited_run_agent(transcript_path):
+    """Write a transcript carrying a rejected (429) rate-limit event."""
+    Path(transcript_path).write_text(
+        json.dumps({"type": "rate_limit_event",
+                    "rate_limit_info": {"status": "rejected"}}) + "\n"
+        + json.dumps({"type": "result", "subtype": "success", "is_error": True,
+                      "api_error_status": 429, "total_cost_usd": 0.0, "num_turns": 1}) + "\n")
+
+
+def test_halt_on_rate_limit_backs_off_grades_clean_and_raises(monkeypatch, tmp_path) -> None:
+    _stub_agent_pass(monkeypatch)
+    # First instance is clean; the second comes back rate-limited (429).
+    calls = {"n": 0}
+
+    def _run_agent_seq(h, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            Path(kw["result_path"]).write_text('{"type":"result","subtype":"success","is_error":false,"api_error_status":null}\n')
+        else:
+            _rate_limited_run_agent(kw["result_path"])
+        return 0
+
+    monkeypatch.setattr(image_run.container_agent, "run_agent", _run_agent_seq)
+    graded = {}
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: graded.update({"ids": [p["instance_id"] for p in preds]})
+                        or {p["instance_id"]: {"resolved": True} for p in preds})
+
+    problems = [_problem(instance_id=f"psf__requests-{i}") for i in range(2)]
+    with pytest.raises(image_run.AccountLimitHalt) as ei:
+        image_run.run_image_arms(
+            problems, arms=["baseline"], num_runs=1,
+            results_dir=str(tmp_path), agent_binary="claude",
+            agent_max_workers=1, halt_on_rate_limit=True, echo=lambda *a: None,
+        )
+    assert ei.value.n_limited == 1
+    # Only the clean instance was graded; the rate-limited one was NOT.
+    assert graded["ids"] == ["psf__requests-0"]
+    # The rate-limited record stays PENDING → --resume re-runs it.
+    rl = json.loads((tmp_path / "psf__requests-1_baseline_run0.jsonl").read_text().splitlines()[0])
+    assert rl["verdict"] == "PENDING"
+
+
+def test_no_halt_when_disabled(monkeypatch, tmp_path) -> None:
+    # With halt_on_rate_limit=False, a 429 run is recorded and graded like any other.
+    _stub_agent_pass(monkeypatch)
+    monkeypatch.setattr(image_run.container_agent, "run_agent",
+                        lambda h, **kw: (_rate_limited_run_agent(kw["result_path"]), 0)[1])
+    monkeypatch.setattr(image_run.grading_official, "grade_predictions",
+                        lambda preds, **kw: {p["instance_id"]: {"resolved": False} for p in preds})
+    out = image_run.run_image_arms(
+        [_problem()], arms=["baseline"], num_runs=1,
+        results_dir=str(tmp_path), agent_binary="claude",
+        halt_on_rate_limit=False, echo=lambda *a: None,
+    )
+    assert out == [("psf__requests-1142", "baseline", "FAIL")]  # graded, no halt
+
+
+def test_is_account_limited_helper(tmp_path) -> None:
+    from swebench.run_audit import is_account_limited
+    p = tmp_path / "x__x-1_baseline_run0.jsonl"
+    _rate_limited_run_agent(p)
+    assert is_account_limited(p) is True
+    p.write_text('{"type":"result","subtype":"success","is_error":false,"api_error_status":null}\n')
+    assert is_account_limited(p) is False
+
+
 def test_serial_path_unchanged_when_workers_one(monkeypatch, tmp_path) -> None:
     _stub_agent_pass(monkeypatch)
     monkeypatch.setattr(image_run.grading_official, "grade_predictions",

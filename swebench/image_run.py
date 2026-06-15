@@ -45,6 +45,23 @@ from pathlib import Path
 from swebench import container, container_agent, grading_official, image_store, specs
 from swebench.container_agent import runtime_volume_spec
 from swebench.models import Problem
+from swebench.run_audit import is_account_limited
+
+
+class AccountLimitHalt(Exception):
+    """Raised when the agent hits an account rate-limit / quota (HTTP 429) and the
+    run backs off. The clean agent work captured so far is graded and committed
+    first; rate-limited instances stay PENDING so a later ``--resume`` re-runs
+    only them. The run does **not** auto-retry — the operator approves the resume
+    once quota recovers (or maxmanager rotates credentials)."""
+
+    def __init__(self, n_limited: int, n_done: int):
+        self.n_limited = n_limited
+        self.n_done = n_done
+        super().__init__(
+            f"account rate-limit (429) hit: backed off after {n_done} clean run(s); "
+            f"{n_limited} rate-limited instance(s) left PENDING. "
+            f"Resume with --resume once quota recovers.")
 
 #: SWE-bench image canonical paths.
 _TESTBED = "/testbed"
@@ -306,6 +323,7 @@ def run_image_arms(
     agent_max_workers: int = 1,
     grading_max_workers: int = 1,
     resume: bool = False,
+    halt_on_rate_limit: bool = True,
     echo=print,
 ) -> list[tuple[str, str, str]]:
     """Run ``arms`` over ``problems`` on the image runtime in two passes.
@@ -350,6 +368,10 @@ def run_image_arms(
     pred_lock = threading.Lock()
     stop_event = threading.Event()
     disk_full: list[image_store.DiskFullError] = []
+    # Account rate-limit (429) back-off: when an agent turn comes back throttled we
+    # stop launching new instances, let in-flight drain, grade the clean work, and
+    # leave the rate-limited records PENDING for a later --resume.
+    rate_limited: list[str] = []
 
     workers = max(1, agent_max_workers)
     free = image_store.free_disk_gb()
@@ -388,12 +410,24 @@ def run_image_arms(
             return
 
         for arm, run_idx in todo:
+            if stop_event.is_set():
+                return
             pred = run_one_arm(
                 problem, arm=arm, run_idx=run_idx, prepared=prepared,
                 digest_info=digest_info, results_dir=results_dir,
                 wall_timeout=wall_timeout, agent_surface=agent_surface,
                 codex_model=codex_model,
             )
+            # Account-limit (429) back-off: a throttled turn is not a result. Leave
+            # its PENDING record for --resume, stop launching new work, and don't
+            # grade it. Distinct from a task FAIL or a non-quota api_error.
+            if halt_on_rate_limit and is_account_limited(pred["record_path"]):
+                with pred_lock:
+                    rate_limited.append(pred["instance_id"])
+                stop_event.set()
+                echo(f"  RATE LIMIT (429) at {problem.instance_id} {arm} run {run_idx} "
+                     "— backing off, draining in-flight, no new instances")
+                return
             echo(f"  [{problem.instance_id} {arm} run {run_idx}] agent done (PENDING grade)")
             with pred_lock:
                 predictions.setdefault((arm, run_idx), []).append(pred)
@@ -432,4 +466,9 @@ def run_image_arms(
             _finalize_record(pred["record_path"], verdict, resolution)
             echo(f"  [{arm} run {run_idx}] {iid}: {verdict}")
             results.append((iid, arm, verdict))
+
+    # Clean work is now graded + committed. If we backed off on an account limit,
+    # halt loudly so the operator approves the resume once quota recovers.
+    if rate_limited:
+        raise AccountLimitHalt(n_limited=len(set(rate_limited)), n_done=len(results))
     return results

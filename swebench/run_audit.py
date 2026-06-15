@@ -375,6 +375,15 @@ def classify_run(jsonl_path: Path) -> RunAudit:
     )
 
 
+def is_account_limited(jsonl_path: Path) -> bool:
+    """True if a transcript shows an **account rate-limit / quota rejection** — an
+    HTTP 429, a ``rate_limit_event`` whose status is not ``allowed*``, or a
+    usage-limit error event (codex). This is the signal to *back off and pause*
+    the run, distinct from a task FAIL or a one-off non-quota ``api_error`` (e.g.
+    a 401 or 500). Reuses the tested classifier so the rule stays single-sourced."""
+    return classify_run(jsonl_path).status == RATE_LIMITED
+
+
 def audit_dir(run_dir: Path) -> list[RunAudit]:
     """Classify every ``*_run<N>.jsonl`` transcript under ``run_dir`` (recursive),
     sorted by path for deterministic output.
