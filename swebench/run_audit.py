@@ -196,10 +196,15 @@ def _classify_claude(objs: list[dict], raw: str, arm: str | None) -> tuple[str, 
     fired: list[str] = []
     reasons: list[str] = []
 
-    # Rate-limit events: the request was served unless the status says otherwise.
-    # ``allowed`` and ``allowed_warning`` (allowed, but near the cap) both mean the
-    # call went through — only a non-``allowed*`` status (e.g. "rejected",
-    # "blocked", "exceeded") indicates the turn was actually throttled.
+    # Rate-limit events: the request was served unless the **primary** status says
+    # otherwise. ``allowed`` and ``allowed_warning`` (allowed, but near the cap)
+    # both mean the call went through — only a non-``allowed*`` status (e.g.
+    # "rejected", "blocked", "exceeded") means the turn was actually throttled.
+    #
+    # ``overageStatus`` is NOT checked: it reports whether *overage* (pay-as-you-go
+    # beyond the plan) is enabled, so ``overageStatus: rejected`` with
+    # ``status: allowed`` is a normal served request on a plan without overage —
+    # flagging it produced false-positive quarantines (django-13121/13964).
     def _is_served(val: object) -> bool:
         return val is None or str(val).startswith("allowed") or val == "disabled"
 
@@ -210,10 +215,6 @@ def _classify_claude(objs: list[dict], raw: str, arm: str | None) -> tuple[str, 
             if not _is_served(status):
                 fired.append(RATE_LIMITED)
                 reasons.append(f"rate_limit_event.status={status!r}")
-            over = info.get("overageStatus")
-            if not _is_served(over):
-                fired.append(RATE_LIMITED)
-                reasons.append(f"rate_limit_event.overageStatus={over!r}")
 
     # Wall-time kill (runner writes a system/wall_timeout line).
     for o in objs:
