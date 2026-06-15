@@ -90,11 +90,20 @@ def test_claude_rate_limited_rejected(tmp_path):
     assert a.needs_rerun
 
 
-def test_claude_overage_rejected(tmp_path):
+def test_claude_overage_rejected_but_served_is_ok(tmp_path):
+    # overageStatus reports whether pay-as-you-go overage is enabled; "rejected"
+    # with status "allowed" is a normal served request on a plan without overage,
+    # NOT a throttle (regression: this previously false-flagged as rate_limited).
     p = _claude_jsonl(tmp_path, "x__x-1_baseline_run0.jsonl",
                       [_claude_meta(), _rate_event("allowed", overage="rejected"),
                        _claude_result()])
-    assert classify_run(p).status == RATE_LIMITED
+    assert classify_run(p).status == OK
+
+    # But a genuine throttle — primary status rejected — is still caught.
+    p2 = _claude_jsonl(tmp_path, "x__x-2_baseline_run0.jsonl",
+                       [_claude_meta(), _rate_event("rejected", overage="rejected"),
+                        _claude_result(is_error=True, api_error_status=429)])
+    assert classify_run(p2).status == RATE_LIMITED
 
 
 def test_claude_is_error_is_api_error(tmp_path):
